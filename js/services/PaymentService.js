@@ -144,6 +144,7 @@ class PaymentService {
             ...sale,
             paidAmount: isFullyPaid ? originalTotal : newPaidAmount,
             status: newStatus,
+            paidAt: isFullyPaid ? new Date().toISOString() : null,
             updatedAt: new Date().toISOString()
         };
 
@@ -155,7 +156,12 @@ class PaymentService {
         // SQLite mode supports atomic backend transaction
         if (db.mode === 'sqlite') {
             const result = await ApiClient.post('complex/payment', { payment });
-            if (!result.success) throw new Error(result.error || 'Error al registrar pago en SQLite');
+            
+            // CRITICAL: Invalidate 'sales', 'payments' and 'customers' cache to reflect new state
+            db.clearCache('sales');
+            db.clearCache('payments');
+            db.clearCache('customers');
+            
             return result.id;
         }
 

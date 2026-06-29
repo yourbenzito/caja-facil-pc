@@ -7,6 +7,7 @@ class CashRegister {
             throw new Error('Ya existe una caja abierta');
         }
 
+        const currentUser = AuthManager.getCurrentUser();
         const cashRegister = {
             openDate: new Date().toISOString(),
             closeDate: null,
@@ -15,7 +16,7 @@ class CashRegister {
             expectedAmount: 0,
             difference: 0,
             status: 'open',
-            userId: 1,
+            userId: currentUser ? currentUser.id : 1,
             denominations: denominations || null,
             paymentSummary: {
                 cash: 0,
@@ -52,10 +53,14 @@ class CashRegister {
         let totalCashIn = 0;
         let totalRetiros = 0;
         movements.forEach(m => {
+            // FIX: Evitar doble contabilidad.
+            // 1) Los abonos (paymentId) ya están en salesPaymentSummary.cash
+            // 2) Los depósitos de saldo a favor ya se computan en CustomerCreditDeposit → paymentSummary.cash
+            if (m.type === 'in' && (m.paymentId || (m.description && m.description.toLowerCase().includes('saldo a favor')))) return;
+
             if (m.type === 'in') {
                 totalCashIn += parseFloat(m.amount);
             } else {
-                // TODOS los retiros (incluidos gastos/compras) deben restar del efectivo esperado
                 totalRetiros += parseFloat(m.amount);
             }
         });
@@ -78,7 +83,23 @@ class CashRegister {
     }
 
     static async getOpen() {
+        const allowMultiple = localStorage.getItem('allowMultipleCashRegisters') === 'true';
+        if (allowMultiple) {
+            const currentUser = AuthManager.getCurrentUser();
+            const uid = currentUser ? currentUser.id : 1;
+            const openRegisters = await this.getAllOpen();
+            return openRegisters.find(r => r.userId === uid) || null;
+        }
         return await this._repository.findOpen();
+    }
+
+    static async getAllOpen() {
+        try {
+            return await this._repository.findByIndex('status', 'open');
+        } catch (error) {
+            const all = await this.getAll();
+            return all.filter(r => r.status === 'open');
+        }
     }
 
     static async getById(id) {
@@ -87,6 +108,10 @@ class CashRegister {
 
     static async getAll() {
         return await this._repository.findAll();
+    }
+
+    static async getLatest(limit = 50, offset = 0) {
+        return await this._repository.findAll({ limit, offset, sort: { field: 'id', direction: 'desc' } });
     }
 
     /**
@@ -128,7 +153,7 @@ class CashRegister {
             expectedAmount: expectedCash,
             difference: difference,
             status: 'closed',
-            userId: 1,
+            openedBy: 1,
             denominations: null,
             paymentSummary: {
                 cash: parseFloat(paymentSummary.cash) || 0,
@@ -168,10 +193,15 @@ class CashRegister {
         const sales = await Sale.getByCashRegister(id);
         const payments = await Payment.getByCashRegister(id);
 
-        const totalSalesAmount = sales.reduce((sum, s) => sum + (parseFloat(s.total) || 0), 0);
-        const totalSalesCount = sales.length;
+        const totalSalesAmount = sales.reduce((sum, s) => {
+            if (s.status === 'cancelled') return sum;
+            return sum + (parseFloat(s.total) || 0);
+        }, 0);
+        const totalSalesCount = sales.filter(s => s.status !== 'cancelled').length;
 
-        const totalDebtPayments = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        const totalDebtPayments = payments
+            .filter(p => p.paymentMethod !== 'discount' && p.paymentMethod !== 'cancelled')
+            .reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
         const debtPaymentSummary = {
             cash: 0,
             card: 0,
@@ -180,7 +210,7 @@ class CashRegister {
         };
         payments.forEach(payment => {
             const method = payment.paymentMethod || 'cash';
-            if (debtPaymentSummary[method] !== undefined) {
+            if (method !== 'cancelled' && debtPaymentSummary[method] !== undefined) {
                 debtPaymentSummary[method] += parseFloat(payment.amount) || 0;
             }
         });
@@ -200,6 +230,13 @@ class CashRegister {
         let totalCashIn = 0;
         let totalRetiros = 0;
         movements.forEach(m => {
+            // C7 FIX: Solo evitamos doble contabilidad en INGRESOS (in).
+            // 1) Los abonos de clientes (in con paymentId) ya se cuentan en paymentSummary.cash.
+            // 2) Los depósitos de saldo a favor (in sin paymentId pero con desc 'saldo a favor') también
+            //    se cuentan en paymentSummary.cash vía CustomerCreditDeposit → evitar doble conteo.
+            // Los RETIROS (out) deben contarse SIEMPRE.
+            if (m.type === 'in' && (m.paymentId || (m.description && m.description.toLowerCase().includes('saldo a favor')))) return;
+
             if (m.type === 'in') {
                 totalCashIn += parseFloat(m.amount);
             } else {
@@ -216,22 +253,30 @@ class CashRegister {
         // C6 FIX: IVA Débito — Using sales document information
         let ivaDebito = 0;
         sales.forEach(s => {
+            if (s.status === 'cancelled') return; // No sumar IVA de ventas anuladas
             const fiscal = Sale.computeFiscalFromTotal(s.total, s.documentType);
             ivaDebito += fiscal.tax_amount;
         });
         ivaDebito = Math.round(ivaDebito);
 
-        // Obtener todas las compras en el periodo de esta caja para el IVA Crédito
-        const allPurchases = await Purchase.getAll();
-        const startTime = new Date(cashRegister.openDate).getTime();
-        const endTime = cashRegister.closeDate ? new Date(cashRegister.closeDate).getTime() : new Date().getTime();
+        // Obtener solo las compras en el periodo de esta caja para el IVA Crédito
+        const startTime = new Date(cashRegister.openDate);
+        const endTime = cashRegister.closeDate ? new Date(cashRegister.closeDate) : new Date();
 
-        const sessionPurchases = allPurchases.filter(p => {
-            const pTime = new Date(p.date).getTime();
-            return pTime >= startTime && pTime <= endTime && p.documentType === 'factura';
-        });
-
-        const ivaCredito = sessionPurchases.reduce((sum, p) => sum + (parseFloat(p.ivaAmount) || 0), 0);
+        const sessionPurchases = await Purchase.getByDateRange(startTime, endTime);
+        // CORRECCIÓN: uses includes('factura') para capturar 'factura_neto' y 'factura_bruto'
+        // También recalcula si ivaAmount fue guardado como 0 por error
+        const ivaCredito = sessionPurchases.reduce((sum, p) => {
+            if (!p.documentType || !p.documentType.includes('factura')) return sum;
+            const stored = parseFloat(p.ivaAmount) || 0;
+            if (stored > 0) return sum + stored;
+            const sub = parseFloat(p.subtotal) || 0;
+            if (sub <= 0) return sum;
+            const recalc = p.vatMode === 'gross'
+                ? sub - Math.round(sub / 1.19)
+                : Math.round(sub * 0.19);
+            return sum + recalc;
+        }, 0);
 
         return {
             ...cashRegister,

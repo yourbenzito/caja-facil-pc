@@ -39,6 +39,21 @@ class CashMovementRepository extends BaseRepository {
         });
     }
 
+    async findByPaymentId(paymentId) {
+        const all = await super.findAll();
+        return all.filter(m => m.paymentId == paymentId);
+    }
+
+    async findByExpenseId(expenseId) {
+        const all = await super.findAll();
+        return all.filter(m => m.expenseId == expenseId);
+    }
+
+    async findBySaleId(saleId) {
+        const all = await super.findAll();
+        return all.filter(m => m.saleId == saleId || (m.description && String(m.description).includes(`Venta #${saleId}`)));
+    }
+
     /**
      * Get all movements sorted by date (newest first)
      * @returns {Promise<Array>}

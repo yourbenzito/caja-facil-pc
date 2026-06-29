@@ -60,6 +60,11 @@ class AuditLogService {
             };
 
             await db.add(this.STORE_NAME, logEntry);
+
+            // Invalidar caché para que la UI (especialmente en Inventario) se actualice
+            if (db.mode === 'sqlite' && db.clearCache) {
+                await db.clearCache(this.STORE_NAME);
+            }
         } catch (error) {
             // CRÍTICO: NUNCA propagar el error. Solo loguear en consola.
             console.error('AuditLogService: Error al registrar audit log (operación principal NO afectada):', error);

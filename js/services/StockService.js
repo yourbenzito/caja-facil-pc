@@ -12,15 +12,100 @@ class StockService {
 
 
     /**
-     * Process stock update for a purchase
-     * CRITICAL: Updates cost (average), price (if provided), and stock atomically
-     * Creates stock movement for each item
-     * All operations are performed in database (not just in memory)
+     * Motor Central de Movimientos de Stock (ATÓMICO)
+     * Centraliza la matemática de redondeo, la persistencia y el historial.
      * 
-     * @param {Array} items - Purchase items with cost, price (optional), and quantity
-     * @param {number} purchaseId - Purchase ID (for stock movement reference)
-     * @returns {Promise<void>}
+     * @param {number} productId 
+     * @param {number} delta - Cantidad a sumar (positivo) o restar (negativo)
+     * @param {string} type - 'sale', 'purchase', 'adjustment', 'loss', 'consumption', 'return'
+     * @param {number|string} reference - ID de venta, compra o ajuste
+     * @param {string} reason - Explicación del movimiento
+     * @param {Object} txObject - (Opcional) Transacción de IndexedDB existente
      */
+    static async applyStockMovement(productId, delta, type, reference, reason = '', txObject = null) {
+        const qty = roundQuantity(delta);
+        if (qty === 0) return;
+
+        // B5: Si estamos en modo SQLite, usamos la API centralizada del backend (que ya es atómica)
+        if (db.mode === 'sqlite') {
+            const result = await window.ApiClient.post('complex/bulk-adjustment', {
+                items: [{ productId, quantity: qty }],
+                type: type === 'return' ? 'adjustment' : type,
+                reason: reason || `Movimiento automático: ${type}`,
+                reference: reference
+            });
+            if (!result.success) throw new Error(result.error || 'Error en movimiento de stock (SQLite)');
+            if (db.clearCache) await db.clearCache('products');
+            return;
+        }
+
+        // Modo IndexedDB
+        const execute = async (tx) => {
+            const productStore = tx.objectStore('products');
+            const movementStore = tx.objectStore('stockMovements');
+
+            const product = await new Promise((resolve, reject) => {
+                const req = productStore.get(productId);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error);
+            });
+
+            if (!product) throw new Error(`Producto #${productId} no encontrado para movimiento.`);
+
+            const currentStock = roundQuantity(product.stock);
+            const newStock = roundQuantity(currentStock + qty);
+
+            // LOGICA FLEXIBLE: Si el stock queda negativo, lo permitimos pero podríamos registrar una alerta.
+            // (Para este sistema mantendremos la integridad, pero redondeada)
+            if (newStock < -1000000) { // Límite de seguridad absurdo
+                throw new Error(`Error crítico: Stock resultante inválido (${newStock})`);
+            }
+
+            // Actualizar Producto
+            await new Promise((resolve, reject) => {
+                const updateData = {
+                    ...product,
+                    stock: newStock,
+                    updatedAt: new Date().toISOString()
+                };
+                if (type === 'sale') updateData.lastSoldAt = new Date().toISOString();
+                
+                const req = productStore.put(updateData);
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+
+            // Registrar Movimiento
+            await new Promise((resolve, reject) => {
+                const req = movementStore.add({
+                    productId,
+                    type: type === 'return' ? 'adjustment' : type,
+                    quantity: qty,
+                    reference: reference,
+                    reason: reason || '',
+                    date: new Date().toISOString(),
+                    cost_value: (parseFloat(product.cost) || 0) * Math.abs(qty),
+                    sale_value: (parseFloat(product.price) || 0) * Math.abs(qty)
+                });
+                req.onsuccess = () => resolve();
+                req.onerror = () => reject(req.error);
+            });
+        };
+
+        if (txObject) {
+            await execute(txObject);
+        } else {
+            await new Promise((resolve, reject) => {
+                const tx = db.db.transaction(['products', 'stockMovements'], 'readwrite');
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+                execute(tx).catch(err => {
+                    tx.abort();
+                    reject(err);
+                });
+            });
+        }
+    }
     static async processPurchaseStock(items, purchaseId) {
         if (!items || items.length === 0) {
             console.warn('processPurchaseStock: No items provided');
@@ -68,18 +153,23 @@ class StockService {
             const productStore = tx.objectStore('products');
             const movementStore = tx.objectStore('stockMovements');
 
-            for (const item of normalizedItems) {
-                const getReq = productStore.get(item.productId);
-                getReq.onsuccess = () => {
-                    const product = getReq.result;
+            const executeAll = async () => {
+                for (const item of normalizedItems) {
+                    const productReq = productStore.get(item.productId);
+                    const product = await new Promise((resolve, reject) => {
+                        productReq.onsuccess = () => resolve(productReq.result);
+                        productReq.onerror = () => reject(productReq.error);
+                    });
+
                     if (!product) {
                         tx.abort();
                         return;
                     }
 
-                    const currentStock = parseFloat(product.stock) || 0;
+                    const currentStock = roundQuantity(product.stock);
                     const currentCost = parseFloat(product.cost) || 0;
 
+                    // El costo promedio se calcula aquí porque es específico de Compras
                     const averageCost = Product.calculateAverageCost(
                         currentStock,
                         currentCost,
@@ -87,27 +177,25 @@ class StockService {
                         item.newCost
                     );
 
-                    const newStock = currentStock + item.newQuantity;
                     const finalPrice = item.newPrice !== null ? item.newPrice : product.price;
 
+                    // Actualizamos costo y precio en el producto (dentro de la tx)
                     productStore.put({
                         ...product,
-                        stock: newStock,
                         cost: averageCost,
                         price: finalPrice,
                         updatedAt: new Date().toISOString()
                     });
 
-                    movementStore.add({
-                        productId: item.productId,
-                        type: 'purchase',
-                        quantity: item.newQuantity,
-                        reference: purchaseId,
-                        reason: `Compra #${purchaseId}`,
-                        date: new Date().toISOString()
-                    });
-                };
-            }
+                    // Delegamos el movimiento y el stock final al motor central
+                    await this.applyStockMovement(item.productId, item.newQuantity, 'purchase', purchaseId, `Compra #${purchaseId}`, tx);
+                }
+            };
+
+            executeAll().catch(err => {
+                tx.abort();
+                reject(err);
+            });
         });
     }
 
@@ -136,14 +224,8 @@ class StockService {
             if (!item || !item.productId || item.quantity == null || item.quantity <= 0) continue;
             const qty = parseFloat(item.quantity);
             if (isNaN(qty) || qty <= 0) continue;
-            await Product.updateStock(item.productId, qty, 'subtract');
-            await StockMovement.create({
-                productId: item.productId,
-                type: 'adjustment',
-                quantity: -qty,
-                reference: purchaseId,
-                reason
-            });
+            // CORRECCIÓN: Usar applyStockMovement para atomicidad
+            await this.applyStockMovement(item.productId, -qty, 'adjustment', purchaseId, reason);
         }
     }
 
@@ -160,14 +242,8 @@ class StockService {
             if (!item || !item.productId || item.quantity == null || item.quantity <= 0) continue;
             const qty = parseFloat(item.quantity);
             if (isNaN(qty) || qty <= 0) continue;
-            await Product.updateStock(item.productId, qty, 'add');
-            await StockMovement.create({
-                productId: item.productId,
-                type: 'purchase',
-                quantity: qty,
-                reference: purchaseId,
-                reason
-            });
+            // CORRECCIÓN: Usar applyStockMovement para atomicidad
+            await this.applyStockMovement(item.productId, qty, 'purchase', purchaseId, reason);
         }
     }
 
@@ -185,23 +261,11 @@ class StockService {
             if (!productId || quantityDelta === 0) continue;
             const qty = Math.abs(quantityDelta);
             if (quantityDelta > 0) {
-                await Product.updateStock(productId, qty, 'add');
-                await StockMovement.create({
-                    productId,
-                    type: 'purchase',
-                    quantity: qty,
-                    reference: purchaseId,
-                    reason
-                });
+                // CORRECCIÓN: Usar applyStockMovement para atomicidad
+                await this.applyStockMovement(productId, qty, 'purchase', purchaseId, reason);
             } else {
-                await Product.updateStock(productId, qty, 'subtract');
-                await StockMovement.create({
-                    productId,
-                    type: 'adjustment',
-                    quantity: -qty,
-                    reference: purchaseId,
-                    reason
-                });
+                // CORRECCIÓN: Usar applyStockMovement para atomicidad
+                await this.applyStockMovement(productId, -qty, 'adjustment', purchaseId, reason);
             }
         }
     }
@@ -212,9 +276,10 @@ class StockService {
      * @param {number} productId - Product ID
      * @param {number} quantity - Adjustment quantity (positive = add, negative = subtract)
      * @param {string} reason - Reason for adjustment
+     * @param {string|null} reference - Optional reference ID (e.g., for corrections)
      * @returns {Promise<number|null>} - Movement ID
      */
-    static async createAdjustment(productId, quantity, reason) {
+    static async createAdjustment(productId, quantity, reason, reference = null) {
         const product = await Product.getById(productId);
         if (!product) throw new Error('Producto no encontrado');
 
@@ -222,58 +287,28 @@ class StockService {
         if (qty === 0) return null;
         const currentStock = parseFloat(product.stock) || 0;
         if (qty < 0 && currentStock < Math.abs(qty)) {
-            throw new Error(`Stock insuficiente para ajuste. Disponible: ${currentStock}, intento de restar: ${Math.abs(qty)}`);
+            console.warn(`⚠️ Ajuste con stock insuficiente: ${product.name} (stock: ${currentStock}, ajuste: ${qty})`);
         }
 
         if (db.mode === 'sqlite') {
             const result = await window.ApiClient.post('complex/bulk-adjustment', {
                 items: [{ productId, quantity: qty }],
                 type: 'adjustment',
-                reason
+                reason,
+                reference
             });
             if (!result.success) throw new Error(result.error || 'Error en ajuste (SQLite)');
-            return null; // El endpoint complex no devuelve el ID del movimiento individual fácilmente
+            
+            // Invalidar caché para que la UI se actualice
+            if (db.clearCache) {
+                await db.clearCache('products');
+                await db.clearCache('stockMovements');
+            }
+            return null; 
         }
 
-        return await new Promise((resolve, reject) => {
-            if (!db.db) return reject(new Error('Base de datos no inicializada'));
-            const tx = db.db.transaction(['products', 'stockMovements'], 'readwrite');
-            let movementId = null;
-
-            tx.onerror = () => reject(new Error(`Error en ajuste: ${tx.error?.message || 'Error desconocido'}`));
-            tx.onabort = () => reject(new Error('Ajuste abortado: stock y movimiento no fueron modificados'));
-            tx.oncomplete = () => resolve(movementId);
-
-            const productStore = tx.objectStore('products');
-            const movementStore = tx.objectStore('stockMovements');
-
-            const getReq = productStore.get(productId);
-            getReq.onsuccess = () => {
-                const currentProduct = getReq.result;
-                if (!currentProduct) { tx.abort(); return; }
-
-                const stock = parseFloat(currentProduct.stock) || 0;
-                const newStock = stock + qty;
-                if (newStock < 0) { tx.abort(); return; }
-
-                productStore.put({
-                    ...currentProduct,
-                    stock: newStock,
-                    updatedAt: new Date().toISOString()
-                });
-
-                const movReq = movementStore.add({
-                    productId,
-                    type: 'adjustment',
-                    quantity: qty,
-                    reason: reason || '',
-                    date: new Date().toISOString(),
-                    cost_value: (parseFloat(currentProduct.cost) || 0) * Math.abs(qty),
-                    sale_value: (parseFloat(currentProduct.price) || 0) * Math.abs(qty)
-                });
-                movReq.onsuccess = () => { movementId = movReq.result; };
-            };
-        });
+        await this.applyStockMovement(productId, qty, 'adjustment', reference, reason);
+        return true;
     }
 
     /**
@@ -298,48 +333,17 @@ class StockService {
                 reason
             });
             if (!result.success) throw new Error(result.error || 'Error en pérdida (SQLite)');
+            
+            // Invalidar caché
+            if (db.clearCache) {
+                await db.clearCache('products');
+                await db.clearCache('stockMovements');
+            }
             return null;
         }
 
-        return await new Promise((resolve, reject) => {
-            if (!db.db) return reject(new Error('Base de datos no inicializada'));
-            const tx = db.db.transaction(['products', 'stockMovements'], 'readwrite');
-            let movementId = null;
-
-            tx.onerror = () => reject(new Error(`Error en pérdida: ${tx.error?.message || 'Error desconocido'}`));
-            tx.onabort = () => reject(new Error('Pérdida abortada: stock y movimiento no fueron modificados'));
-            tx.oncomplete = () => resolve(movementId);
-
-            const productStore = tx.objectStore('products');
-            const movementStore = tx.objectStore('stockMovements');
-
-            const getReq = productStore.get(productId);
-            getReq.onsuccess = () => {
-                const currentProduct = getReq.result;
-                if (!currentProduct) { tx.abort(); return; }
-
-                const stock = parseFloat(currentProduct.stock) || 0;
-                const newStock = stock - qty;
-                if (newStock < 0) { tx.abort(); return; }
-
-                productStore.put({
-                    ...currentProduct,
-                    stock: newStock,
-                    updatedAt: new Date().toISOString()
-                });
-
-                const movReq = movementStore.add({
-                    productId,
-                    type: 'loss',
-                    quantity: -qty,
-                    reason: reason || '',
-                    date: new Date().toISOString(),
-                    cost_value: (parseFloat(currentProduct.cost) || 0) * qty,
-                    sale_value: (parseFloat(currentProduct.price) || 0) * qty
-                });
-                movReq.onsuccess = () => { movementId = movReq.result; };
-            };
-        });
+        await this.applyStockMovement(productId, -qty, 'loss', null, reason);
+        return true;
     }
 
     /**
@@ -364,6 +368,12 @@ class StockService {
                 reason
             });
             if (!result.success) throw new Error(result.error || 'Error en consumo (SQLite)');
+            
+            // Invalidar caché
+            if (db.clearCache) {
+                await db.clearCache('products');
+                await db.clearCache('stockMovements');
+            }
             return null;
         }
 
@@ -417,22 +427,25 @@ class StockService {
      * @param {string} reason - Reason for adjustment
      * @returns {Promise<number|null>} - Movement ID (null if no change)
      */
-    static async setStock(productId, targetStock, reason) {
+    static async setStock(productId, targetStock, reason, type = 'adjustment') {
         const product = await Product.getById(productId);
         if (!product) throw new Error('Producto no encontrado');
         if (targetStock < 0) throw new Error('El stock no puede ser negativo');
 
         if (db.mode === 'sqlite') {
-            const currentStock = parseFloat(product.stock) || 0;
-            const difference = targetStock - currentStock;
-            if (Math.abs(difference) < 0.001) return null;
-
+            // FASE 5: Usamos targetStock (absoluto) para evitar errores por deltas basados en caché obsoleta
             const result = await window.ApiClient.post('complex/bulk-adjustment', {
-                items: [{ productId, quantity: difference }],
-                type: 'adjustment',
+                items: [{ productId, targetStock }],
+                type: type,
                 reason
             });
             if (!result.success) throw new Error(result.error || 'Error al establecer stock (SQLite)');
+            
+            // Invalidar caché
+            if (db.clearCache) {
+                await db.clearCache('products');
+                await db.clearCache('stockMovements');
+            }
             return null;
         }
 
@@ -465,7 +478,7 @@ class StockService {
 
                 const movReq = movementStore.add({
                     productId,
-                    type: 'adjustment',
+                    type: type,
                     quantity: difference,
                     reason: reason || '',
                     date: new Date().toISOString(),
@@ -504,12 +517,12 @@ class StockService {
                 }
                 const currentStock = parseFloat(product.stock) || 0;
                 if (currentStock < absQty) {
-                    throw new Error(`Stock insuficiente en "${product.name}". Disponible: ${currentStock}, requerido: ${absQty}.`);
+                    console.warn(`⚠️ Stock insuficiente en "${product.name}" para ${type}.}`);
                 }
             } else {
                 const currentStock = parseFloat(product.stock) || 0;
                 if (qty < 0 && currentStock < Math.abs(qty)) {
-                    throw new Error(`Stock insuficiente para ajuste en "${product.name}". Disponible: ${currentStock}, intento de restar: ${Math.abs(qty)}.`);
+                    console.warn(`⚠️ Stock insuficiente para ajuste en "${product.name}".`);
                 }
             }
         }
@@ -540,6 +553,12 @@ class StockService {
                 reason
             });
             if (!result.success) throw new Error(result.error || 'Error en ajuste masivo (SQLite)');
+            
+            // Invalidar caché
+            if (db.clearCache) {
+                await db.clearCache('products');
+                await db.clearCache('stockMovements');
+            }
             return;
         }
 
@@ -551,49 +570,22 @@ class StockService {
             tx.onabort = () => reject(new Error('Ajuste masivo abortado: ningún cambio fue aplicado'));
             tx.oncomplete = () => resolve();
 
-            const productStore = tx.objectStore('products');
-            const movementStore = tx.objectStore('stockMovements');
-
-            for (const item of normalized) {
-                const getReq = productStore.get(item.productId);
-                getReq.onsuccess = () => {
-                    const product = getReq.result;
-                    if (!product) { tx.abort(); return; }
-
+            const executeAll = async () => {
+                for (const item of normalized) {
                     let stockDelta;
-                    let movType;
                     if (type === 'adjustment') {
                         stockDelta = item.quantity;
-                        movType = 'adjustment';
-                    } else if (type === 'loss') {
-                        stockDelta = -Math.abs(item.quantity);
-                        movType = 'loss';
                     } else {
                         stockDelta = -Math.abs(item.quantity);
-                        movType = 'consumption';
                     }
+                    await this.applyStockMovement(item.productId, stockDelta, type, null, reason, tx);
+                }
+            };
 
-                    const currentStock = parseFloat(product.stock) || 0;
-                    const newStock = currentStock + stockDelta;
-                    if (newStock < 0) { tx.abort(); return; }
-
-                    productStore.put({
-                        ...product,
-                        stock: newStock,
-                        updatedAt: new Date().toISOString()
-                    });
-
-                    movementStore.add({
-                        productId: item.productId,
-                        type: movType,
-                        quantity: stockDelta,
-                        reason: reason || '',
-                        date: new Date().toISOString(),
-                        cost_value: (parseFloat(product.cost) || 0) * Math.abs(stockDelta),
-                        sale_value: (parseFloat(product.price) || 0) * Math.abs(stockDelta)
-                    });
-                };
-            }
+            executeAll().catch(err => {
+                tx.abort();
+                reject(err);
+            });
         });
     }
 

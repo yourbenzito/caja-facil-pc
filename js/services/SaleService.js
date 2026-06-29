@@ -4,12 +4,32 @@
  */
 class SaleService {
     /**
-     * Generate next sale number
-     * @returns {Promise<number>}
+     * Generate next sale number (consecutivo).
+     * Usa MAX(saleNumber) en SQLite para evitar findAll() lento y corrupción por concatenación.
      */
     static async generateSaleNumber() {
-        const lastSale = await Sale.getLastSale();
-        return lastSale ? lastSale.saleNumber + 1 : 1;
+        let max = 0;
+        if (db.mode === 'sqlite') {
+            try {
+                const res = await window.ApiClient.get('sales/max-sale-number');
+                // Aseguramos que max sea un número real antes de sumar
+                max = (res && typeof res.max !== 'undefined') ? (parseInt(res.max, 10) || 0) : 0;
+                return max + 1;
+            } catch (e) {
+                console.warn('generateSaleNumber fallback due to API failure:', e);
+            }
+        }
+
+        // Fallback or IndexedDB
+        try {
+            const lastSale = await Sale.getLastSale();
+            const lastNum = lastSale && lastSale.saleNumber != null ? parseInt(lastSale.saleNumber, 10) : 0;
+            max = isNaN(lastNum) ? 0 : lastNum;
+            return max + 1;
+        } catch (e) {
+            console.error('Error total generando numero de venta:', e);
+            return 1;
+        }
     }
 
     /**
@@ -45,7 +65,7 @@ class SaleService {
         }
 
         // Generate sale number
-        const saleNumber = await this.generateSaleNumber();
+        const saleNumber = parseInt(await this.generateSaleNumber(), 10) || 1;
 
         // Ensure customerId is set for pending sales
         const isPending = saleData.status === 'pending' || saleData.status === 'partial';
@@ -108,26 +128,30 @@ class SaleService {
             delete sale.id;
         }
 
-        // Pre-validate stock availability (outside transaction for clear error messages)
+        // Stock negativo permitido por diseño del negocio — solo validamos que el producto exista
         const validItems = [];
         for (const item of sale.items) {
             if (!item || !item.productId || item.quantity === undefined) continue;
             const qty = parseFloat(item.quantity) || 0;
             if (qty <= 0) continue;
             const product = await Product.getById(item.productId);
-            const validation = ProductValidator.validateStock(product, qty);
-            if (!validation.valid) {
-                throw new Error(validation.error);
-            }
-            validItems.push({ productId: item.productId, qty });
+            if (!product) throw new Error(`Producto ${item.productId} no encontrado`);
+            validItems.push({ productId: item.productId, qty, price: item.unitPrice });
         }
 
         // CRITICAL FIX: Single atomic transaction - sale + product updates + stock movements
         let saleId;
+        let fromIdempotency = false;
         if (db.mode === 'sqlite') {
             const result = await ApiClient.post('complex/sale', { sale, validItems });
             if (!result.success) throw new Error(result.error || 'Error al crear venta en SQLite');
             saleId = result.id;
+            fromIdempotency = result.fromIdempotency === true;
+            // CRITICAL: Clear cache to ensure immediate synchronization of debt/stock
+            db.clearCache('sales');
+            db.clearCache('customers');
+            db.clearCache('products');
+            db.clearCache('stockMovements');
         } else {
             // Original IndexedDB Transaction
             saleId = await new Promise((resolve, reject) => {
@@ -149,38 +173,22 @@ class SaleService {
                 const movementStore = tx.objectStore('stockMovements');
 
                 const saleRequest = saleStore.add(sale);
-                saleRequest.onsuccess = () => {
+                saleRequest.onsuccess = async () => {
                     const id = saleRequest.result;
                     if (!id || typeof id !== 'number') {
                         tx.abort();
                         return;
                     }
                     resolvedSaleId = id;
-                    for (const { productId, qty } of validItems) {
-                        const getReq = productStore.get(productId);
-                        getReq.onsuccess = () => {
-                            const product = getReq.result;
-                            if (!product) { tx.abort(); return; }
-                            const currentStock = parseFloat(product.stock) || 0;
-                            const newStock = currentStock - qty;
-                            if (newStock < 0) { tx.abort(); return; }
-                            productStore.put({
-                                ...product,
-                                stock: newStock,
-                                lastSoldAt: new Date().toISOString(), // Notebook Feature: Track rotation
-                                updatedAt: new Date().toISOString()
-                            });
-                            movementStore.add({
-                                productId,
-                                type: 'sale',
-                                quantity: -qty,
-                                reference: id,
-                                date: new Date().toISOString(),
-                                reason: '',
-                                cost_value: (product.cost || 0) * qty,
-                                sale_value: (product.price || 0) * qty
-                            });
-                        };
+
+                    try {
+                        for (const { productId, qty } of validItems) {
+                            // Usar el motor central PASANDO LA TRANSACCIÓN ACTUAL (tx)
+                            await StockService.applyStockMovement(productId, -qty, 'sale', id, '', tx);
+                        }
+                    } catch (err) {
+                        console.error('Error applying stock during sale:', err);
+                        tx.abort();
                     }
                 };
                 saleRequest.onerror = () => {
@@ -190,19 +198,22 @@ class SaleService {
         }
 
         // C2: Audit log (después de la transacción atómica exitosa)
-        AuditLogService.log({
-            entity: 'sale', entityId: saleId, action: 'create',
-            summary: `Venta #${saleNumber} creada — Total: ${sale.total}, Estado: ${sale.status}`,
-            metadata: {
-                saleNumber,
-                total: sale.total,
-                status: sale.status,
-                paymentMethod: sale.paymentMethod,
-                customerId: sale.customerId,
-                itemCount: sale.items.length
-            }
-        });
+        if (!fromIdempotency) {
+            AuditLogService.log({
+                entity: 'sale', entityId: saleId, action: 'create',
+                summary: `Venta #${saleNumber} creada — Total: ${sale.total}, Estado: ${sale.status}`,
+                metadata: {
+                    saleNumber,
+                    total: sale.total,
+                    status: sale.status,
+                    paymentMethod: sale.paymentMethod,
+                    customerId: sale.customerId,
+                    itemCount: sale.items.length
+                }
+            });
+        }
 
+        if (fromIdempotency) return { saleId, fromIdempotency: true };
         return saleId;
     }
 
@@ -237,6 +248,13 @@ class SaleService {
                 summary: `Venta #${sale.saleNumber} eliminada (SQLite). Stock devuelto.`,
                 metadata: { total: sale.total, customerId: sale.customerId }
             });
+            // CRITICAL: Clear cache to ensure immediate synchronization of debt/stock
+            if (db.clearCache) {
+                db.clearCache('sales');
+                db.clearCache('customers');
+                db.clearCache('products');
+                db.clearCache('stockMovements');
+            }
             return true;
         }
 
@@ -270,7 +288,7 @@ class SaleService {
                     const product = getReq.result;
                     if (product) {
                         const qty = parseFloat(item.quantity) || 0;
-                        const newStock = (parseFloat(product.stock) || 0) + qty;
+                        const newStock = Math.round(((parseFloat(product.stock) || 0) + qty) * 100) / 100;
 
                         productStore.put({
                             ...product,

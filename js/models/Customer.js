@@ -5,8 +5,10 @@ class Customer {
         const creditLimit = data.creditLimit != null && data.creditLimit !== '' ? parseFloat(data.creditLimit) : null;
         const customer = {
             name: data.name,
+            rut: data.rut || '',
             phone: data.phone || '',
             email: data.email || '',
+            paymentDay: data.paymentDay ? parseInt(data.paymentDay) : 0,
             creditLimit: creditLimit != null && !isNaN(creditLimit) && creditLimit >= 0 ? creditLimit : null,
             balanceCredit: 0, // dinero a favor del cliente
             createdAt: new Date().toISOString(),
@@ -44,8 +46,10 @@ class Customer {
                 const changes = {};
                 const labels = {
                     name: 'Nombre',
+                    rut: 'RUT/ID',
                     phone: 'Teléfono',
                     email: 'Email',
+                    paymentDay: 'Día de Pago',
                     creditLimit: 'Límite de Crédito',
                     balanceCredit: 'Saldo a Favor'
                 };
@@ -220,5 +224,9 @@ class Customer {
 
     static async getPaymentHistory(customerId) {
         return await Payment.getByCustomer(customerId);
+    }
+
+    static async useCreditForPayment(customerId, amount, details = {}) {
+        return await CustomerAccountService.useCreditForPayment(customerId, amount, details);
     }
 }

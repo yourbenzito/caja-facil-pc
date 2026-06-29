@@ -21,3 +21,11 @@ Thumbs.db
 
 # Archivos de respaldo locales
 backups/
+
+# Base de datos y secretos (Seguridad)
+*.sqlite
+backend/data/
+backend/.env
+.env
+mobile/node_modules/
+mobile/android/

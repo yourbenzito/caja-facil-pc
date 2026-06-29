@@ -53,7 +53,7 @@ class ProductService {
         // preventing race conditions if stock changes between reading and writing.
         if (stock !== undefined && stock !== null && stock !== '') {
             const newStock = parseFloat(stock);
-            if (!isNaN(newStock) && newStock >= 0) {
+            if (!isNaN(newStock)) {
                 await StockService.setStock(
                     id,
                     newStock,

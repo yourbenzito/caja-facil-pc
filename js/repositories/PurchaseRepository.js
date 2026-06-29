@@ -12,16 +12,18 @@ class PurchaseRepository extends BaseRepository {
      * @param {number} supplierId - Supplier ID
      * @returns {Promise<Array>}
      */
-    async findBySupplierId(supplierId) {
-        return await this.findByIndex('supplierId', supplierId);
+    async findBySupplierId(supplierId, params = {}) {
+        return await this.findByIndex('supplierId', supplierId, params);
     }
 
     /**
      * Get all purchases sorted by date (newest first)
      * @returns {Promise<Array>}
      */
-    async findAll() {
-        const purchases = await super.findAll();
+    async findAll(params = {}) {
+        const purchases = await super.findAll(params);
+        // El servidor ya debería devolverlos ordenados si es SQLite, 
+        // pero mantenemos el sort por seguridad y para el modo IndexedDB.
         return purchases.sort((a, b) => new Date(b.date) - new Date(a.date));
     }
 
@@ -40,14 +42,22 @@ class PurchaseRepository extends BaseRepository {
      * @param {Date|string} endDate - End date
      * @returns {Promise<Array>}
      */
-    async findByDateRange(startDate, endDate) {
+    async findByDateRange(startDate, endDate, params = {}) {
+        const dStart = new Date(startDate);
+        const dEnd = new Date(endDate);
+        
+        if (isNaN(dStart.getTime()) || isNaN(dEnd.getTime())) {
+            console.warn('PurchaseRepository: Invalid dates provided', { startDate, endDate });
+            return [];
+        }
+
         try {
-            const start = new Date(startDate).toISOString();
-            const end = new Date(endDate).toISOString();
-            return await this.findByIndexRange('date', start, end);
+            const start = dStart.toISOString();
+            const end = dEnd.toISOString();
+            return await this.findByIndexRange('date', start, end, params);
         } catch (indexError) {
             console.warn('PurchaseRepository.findByDateRange: index range fallback', indexError);
-            const purchases = await super.findAll();
+            const purchases = await super.findAll(params);
             return purchases.filter(p => {
                 const pDate = new Date(p.date);
                 return pDate >= new Date(startDate) && pDate <= new Date(endDate);

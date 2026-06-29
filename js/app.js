@@ -1,19 +1,22 @@
 const app = {
     currentView: 'pos',
     views: {},
+    lastServerActivity: 0,
+    activityInterval: null,
 
     async init() {
         console.log('🚀 [App] Iniciando aplicación...');
         
         // Inicializar mapeo de vistas de forma defensiva
         this.views = {
+            dashboard: typeof DashboardView !== 'undefined' ? DashboardView : null,
             pos: typeof POSView !== 'undefined' ? POSView : null,
             products: typeof ProductsView !== 'undefined' ? ProductsView : null,
             customers: typeof CustomersView !== 'undefined' ? CustomersView : null,
             suppliers: typeof SuppliersView !== 'undefined' ? SuppliersView : null,
             purchases: typeof PurchasesView !== 'undefined' ? PurchasesView : null,
-            expenses: typeof ExpensesView !== 'undefined' ? ExpensesView : null,
             cash: typeof CashView !== 'undefined' ? CashView : null,
+            expenses: typeof ExpensesView !== 'undefined' ? ExpensesView : null,
             inventory: typeof InventoryView !== 'undefined' ? InventoryView : null,
             reports: typeof ReportsView !== 'undefined' ? ReportsView : null,
             sales: typeof SalesView !== 'undefined' ? SalesView : null,
@@ -27,11 +30,8 @@ const app = {
             console.warn('⚠️ [App] Vistas no encontradas:', missingViews);
         }
 
-        // LIMPIEZA POST-MIGRACIÓN: Si el business_id no es 1, forzarlo
-        if (localStorage.getItem('BUSINESS_ID') !== '1') {
-            console.log('🧹 [App] Limpiando ID de negocio inconsistente...');
-            localStorage.setItem('BUSINESS_ID', '1');
-        }
+        // LA LIMPIEZA POST-MIGRACIÓN SE ELIMINÓ: 
+        // Ya no forzamos ID 1 para permitir multi-tenant real.
 
         try {
             console.log('🔌 [App] Inicializando Base de Datos...');
@@ -73,8 +73,13 @@ const app = {
 
             AuthManager.addLogoutButton();
             
+            this.startActivityMonitor();
+            
             console.log('✨ [App] Inicialización completada con éxito');
             this.hideSplashScreen();
+
+            // --- NUEVO: ALERTA DE COBRANZA AL ENTRAR ---
+            setTimeout(() => this.checkCollectionAlerts(), 1500);
 
         } catch (error) {
             console.error('❌ [App] Error fatal en inicialización:', error);
@@ -98,14 +103,11 @@ const app = {
         const splash = document.getElementById('splash-screen');
         const appDiv = document.getElementById('app');
         if (splash) {
-            splash.style.opacity = '0';
-            setTimeout(() => {
-                splash.style.display = 'none';
-                if (appDiv) {
-                    appDiv.style.display = 'flex';
-                    appDiv.style.opacity = '1';
-                }
-            }, 500);
+            splash.style.display = 'none';
+            if (appDiv) {
+                appDiv.style.display = 'flex';
+                appDiv.style.opacity = '1';
+            }
         }
     },
 
@@ -179,11 +181,20 @@ const app = {
             return;
         }
 
+        const previousViewName = this.currentView;
+
         const navPerm = 'nav.' + viewName;
         if (!PermissionService.can(navPerm)) {
             console.warn(`🚫 [App] Acceso denegado a "${viewName}" para el rol actual.`);
             showNotification(`Acceso denegado: no tienes permiso para esta sección.`, 'error');
             return;
+        }
+
+        if (previousViewName && previousViewName !== viewName) {
+            const prev = this.views[previousViewName];
+            if (prev && typeof prev.destroy === 'function') {
+                try { prev.destroy(); } catch (e) { console.warn('Error en destroy de vista:', e); }
+            }
         }
 
         this.currentView = viewName;
@@ -275,24 +286,67 @@ const app = {
         if (!('serviceWorker' in navigator)) return;
         
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('sw.js?v=2026.3').then((registration) => {
-                console.log('✅ ServiceWorker listo');
+            // Usamos la URL base para el Service Worker; el navegador se encarga de detectar cambios reales.
+            const swUrl = 'sw.js';
+            
+            navigator.serviceWorker.register(swUrl).then((registration) => {
+                console.log('✅ [Update] ServiceWorker registrado');
                 
+                // 1. Detectar actualizaciones en el primer carga
                 registration.onupdatefound = () => {
                     const installingWorker = registration.installing;
                     if (installingWorker) {
                         installingWorker.onstatechange = () => {
                             if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                                this.showUpdateNotification(registration);
+                                this.triggerUpdate(registration);
                             }
                         };
                     }
                 };
-            }).catch(err => console.warn('❌ SW Falló:', err));
+
+                // 2. SONDEO PROACTIVO: Revisar el servidor cada 20 minutos por cambios en sw.js
+                // Esto detecta tus subidas por FileZilla sin que el usuario refresque.
+                setInterval(() => {
+                    console.log('🔍 [Update] Buscando actualizaciones en el servidor...');
+                    registration.update();
+                }, 1000 * 60 * 20); 
+
+                // 3. Si ya hay una actualización esperando de una sesión anterior
+                if (registration.waiting) {
+                    this.triggerUpdate(registration);
+                }
+            }).catch(err => console.warn('❌ [Update] SW Falló:', err));
+        });
+
+        // Escuchar cuando el Service Worker toma el mando para recargar la página
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (refreshing) return;
+            refreshing = true;
+            window.location.reload();
         });
     },
 
-    showUpdateNotification(registration) {
+    /**
+     * Dispara la interfaz visual de actualización
+     */
+    triggerUpdate(registration) {
+        if (typeof showUpdateNotification === 'function') {
+            showUpdateNotification(() => {
+                if (registration.waiting) {
+                    registration.waiting.postMessage({ action: 'skipWaiting' });
+                }
+            });
+        } else {
+            // Fallback si alerts.js no cargó
+            this.showUpdateNotificationLegacy(registration);
+        }
+    },
+
+    /**
+     * Mantengo el método anterior como respaldo oculto
+     */
+    showUpdateNotificationLegacy(registration) {
         const notification = document.createElement('div');
         notification.id = 'update-notification';
         notification.style.cssText = `
@@ -355,7 +409,138 @@ const app = {
                 window.api.sendBackupSkip();
             }
         });
-    }
+    },
+
+    // --- SINCRONIZACIÓN EN TIEMPO REAL (HEARTBEAT) ---
+    
+    /**
+     * Inicia el monitor de actividad que consulta al servidor cada 10 segundos
+     */
+    startActivityMonitor() {
+        if (this.activityInterval) clearInterval(this.activityInterval);
+        
+        // Primera ejecución inmediata
+        this.checkServerActivity();
+        
+        // Intervalo de 10 segundos para balancear reactividad y carga de red
+        this.activityInterval = setInterval(() => this.checkServerActivity(), 10000);
+        console.log('💓 [Sync] Monitor de actividad iniciado (10s)');
+    },
+
+    /**
+     * Consulta el estado de actividad del servidor
+     */
+    async checkServerActivity() {
+        if (db.mode !== 'sqlite' || !AuthManager.isAuthenticated()) return;
+
+        try {
+            const data = await window.ApiClient.get('system/activity');
+            if (data && data.lastActivity) {
+                const serverTs = parseInt(data.lastActivity, 10);
+                
+                // Si es la primera vez, solo guardamos el timestamp
+                if (this.lastServerActivity === 0) {
+                    this.lastServerActivity = serverTs;
+                    return;
+                }
+
+                // Si hubo cambios en el servidor que no conocemos localmente
+                if (serverTs > this.lastServerActivity) {
+                    console.log(`🔄 [Sync] Actividad detectada (${serverTs}). Sincronizando...`);
+                    this.lastServerActivity = serverTs;
+                    await this.handleServerUpdate();
+                }
+            }
+        } catch (error) {
+            // Silencioso para evitar spam en consola por problemas de red temporales
+            if (error.name !== 'AbortError') {
+                console.debug('[Sync] Error consultando actividad:', error.message);
+            }
+        }
+    },
+
+    /**
+     * Procesa una actualización desde el servidor limpiando caché y refrescando vista
+     */
+    async handleServerUpdate() {
+        // 1. Limpiar caché de datos volátiles
+        db.clearCache('products');
+        db.clearCache('sales');
+        db.clearCache('purchases');
+        db.clearCache('customers');
+        db.clearCache('stockMovements');
+        db.clearCache('suppliers');
+        db.clearCache('payments');
+
+        // 2. Refrescar la vista actual de forma "silenciosa" si es seguro
+        const safeToRefresh = ['sales', 'purchases', 'inventory', 'reports', 'auditLogs', 'customers', 'suppliers'];
+        
+        if (safeToRefresh.includes(this.currentView)) {
+            console.log(`✨ [Sync] Refrescando vista: ${this.currentView}`);
+            const viewInstance = this.views[this.currentView];
+            if (viewInstance && typeof viewInstance.refresh === 'function') {
+                await viewInstance.refresh();
+                console.log(`⚡ [Sync] Vista "${this.currentView}" actualizada silenciosamente vía refresh()`);
+            } else if (viewInstance && typeof viewInstance.render === 'function') {
+                // Reset de estado interno de la vista si es necesario
+                if (viewInstance.offset !== undefined) {
+                    viewInstance.offset = 0;
+                }
+                if (viewInstance.allSales) {
+                    viewInstance.allSales = [];
+                }
+                
+                await this.navigate(this.currentView);
+                showNotification('Datos actualizados automáticamente', 'info');
+            }
+        } else if (this.currentView === 'pos') {
+            db.warmCache();
+            console.log('⚡ [Sync] Caché de POS actualizada en background');
+        }
+    },
+
+    stopActivityMonitor() {
+        if (this.activityInterval) {
+            clearInterval(this.activityInterval);
+            this.activityInterval = null;
+        }
+    },
+
+
+
+    async checkCollectionAlerts() {
+        try {
+            if (typeof AccountService === 'undefined') return;
+            const alerts = await AccountService.getCollectionAlerts();
+            
+            if (alerts.length > 0) {
+                const todayAlerts = alerts.filter(a => a.isPaymentDay).length;
+                let message = `Tienes ${alerts.length} alertas de cobranza pendientes.`;
+                if (todayAlerts > 0) {
+                    message = `🔔 ¡ATENCIÓN! ${todayAlerts} cliente(s) deben pagar HOY. Revisa tus Reportes.`;
+                }
+
+                // Mostrar notificación (dura 10 segundos para que se vea bien)
+                if (typeof showNotification === 'function') {
+                    showNotification(message, 'warning', 10000);
+                }
+
+                // Añadir punto rojo al menú lateral (Reportes)
+                const reportBtn = document.querySelector('[data-view="reports"]');
+                if (reportBtn) {
+                   reportBtn.style.position = 'relative';
+                   const dot = document.createElement('span');
+                   dot.id = 'reports-alert-dot';
+                   dot.style.cssText = "position:absolute; top:8px; right:8px; width:10px; height:10px; background:#ef4444; border-radius:50%; border:2px solid #1f2937; box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);";
+                   reportBtn.appendChild(dot);
+                }
+            }
+        } catch (e) {
+            console.warn('App.checkCollectionAlerts:', e);
+        }
+    },
+
+    // checkSubscriptionStatus eliminada
 };
 
 // Inicialización global

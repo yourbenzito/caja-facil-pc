@@ -5,7 +5,23 @@ class POSController {
         this.currentCashRegister = null;
         this.discountAmount = 0;
         this.creditBalanceToUse = 0;
-        this.heldSales = []; // To storepaused sales
+        this.heldSales = []; // To store paused sales
+    }
+
+    _createHeldSaleSnapshot(name = '') {
+        const defaultName = name || (this.currentCustomer && this.currentCustomer.name)
+            ? `${(this.currentCustomer && this.currentCustomer.name) ? this.currentCustomer.name : 'Cliente'} ${new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`
+            : `Venta ${new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`;
+
+        return {
+            id: Date.now() + Math.floor(Math.random() * 1000),
+            cart: [...this.cart],
+            customer: this.currentCustomer ? { ...this.currentCustomer } : null,
+            discountAmount: this.discountAmount,
+            creditBalanceToUse: this.creditBalanceToUse,
+            timestamp: new Date(),
+            name: defaultName
+        };
     }
 
     holdSale(name = '') {
@@ -13,15 +29,7 @@ class POSController {
             throw new Error('No hay productos en el carrito para poner en espera');
         }
 
-        const heldSale = {
-            id: Date.now(),
-            cart: [...this.cart],
-            customer: this.currentCustomer ? { ...this.currentCustomer } : null,
-            discountAmount: this.discountAmount,
-            creditBalanceToUse: this.creditBalanceToUse, // Added this line
-            timestamp: new Date(),
-            name: name || `Venta ${new Date().toLocaleTimeString()}`
-        };
+        const heldSale = this._createHeldSaleSnapshot(name || '');
 
         this.heldSales.push(heldSale);
         this.clearCart();
@@ -43,9 +51,14 @@ class POSController {
 
         const held = this.heldSales[index];
 
-        // If current cart is not empty, we should probably warn or swap, 
-        // but for simplicity we'll just Load it (replacing if empty or merge)
-        // Let's replace the current cart with the held one.
+        // FIX: Si ya hay una venta en curso (carrito con productos), NO debe perderse.
+        // En vez de reemplazar y "desaparecer" esa venta, la volvemos a guardar en espera automáticamente.
+        if (this.cart.length > 0) {
+            const snapshot = this._createHeldSaleSnapshot('');
+            this.heldSales.push(snapshot);
+        }
+
+        // Reemplazar la venta actual por la seleccionada
         this.cart = [...held.cart];
         this.currentCustomer = held.customer ? { ...held.customer } : null;
         this.discountAmount = held.discountAmount;
@@ -67,6 +80,22 @@ class POSController {
     }
 
     async searchProduct(term) {
+        // Soporte para códigos de balanza (Chile: Prefijo 28 o 20)
+        // Formato estándar: 28XXXXXWWWWWK (28 + 5 dígitos código + 5 dígitos peso en gramos + dígito verificador)
+        if (term.length === 13 && (term.startsWith('28') || term.startsWith('20'))) {
+            const productCode = term.substring(2, 7);
+            const weightValue = parseInt(term.substring(7, 12), 10);
+            
+            // Buscamos el producto usando el código de 5 dígitos (debe estar registrado así en la base de datos)
+            let product = await Product.getByBarcode(productCode);
+            if (product) {
+                if (product.type === 'weight') {
+                    const weight = weightValue / 1000; // Convertir gramos a kg
+                    return { product, weight };
+                }
+            }
+        }
+
         let product = await Product.getByBarcode(term);
 
         if (!product) {
@@ -83,42 +112,47 @@ class POSController {
 
     addToCart(product, quantity = 1, customPrice = null) {
         this._idempotencyKeyForCurrentSale = null;
+        
+        let unitPrice = customPrice !== null ? parseNumber(customPrice) : parseNumber(product.price);
+        const qty = parseNumber(quantity);
+
+        // Redondeo preventivo a nivel de ítem (Ley 20.956)
+        // Para productos pesables, redondeamos el total de la línea a la decena inmediatamente
+        const isWeight = product.type === 'weight' || (product.sellByWeight);
+        const rawTotal = qty * unitPrice;
+        
+        // C10: Forzamos redondeo de Ley 20.956 (a la decena) para productos por peso o con decimales
+        // Esto asegura consistencia con el preview del modal
+        const itemTotal = (isWeight || qty % 1 !== 0) ? roundPrice(rawTotal) : Math.round(rawTotal);
+
         const existingItem = this.cart.find(item => item.productId === product.id);
 
-        let unitPrice = customPrice || product.price;
-
-        if (product.type === 'weight') {
-            unitPrice = roundPrice(quantity * product.price);
-        }
-
         if (existingItem) {
-            existingItem.quantity += quantity;
-            if (product.type === 'weight') {
-                existingItem.total = roundPrice(existingItem.quantity * product.price);
-            } else {
-                existingItem.total = existingItem.quantity * existingItem.unitPrice;
-            }
+            existingItem.quantity += qty;
+            // Actualizar stock en caso de que haya cambiado
+            existingItem.stock = product.stock !== undefined ? product.stock : existingItem.stock;
+            // Recalcular total acumulado y volver a redondear
+            const newRawTotal = existingItem.quantity * existingItem.unitPrice;
+            existingItem.total = (isWeight || existingItem.quantity % 1 !== 0) ? roundPrice(newRawTotal) : Math.round(newRawTotal);
         } else {
-            const total = product.type === 'weight'
-                ? unitPrice
-                : quantity * unitPrice;
-
             this.cart.push({
                 productId: product.id,
                 name: product.name,
                 type: product.type,
-                quantity: quantity,
-                unitPrice: product.type === 'weight' ? product.price : unitPrice,
+                quantity: qty,
+                unitPrice: unitPrice,
                 cost: product.cost || 0,
-                total: total
+                stock: product.stock !== undefined ? product.stock : 0,
+                total: itemTotal,
+                sellByWeight: isWeight
             });
         }
 
         return this.getCartSummary();
     }
 
-    calculateSubtotal() {
-        return this.cart.reduce((sum, item) => sum + item.total, 0);
+    calculateExactSubtotal() {
+        return this.cart.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
     }
 
     setDiscount(amount) {
@@ -128,7 +162,7 @@ class POSController {
             return this.getCartSummary();
         }
 
-        const subtotal = this.calculateSubtotal();
+        const subtotal = this.calculateExactSubtotal();
         this.discountAmount = Math.min(amount, subtotal);
         return this.getCartSummary();
     }
@@ -146,7 +180,7 @@ class POSController {
             return this.getCartSummary();
         }
 
-        const subtotal = this.calculateSubtotal();
+        const subtotal = this.calculateExactSubtotal();
         const discountTotal = Math.max(0, subtotal - this.discountAmount);
         this.creditBalanceToUse = Math.min(amount, discountTotal);
         return this.getCartSummary();
@@ -169,24 +203,21 @@ class POSController {
         const item = this.cart.find(i => i.productId === productId);
         if (item) {
             if (customPrice !== null) {
-                item.unitPrice = parseFloat(customPrice);
+                item.unitPrice = parseNumber(customPrice);
             }
-
-            item.quantity = quantity;
-            if (item.type === 'weight') {
-                item.total = roundPrice(item.quantity * item.unitPrice);
-            } else {
-                item.total = roundPrice(item.quantity * item.unitPrice);
-            }
+            item.quantity = parseNumber(quantity);
+            const isWeight = item.type === 'weight' || item.sellByWeight;
+            item.total = (isWeight || item.quantity % 1 !== 0) ? roundPrice(item.quantity * item.unitPrice) : Math.round(item.quantity * item.unitPrice); 
         }
         return this.getCartSummary();
     }
 
     getCartSummary() {
-        const subtotal = this.calculateSubtotal();
-        const discount = roundPrice(Math.min(this.discountAmount, subtotal));
+        const subtotal = this.calculateExactSubtotal();
+        const discount = Math.min(this.discountAmount, subtotal);
         const afterDiscount = Math.max(0, subtotal - discount);
-        const creditBalanceUsed = roundPrice(Math.min(this.creditBalanceToUse, afterDiscount));
+        const creditBalanceUsed = Math.min(this.creditBalanceToUse, afterDiscount);
+        const exactTotal = Math.max(0, afterDiscount - creditBalanceUsed);
 
         return {
             items: this.cart,
@@ -195,8 +226,9 @@ class POSController {
             subtotal: subtotal,
             discount: discount,
             creditBalanceUsed: creditBalanceUsed,
-            total: roundPrice(Math.max(0, afterDiscount - creditBalanceUsed)),
-            actualTotalSale: roundPrice(afterDiscount) // El total legal de la venta antes de usar dinero a favor
+            total: exactTotal, // Exact total for Card/Digital
+            roundedTotal: roundPrice(exactTotal), // Rounded total for Cash
+            actualTotalSale: afterDiscount 
         };
     }
 
@@ -216,7 +248,7 @@ class POSController {
         this.currentCustomer = customer;
     }
 
-    async completeSale(paymentMethod, isPending = false, paymentDetails = null, documentType = 'boleta') {
+    async completeSale(paymentMethod, isPending = false, paymentDetails = null, documentType = 'boleta', forcedTotal = null) {
         if (this.cart.length === 0) {
             throw new Error('El carrito está vacío');
         }
@@ -225,37 +257,35 @@ class POSController {
             throw new Error('No hay caja abierta');
         }
 
-        if (isPending && !this.currentCustomer) {
-            throw new Error('Debes seleccionar un cliente para ventas anotadas');
-        }
-
         const summary = this.getCartSummary();
+        const totalToPay = forcedTotal !== null ? forcedTotal : summary.total;
 
+        // Validation for items stock
         for (const item of this.cart) {
             const check = await this.validateStock(item.productId, item.quantity);
             if (!check.valid) throw new Error(check.error);
         }
 
-        // Si se usó dinero a favor, sumarlo a los detalles de pago
-        if (summary.creditBalanceUsed > 0) {
-            paymentDetails = paymentDetails || {};
-            // Si el método ya era creditBalance (porque se pagó 100% con eso), asegurar el monto
-            if (paymentDetails.creditBalance === undefined) {
-                paymentDetails.creditBalance = summary.creditBalanceUsed;
-            } else {
-                paymentDetails.creditBalance = Math.max(paymentDetails.creditBalance, summary.creditBalanceUsed);
-            }
-        }
-
-        let paidAmount = isPending ? 0 : summary.total;
-
-        // If mixed payment, calculate paid amount from details (including creditBalance)
+        // Calculate actual paid amount from paymentDetails
+        let paidAmount = 0;
         if (paymentDetails) {
-            const sumDetails = Object.values(paymentDetails).reduce((sum, val) => sum + (parseFloat(val) || 0), 0);
-            paidAmount = isPending ? sumDetails : Math.min(sumDetails, summary.actualTotalSale);
+            // Sum all payment methods except 'debt' (which is implicit)
+            paidAmount = Object.entries(paymentDetails)
+                .filter(([key]) => key !== 'debt')
+                .reduce((sum, [, val]) => sum + (parseFloat(val) || 0), 0);
+        } else {
+            // If no details, it's a single method payment
+            paidAmount = isPending ? 0 : totalToPay;
         }
 
-        // Dinero a favor: validar que el cliente tenga saldo suficiente y descontar después de crear la venta
+        // Determinar si es una venta con deuda (parcial o pendiente)
+        const isDebtSale = isPending || (paidAmount < totalToPay);
+        
+        if (isDebtSale && !this.currentCustomer) {
+            throw new Error('Debes seleccionar un cliente para dejar montos pendientes o ventas anotadas');
+        }
+
+        // Dinero a favor: validar que el cliente tenga saldo suficiente
         const creditBalanceUsed = paymentDetails && (paymentDetails.creditBalance != null) ? parseFloat(paymentDetails.creditBalance) || 0 : 0;
         if (creditBalanceUsed > 0) {
             if (!this.currentCustomer) throw new Error('Debes seleccionar un cliente para usar dinero a favor');
@@ -264,38 +294,32 @@ class POSController {
             if (currentCredit < creditBalanceUsed) throw new Error(`El cliente tiene ${formatCLP(currentCredit)} a favor; no alcanza para ${formatCLP(creditBalanceUsed)}`);
         }
 
-        // CRITICAL FIX: Add historical cost to each item before creating sale
+        // CRITICAL: Historical cost and rounding
         const itemsWithHistoricalCost = await Promise.all(this.cart.map(async (item) => {
             const product = await Product.getById(item.productId);
             return {
                 ...item,
-                costAtSale: product ? (parseFloat(product.cost) || 0) : 0 // Store historical cost
+                costAtSale: product ? (parseFloat(product.cost) || 0) : 0
             };
         }));
 
-        // Redondear totales por ítem a la decena para que la suma coincida con el total mostrado
         const itemsWithRoundedTotals = itemsWithHistoricalCost.map((item) => ({
             ...item,
-            total: roundPrice(parseFloat(item.total) || 0)
+            total: Math.round(parseFloat(item.total) || 0)
         }));
-        const sumRounded = itemsWithRoundedTotals.reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
-        if (itemsWithRoundedTotals.length > 0 && Math.abs(sumRounded - summary.actualTotalSale) > 0.01) {
-            const restSum = itemsWithRoundedTotals.slice(1).reduce((s, i) => s + (parseFloat(i.total) || 0), 0);
-            itemsWithRoundedTotals[0].total = Math.max(0, summary.actualTotalSale - restSum);
-        }
 
         const saleData = {
             customerId: this.currentCustomer ? this.currentCustomer.id : null,
             items: itemsWithRoundedTotals,
             subtotal: summary.subtotal,
-            total: summary.actualTotalSale,
+            total: totalToPay,
             discount: summary.discount,
-            ...this.computeFiscalFromTotal(summary.actualTotalSale, documentType),
-            paymentMethod: paymentMethod,
+            ...this.computeFiscalFromTotal(totalToPay, documentType),
+            paymentMethod: paymentMethod === 'mixed' ? 'mixed' : (isDebtSale && paidAmount === 0 ? 'pending' : paymentMethod),
             paymentDetails: paymentDetails,
             cashRegisterId: this.currentCashRegister.id,
-            status: isPending ? (paidAmount > 0 ? 'partial' : 'pending') : 'completed',
-            paidAmount: paidAmount,
+            status: paidAmount >= totalToPay ? 'completed' : (paidAmount > 0 ? 'partial' : 'pending'),
+            paidAmount: Math.min(paidAmount, totalToPay),
             documentType: documentType || 'boleta',
             transferName: paymentDetails ? paymentDetails.transferName : null,
             transferBank: paymentDetails ? paymentDetails.transferBank : null
@@ -321,31 +345,30 @@ class POSController {
             return sale;
         }
 
-        // Descontar dinero a favor del cliente
-        if (creditBalanceUsed > 0 && customerId) {
+        const sale = await Sale.getById(saleId);
+        
+        // Descontar dinero a favor del cliente (Solo en IndexedDB, en SQLite lo hace el backend atómicamente)
+        if (db.mode !== 'sqlite' && creditBalanceUsed > 0 && customerId) {
             const customer = await Customer.getById(customerId);
             const currentCredit = (customer && customer.balanceCredit != null) ? parseFloat(customer.balanceCredit) || 0 : 0;
             const newCredit = Math.max(0, currentCredit - creditBalanceUsed);
             await Customer.update(customerId, { balanceCredit: newCredit });
-        }
-
-        let sale = await Sale.getById(saleId);
-
-        // Registrar uso de saldo a favor para historial en cuenta del cliente
-        if (creditBalanceUsed > 0 && customerId && sale) {
-            await CustomerCreditUse.create({
-                customerId,
-                amount: creditBalanceUsed,
-                saleId: sale.id,
-                saleNumber: sale.saleNumber
-            });
+            
+            if (sale) {
+                await CustomerCreditUse.create({
+                    customerId,
+                    amount: creditBalanceUsed,
+                    saleId: sale.id,
+                    saleNumber: sale.saleNumber
+                });
+            }
         }
 
         if (!sale) {
             throw new Error('Error: La venta no se pudo crear correctamente');
         }
 
-        if (isPending && sale.customerId !== customerId) {
+        if (isPending && sale.customerId != customerId) {
             sale.customerId = customerId;
             await db.put('sales', sale);
         }
@@ -375,15 +398,16 @@ class POSController {
     async validateStock(productId, quantity) {
         const product = await Product.getById(productId);
         if (!product) return { valid: false, error: 'Producto no encontrado' };
-        const qty = parseFloat(quantity);
-        const stock = parseFloat(product.stock) || 0;
-        if (isNaN(qty) || qty <= 0) return { valid: false, error: 'Cantidad inválida' };
-        if (product.type === 'unit') {
-            if (stock < qty) return { valid: false, error: `Stock insuficiente: ${stock} en inventario` };
-        } else {
-            if (stock < qty) return { valid: false, error: `Stock insuficiente: ${stock} kg en inventario` };
+        
+        let allowNegative = true;
+        try {
+            const config = await db.get('settings', 'allowNegativeStock');
+            allowNegative = config == null ? true : !!config.value;
+        } catch (e) {
+            console.warn('Error recuperando allowNegativeStock:', e.message);
         }
-        return { valid: true };
+
+        return ProductValidator.validateStock(product, quantity, allowNegative);
     }
 }
 

@@ -149,45 +149,45 @@ const ReportsView = {
         });
 
         return `
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div class="flex-between-wrap">
                 <h3>Ventas de Hoy - ${formatDate(today)}</h3>
                 <button class="btn btn-secondary" onclick="ReportsView.exportToPDF('daily', ${JSON.stringify(report).replace(/"/g, '&quot;')})" style="background-color: #dc2626; color: white; border-color: #dc2626;">
                     📄 Exportar PDF
                 </button>
             </div>
             
-            <div class="grid grid-6" style="margin: 1.5rem 0;">
+            <div class="grid grid-6 margin-y-medium">
                 <div class="stat-card">
                     <h3>Ventas</h3>
                     <div class="value">${report.totalSales}</div>
                 </div>
                 <div class="stat-card">
                     <h3>Total Vendido</h3>
-                    <div class="value" style="color: var(--secondary);">${formatCLP(report.totalAmount)}</div>
+                    <div class="value">${formatCLP(report.totalAmount)}</div>
                 </div>
-                <div class="stat-card" style="border-bottom: 3px solid #f87171;">
-                    <h3 style="color: #f87171;">📉 Dinero para Impuestos (IVA)</h3>
-                    <div class="value" style="color: #f87171;">${formatCLP(report.ivaDebito)}</div>
-                    <small style="opacity: 0.8; display: block; margin-top: 0.2rem;">Dinero que debes guardar para el SII.</small>
+                <div class="stat-card card-tax-accent">
+                    <h3>📉 Dinero para Impuestos (IVA)</h3>
+                    <div class="value">${formatCLP(report.ivaDebito)}</div>
+                    <small class="small-muted-text">Dinero que debes guardar para el SII.</small>
                 </div>
-                <div class="stat-card" style="border-bottom: 3px solid #34d399;">
-                    <h3 style="color: #34d399;">📈 IVA a mi favor (Compras)</h3>
-                    <div class="value" style="color: #34d399;">${formatCLP(report.ivaCredito)}</div>
-                    <small style="opacity: 0.8; display: block; margin-top: 0.2rem;">Descuento por tus facturas de compra.</small>
+                <div class="stat-card card-credit-accent">
+                    <h3>📈 IVA a mi favor (Compras)</h3>
+                    <div class="value">${formatCLP(report.ivaCredito)}</div>
+                    <small class="small-muted-text">Descuento por tus facturas de compra.</small>
                 </div>
-                <div class="stat-card" style="border-bottom: 3px solid #60a5fa;">
-                    <h3 style="color: #60a5fa;">💰 Venta Limpia (Sin IVA)</h3>
-                    <div class="value" style="color: #60a5fa; font-weight: 800;">
+                <div class="stat-card card-net-accent">
+                    <h3>💰 Venta Limpia (Sin IVA)</h3>
+                    <div class="value" style="font-weight: 800;">
                         ${formatCLP(report.totalAmount - report.ivaDebito)}
                     </div>
-                    <small style="opacity: 0.8; display: block; margin-top: 0.2rem;">Total vendido quitando los impuestos.</small>
+                    <small class="small-muted-text">Total vendido quitando los impuestos.</small>
                 </div>
-                <div class="stat-card" style="border-bottom: 3px solid #10b981; background: rgba(16, 185, 129, 0.05);">
-                    <h3 style="color: #10b981; font-weight: bold;">💎 Mi Ganancia Real (Bolsillo)</h3>
-                    <div class="value" style="color: #10b981; font-weight: 900;">
+                <div class="stat-card card-pocket-accent">
+                    <h3 style="font-weight: bold;">💎 Mi Ganancia Real (Bolsillo)</h3>
+                    <div class="value" style="font-weight: 900;">
                         ${formatCLP(report.realProfit)}
                     </div>
-                    <small style="opacity: 0.9; font-weight: 500; display: block; margin-top: 0.2rem;">¡Tu dinero libre tras recuperar costos!</small>
+                    <small class="small-muted-text" style="font-weight: 500;">¡Tu dinero libre tras recuperar costos!</small>
                 </div>
             </div>
             
@@ -246,7 +246,7 @@ const ReportsView = {
         });
 
         return `
-            <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+            <div class="flex-between-wrap">
                 <div>
                     <h3>Ventas Semanales</h3>
                     <p>${formatDate(report.startDate)} - ${formatDate(report.endDate)}</p>
@@ -256,35 +256,35 @@ const ReportsView = {
                 </button>
             </div>
             
-            <div class="grid grid-6" style="margin: 1.5rem 0;">
+            <div class="grid grid-6 margin-y-medium">
                 <div class="stat-card">
                     <h3>Ventas Totales</h3>
                     <div class="value">${report.totalSales}</div>
                 </div>
                 <div class="stat-card">
                     <h3>Total Vendido</h3>
-                    <div class="value" style="color: var(--secondary);">${formatCLP(report.totalAmount)}</div>
+                    <div class="value">${formatCLP(report.totalAmount)}</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card card-tax-accent">
                     <h3>IVA Débito</h3>
-                    <div class="value" style="color: #f87171;">${formatCLP(report.ivaDebito)}</div>
+                    <div class="value">${formatCLP(report.ivaDebito)}</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card card-credit-accent">
                     <h3>IVA Crédito</h3>
-                    <div class="value" style="color: #34d399;">${formatCLP(report.ivaCredito)}</div>
+                    <div class="value">${formatCLP(report.ivaCredito)}</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card card-tax-accent">
                     <h3>IVA a Pagar (SII)</h3>
-                    <div class="value" style="color: #f87171;">
+                    <div class="value">
                         ${formatCLP(Math.max(0, report.ivaDebito - report.ivaCredito))}
                     </div>
                 </div>
-                <div class="stat-card" title="Venta Neta Total - Costo Neto Total">
-                    <h3>Ganancia Bruta Real</h3>
-                    <div class="value" style="color: #34d399; font-weight: 900;">
+                <div class="stat-card card-pocket-accent" title="Venta Neta Total - Costo Neto Total">
+                    <h3 style="font-weight: bold;">Ganancia Bruta Real</h3>
+                    <div class="value" style="font-weight: 900;">
                         ${formatCLP(report.realProfit)}
                     </div>
-                    <small style="opacity: 0.6; font-size: 0.7rem;">Utilidad real sin impuestos.</small>
+                    <small class="small-muted-text">Utilidad real sin impuestos.</small>
                 </div>
             </div>
             
@@ -381,7 +381,7 @@ const ReportsView = {
         });
 
         return `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 1rem;">
+            <div class="flex-between-wrap margin-bottom-large">
                 <div>
                     <h3 style="margin: 0;">Ventas de ${monthNames[report.month]} ${report.year}</h3>
                     <p style="margin: 0.5rem 0 0 0; color: var(--secondary); font-size: 0.9rem;">
@@ -389,7 +389,7 @@ const ReportsView = {
                         ${isCurrentMonth ? `(${daysInPeriod} de ${totalDaysInMonth} días)` : `(${totalDaysInMonth} días completos)`}
                     </p>
                 </div>
-                <div style="display: flex; align-items: center; gap: 1rem;">
+                <div class="flex-between-wrap" style="gap: 1rem;">
                     <button class="btn btn-primary" onclick="ReportsView.showReport('iva', ${currentYear}, ${currentMonth})">
                         🔍 Ver Detalle IVA
                     </button>
@@ -406,14 +406,14 @@ const ReportsView = {
                 </button>
             </div>
             
-            <div class="grid grid-3" style="margin: 1.5rem 0; gap: 1.5rem;">
+            <div class="grid grid-3 margin-y-medium">
                 <!-- Ganancia de Bolsillo -->
-                <div class="stat-card glass-panel" style="border-bottom: 4px solid var(--primary); padding: 1.5rem; position: relative;">
+                <div class="stat-card glass-panel panel-padding card-net-accent">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                         <h3 style="margin: 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8;">💰 Ganancia de Bolsillo</h3>
                         <span title="Dinero físico que queda tras vender. (Total Venta - Costo que pagaste)" style="cursor: help; background: rgba(255,255,255,0.1); border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem;">?</span>
                     </div>
-                    <div class="value" style="color: #60a5fa; font-size: 2.2rem;">${formatCLP(report.pocketProfit)}</div>
+                    <div class="value" >${formatCLP(report.pocketProfit)}</div>
                     <p style="font-size: 0.75rem; margin-top: 0.5rem; opacity: 0.6; line-height: 1.2;">
                         Cálculo: (Venta Total) - (Costo Bruto pagado al proveedor).<br>
                         <strong>Es el dinero real que entró a tu caja hoy.</strong>
@@ -421,12 +421,12 @@ const ReportsView = {
                 </div>
 
                 <!-- Ganancia Real -->
-                <div class="stat-card glass-panel" style="border-bottom: 4px solid #34d399; padding: 1.5rem; position: relative;">
+                <div class="stat-card glass-panel panel-padding card-pocket-accent">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                         <h3 style="margin: 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8;">📈 Ganancia Bruta Real</h3>
                         <span title="Tu utilidad real considerando que las ventas internas son 100% tuyas y las boletas pagan IVA." style="cursor: help; background: rgba(255,255,255,0.1); border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem;">?</span>
                     </div>
-                    <div class="value" style="color: #34d399; font-size: 2.2rem;">${formatCLP(report.realProfit)}</div>
+                    <div class="value" >${formatCLP(report.realProfit)}</div>
                     <p style="font-size: 0.75rem; margin-top: 0.5rem; opacity: 0.6; line-height: 1.2;">
                         Cálculo: (Ventas Internas) + (Ventas Boleta Neta) - (Costos Netos).<br>
                         <strong>Es el pozo de dinero real que te pertenece legalmente.</strong>
@@ -434,16 +434,13 @@ const ReportsView = {
                 </div>
 
                 <!-- Impuestos SII (Clickable for Modal Detail) -->
-                <div class="stat-card glass-panel clickable" 
-                     onclick="ReportsView.showIVADetailModal('debito', ${report.year}, ${report.month})"
-                     style="border-bottom: 4px solid #f87171; padding: 1.5rem; position: relative; cursor: pointer; transition: transform 0.2s;"
-                     onmouseover="this.style.transform='translateY(-5px)'"
-                     onmouseout="this.style.transform='translateY(0)'">
+                <div class="stat-card glass-panel panel-padding card-tax-accent clickable" 
+                     onclick="ReportsView.showIVADetailModal('debito', ${report.year}, ${report.month})">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                         <h3 style="margin: 0; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8;">⚖️ IVA a Declarar</h3>
                         <span title="Haz clic para ver el detalle de facturas y ventas." style="cursor: help; background: var(--primary); color: white; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: 0.7rem;">i</span>
                     </div>
-                    <div class="value" style="color: #f87171; font-size: 2.2rem;">${formatCLP(Math.max(0, report.ivaDebito - report.ivaCredito))}</div>
+                    <div class="value">${formatCLP(Math.max(0, report.ivaDebito - report.ivaCredito))}</div>
                     <div style="font-size: 0.75rem; margin-top: 0.5rem; opacity: 0.6; line-height: 1.2;">
                         <span style="color: #f87171;">(-) IVA Débito Ventas: ${formatCLP(report.ivaDebito)}</span><br>
                         <span style="color: #34d399;">(+) IVA Crédito Compras: ${formatCLP(report.ivaCredito)}</span>
@@ -452,7 +449,7 @@ const ReportsView = {
                 </div>
             </div>
 
-            <div class="grid grid-4" style="margin: 1.5rem 0; gap: 1rem;">
+            <div class="grid grid-4 margin-y-medium">
                 <div class="stat-card" style="padding: 1rem;">
                     <h3 style="font-size: 0.8rem; opacity: 0.7;">Venta Total</h3>
                     <div class="value" style="font-size: 1.4rem;">${formatCLP(report.totalAmount)}</div>

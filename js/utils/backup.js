@@ -3,7 +3,7 @@ const ENTITY_EXPORTS = [
     { key: 'debts', label: 'Clientes y Deudas', type: 'custom', handler: 'customerDebts', sheet: 'clientes_deudas' },
     { key: 'suppliers', label: 'Proveedores', type: 'store', store: 'suppliers', sheet: 'proveedores' },
     { key: 'purchases', label: 'Compras', type: 'store', store: 'purchases', sheet: 'compras' },
-    { key: 'expenses', label: 'Gastos', type: 'store', store: 'expenses', sheet: 'gastos' },
+
     { key: 'cash', label: 'Caja', type: 'store', store: 'cashRegisters', sheet: 'caja' },
     { key: 'inventory', label: 'Inventario', type: 'store', store: 'products', sheet: 'inventario' },
     { key: 'history', label: 'Historial de Ventas', type: 'store', store: 'stockMovements', sheet: 'historial_ventas' },
@@ -23,13 +23,15 @@ class BackupManager {
                 customers: await db.getAll('customers'),
                 suppliers: await db.getAll('suppliers'),
                 purchases: await db.getAll('purchases'),
+                expenses: await db.getAll('expenses'),
                 cashRegisters: await db.getAll('cashRegisters'),
                 cashMovements: await db.getAll('cashMovements'),
                 stockMovements: await db.getAll('stockMovements'),
                 settings: await db.getAll('settings'),
                 users: await db.getAll('users'),
                 payments: await db.getAll('payments'),
-                expenses: await db.getAll('expenses'),
+                businesses: await db.getAll('businesses'),
+
                 customerCreditDeposits: await db.getAll('customerCreditDeposits'),
                 customerCreditUses: await db.getAll('customerCreditUses'),
                 auditLogs: await db.getAll('auditLogs'),
@@ -59,29 +61,102 @@ class BackupManager {
      * Obtiene el objeto de backup (sin descargar). Usado por backup automático y por cierre.
      */
     static async getBackupData() {
+        const products = await db.getAll('products');
+        const categories = await db.getAll('categories');
+        const sales = await db.getAll('sales');
+        const customers = await db.getAll('customers');
+        const suppliers = await db.getAll('suppliers');
+        const purchases = await db.getAll('purchases');
+        const expenses = await db.getAll('expenses');
+        const cashRegisters = await db.getAll('cashRegisters');
+        const cashMovements = await db.getAll('cashMovements');
+        const stockMovements = await db.getAll('stockMovements');
+        const settings = await db.getAll('settings');
+        const users = await db.getAll('users');
+        const payments = await db.getAll('payments');
+        const businesses = await db.getAll('businesses');
+
+        const customerCreditDeposits = await db.getAll('customerCreditDeposits');
+        const customerCreditUses = await db.getAll('customerCreditUses');
+        const auditLogs = await db.getAll('auditLogs');
+        const productPriceHistory = await db.getAll('productPriceHistory');
+        const productCostHistory = await db.getAll('productCostHistory');
+        const supplierPayments = await db.getAll('supplierPayments');
+        const saleReturns = await db.getAll('saleReturns');
+        const passwordResets = await db.getAll('passwordResets');
+        const debtPaymentSessions = await db.getAll('debtPaymentSessions');
+
+        // CORRECCIÓN: Validar y corregir foreign keys antes de exportar
+        const categoryIds = new Set(categories.map(c => c.id));
+        const customerIds = new Set(customers.map(c => c.id));
+        const supplierIds = new Set(suppliers.map(s => s.id));
+
+        // Corregir productos con categorías inexistentes
+        let fixedProducts = 0;
+        products.forEach(p => {
+            if (p.category && !categoryIds.has(p.category)) {
+                p.category = null;
+                fixedProducts++;
+            }
+        });
+
+        // Corregir ventas con clientes inexistentes
+        let fixedSales = 0;
+        sales.forEach(s => {
+            if (s.customerId && !customerIds.has(s.customerId)) {
+                s.customerId = null;
+                fixedSales++;
+            }
+        });
+
+        // Corregir compras con proveedores inexistentes
+        let fixedPurchases = 0;
+        purchases.forEach(p => {
+            if (p.supplierId && !supplierIds.has(p.supplierId)) {
+                p.supplierId = null;
+                fixedPurchases++;
+            }
+        });
+
+        // Corregir settings con ID nulo
+        let fixedSettings = 0;
+        settings.forEach((s, index) => {
+            if (s.id === null || s.id === undefined) {
+                s.id = Date.now() + index;
+                fixedSettings++;
+            }
+        });
+
+        if (fixedProducts > 0 || fixedSales > 0 || fixedPurchases > 0 || fixedSettings > 0) {
+            console.warn(`Backup: Corregidos ${fixedProducts} productos, ${fixedSales} ventas, ${fixedPurchases} compras, ${fixedSettings} settings con foreign keys inválidos`);
+        }
+
         return {
             version: '1.0.0',
             exportDate: new Date().toISOString(),
-            products: await db.getAll('products'),
-            categories: await db.getAll('categories'),
-            sales: await db.getAll('sales'),
-            customers: await db.getAll('customers'),
-            suppliers: await db.getAll('suppliers'),
-            purchases: await db.getAll('purchases'),
-            cashRegisters: await db.getAll('cashRegisters'),
-            cashMovements: await db.getAll('cashMovements'),
-            stockMovements: await db.getAll('stockMovements'),
-            settings: await db.getAll('settings'),
-            users: await db.getAll('users'),
-            payments: await db.getAll('payments'),
-            expenses: await db.getAll('expenses'),
-            customerCreditDeposits: await db.getAll('customerCreditDeposits'),
-            customerCreditUses: await db.getAll('customerCreditUses'),
-            auditLogs: await db.getAll('auditLogs'),
-            productPriceHistory: await db.getAll('productPriceHistory'),
-            supplierPayments: await db.getAll('supplierPayments'),
-            saleReturns: await db.getAll('saleReturns'),
-            passwordResets: await db.getAll('passwordResets')
+            products,
+            categories,
+            sales,
+            customers,
+            suppliers,
+            purchases,
+            expenses,
+            cashRegisters,
+            cashMovements,
+            stockMovements,
+            settings,
+            users,
+            payments,
+            businesses,
+            customerCreditDeposits,
+            customerCreditUses,
+            auditLogs,
+            productPriceHistory,
+            productCostHistory,
+            supplierPayments,
+            saleReturns,
+            passwordResets,
+            debtPaymentSessions
         };
     }
 
@@ -123,22 +198,20 @@ class BackupManager {
 
             // La confirmación ahora se maneja antes de llamar a esta función para evitar bloqueos
             console.log('Iniciando importación certificada...');
+            console.log('Tablas en el archivo:', Object.keys(data).filter(k => !['version', 'exportDate'].includes(k)));
 
-            // MIGRACIÓN ULTRA-RÁPIDA (Bypass de backup para archivos pequeños)
             if (db.mode === 'sqlite') {
                 showNotification('🚀 Iniciando transferencia inmediata...', 'success');
-                console.log('📦 Enviando datos a SQLite (5MB aprox)...');
+                console.log('📦 Enviando datos a SQLite...');
                 const result = await ApiClient.post('migration/import', data);
+                console.log('📦 Resultado del servidor:', result);
                 if (!result.success) {
                     throw new Error(result.error || 'Error en servidor');
                 }
             } else {
                 showNotification('2/3: Guardando datos en navegador...', 'info');
                 // Modo IndexedDB: Importación secuencial tradicional
-                const stores = ['products', 'categories', 'sales', 'customers',
-                    'suppliers', 'purchases', 'cashRegisters', 'cashMovements', 'stockMovements', 'settings',
-                    'users', 'payments', 'expenses', 'customerCreditDeposits', 'customerCreditUses',
-                    'auditLogs', 'productPriceHistory', 'supplierPayments', 'saleReturns', 'passwordResets'];
+                const stores = ['products', 'categories', 'sales', 'customers', 'suppliers', 'purchases', 'expenses', 'cashRegisters', 'cashMovements', 'stockMovements', 'settings', 'users', 'payments', 'businesses', 'customerCreditDeposits', 'customerCreditUses', 'auditLogs', 'productPriceHistory', 'productCostHistory', 'supplierPayments', 'saleReturns', 'passwordResets', 'debtPaymentSessions'];
 
                 for (const store of stores) {
                     if (data[store] && Array.isArray(data[store])) {
@@ -153,37 +226,7 @@ class BackupManager {
                 }
             }
 
-            // Log stock differences after import (for audit trail)
-            try {
-                const importedProducts = await db.getAll('products');
-                const stockChanges = [];
-                for (const p of importedProducts) {
-                    const before = stockBefore[p.id];
-                    const newStock = parseFloat(p.stock) || 0;
-                    if (before && Math.abs(before.stock - newStock) >= 0.01) {
-                        stockChanges.push({
-                            id: p.id,
-                            name: p.name || before.name,
-                            stockBefore: before.stock,
-                            stockAfter: newStock,
-                            delta: newStock - before.stock
-                        });
-                    }
-                }
-                if (stockChanges.length > 0) {
-                    showNotification('3/3: Stock actualizado y verificado', 'success');
-                    console.warn(`IMPORT: ${stockChanges.length} producto(s) con cambio de stock:`, stockChanges);
-                    if (typeof AuditLogService !== 'undefined') {
-                        AuditLogService.log({
-                            entity: 'backup', entityId: 0, action: 'import',
-                            summary: `Importación de datos: ${stockChanges.length} producto(s) con stock modificado`,
-                            metadata: { stockChanges }
-                        });
-                    }
-                }
-            } catch (_) { }
-
-            showNotification('Datos importados exitosamente (backup previo creado)', 'success');
+            showNotification('✅ Datos importados exitosamente. Recargando...', 'success');
             setTimeout(() => location.reload(), 1500);
         } catch (error) {
             console.error('Error importing data:', error);
@@ -423,8 +466,8 @@ class BackupManager {
             // First clear all object stores
             const stores = ['products', 'categories', 'sales', 'customers',
                 'suppliers', 'purchases', 'cashRegisters', 'cashMovements', 'stockMovements',
-                'settings', 'users', 'payments', 'expenses', 'customerCreditDeposits', 'customerCreditUses',
-                'auditLogs', 'productPriceHistory', 'supplierPayments', 'saleReturns', 'passwordResets'];
+                'settings', 'users', 'payments', 'customerCreditDeposits', 'customerCreditUses',
+                'auditLogs', 'productPriceHistory', 'productCostHistory', 'supplierPayments', 'saleReturns', 'passwordResets', 'debtPaymentSessions'];
 
             for (const store of stores) {
                 try {

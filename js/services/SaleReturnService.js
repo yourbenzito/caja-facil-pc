@@ -115,6 +115,13 @@ class SaleReturnService {
                 cashRegisterId: openCash ? openCash.id : null
             });
             if (!result.success) throw new Error(result.error || 'Error en devolución SQLite');
+            
+            // CRITICAL: Invalidate relevant caches
+            db.clearCache('sales');
+            db.clearCache('products');
+            db.clearCache('stockMovements');
+            db.clearCache('saleReturns');
+            
             return { returnId: result.id, totalReturned };
         }
 
@@ -142,41 +149,34 @@ class SaleReturnService {
                 resolvedReturnId = returnRequest.result;
             };
 
-            // Restore stock for each item (read products WITHIN transaction)
-            for (const item of validatedItems) {
-                const getReq = productStore.get(item.productId);
-                getReq.onsuccess = () => {
-                    const product = getReq.result;
-                    if (!product) return;
-                    const currentStock = parseFloat(product.stock) || 0;
-                    productStore.put({
-                        ...product,
-                        stock: currentStock + item.quantity,
-                        updatedAt: new Date().toISOString()
-                    });
-                    movementStore.add({
-                        productId: item.productId,
-                        type: 'return',
-                        quantity: item.quantity,
-                        reference: saleId,
-                        date: new Date().toISOString(),
-                        reason: `Devolución Venta #${sale.saleNumber || saleId}: ${reason || 'Sin motivo'}`,
-                        cost_value: (item.costAtSale || 0) * item.quantity,
-                        sale_value: (item.unitPrice || 0) * item.quantity
-                    });
-                };
-            }
+            const executeStockRestore = async () => {
+                // Restore stock for each item using the unified engine
+                for (const item of validatedItems) {
+                    await StockService.applyStockMovement(
+                        item.productId,
+                        item.quantity,
+                        'return',
+                        saleId,
+                        `Devolución Venta #${sale.saleNumber || saleId}: ${reason || 'Sin motivo'}`,
+                        tx
+                    );
+                }
+            };
 
-            if (deductFromCashRegister && openCash) {
-                const desc = `Reembolso por Devolución Venta #${sale.saleNumber || saleId}`;
-                cashMovementStore.add({
-                    cashRegisterId: openCash.id,
-                    type: 'out',
-                    amount: totalReturned,
-                    reason: desc,
-                    date: new Date().toISOString()
-                });
-            }
+            executeStockRestore().then(() => {
+                if (deductFromCashRegister && openCash) {
+                    const desc = `Reembolso por Devolución Venta #${sale.saleNumber || saleId}`;
+                    cashMovementStore.add({
+                        cashRegisterId: openCash.id,
+                        type: 'out',
+                        amount: totalReturned,
+                        description: desc,
+                        date: new Date().toISOString()
+                    });
+                }
+            }).catch(err => {
+                tx.abort();
+            });
         });
 
         return { returnId, totalReturned };

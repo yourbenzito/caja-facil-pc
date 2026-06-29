@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es"> <!-- Actualizado: 13-03-2026 20:10 -->
+<html lang="es"> <!-- Actualizado: 29-03-2026 14:15 -->
 
 <head>
     <meta charset="UTF-8">
@@ -11,21 +11,29 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="POS Mini">
-    <meta http-equiv="Content-Security-Policy"
-        content="default-src 'self' data: gap: https://ssl.gstatic.com 'unsafe-eval' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://cdn.sheetjs.com https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src * 'unsafe-inline'; worker-src 'self' blob:;">
-    <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
-    <title>CajaFácil POS v2026.3</title>
+    <title>CajaFácil - Sistema POS</title>
     <link rel="manifest" href="manifest.json">
-    <link rel="stylesheet" href="css/styles.css?v=2026.final.v3">
+    <link rel="stylesheet" href="css/styles.css?v=2026.final">
+
+    <!-- Cargar Tema y Brillo de forma inmediata para prevenir parpadeo (FOUC) -->
+    <script>
+        (function() {
+            const theme = localStorage.getItem('APP_THEME') || 'indigo';
+            const brightness = localStorage.getItem('APP_BRIGHTNESS') || '1';
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.style.setProperty('--app-brightness', brightness);
+        })();
+    </script>
+
+    <!-- Sistema blindado 100% Offline -->
+    <!-- Fuentes locales del sistema (Outfit/Inter) -->
 </head>
 
 <body>
-    <div id="update-banner"
-        style="display: none; position: fixed; top: 0; left: 0; width: 100%; background: #3498db; color: white; text-align: center; padding: 10px; z-index: 9999; font-weight: bold; cursor: pointer; animation: slideDown 0.5s ease-out;">
-        🚀 ¡Hay una nueva actualización disponible! Haz clic aquí para actualizar.
-    </div>
+    <!-- Gateway blindado fue removido de la versión local para acceso rápido -->
+    <!-- Banner de actualización removido para versión escritorio -->
+
+    <!-- BANNER DE SUSCRIPCIÓN ELIMINADO -->
 
     <style>
         @keyframes slideDown {
@@ -37,56 +45,44 @@
                 transform: translateY(0);
             }
         }
+        .held-sale-compact-item:hover {
+            border-color: var(--primary) !important;
+            background: rgba(79, 70, 229, 0.05) !important;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+        .held-sale-compact-item:active {
+            transform: translateY(0);
+        }
     </style>
 
-    <script>
-        // Sistema de Actualización Automática
-        async function checkVersion() {
-            try {
-                const response = await fetch('version.json?t=' + new Date().getTime());
-                const data = await response.json();
-                const currentVersion = localStorage.getItem('app_version');
-
-                if (currentVersion && currentVersion !== data.version) {
-                    document.getElementById('update-banner').style.display = 'block';
-                    document.getElementById('update-banner').onclick = () => {
-                        localStorage.setItem('app_version', data.version);
-                        window.location.reload(true);
-                    };
-                } else if (!currentVersion) {
-                    localStorage.setItem('app_version', data.version);
-                }
-            } catch (e) { console.log('Error check version:', e); }
-        }
-        checkVersion();
-    </script>
-    <!-- Google Fonts para diseño premium -->
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <!-- Script de actualización removido -->
+    <!-- Google Fonts movidas al <head> con preload para mejor rendimiento -->
 
     <!-- Splash screen para carga (Diseño Premium 2026) -->
     <div id="splash-screen"
-        style="position: fixed; inset: 0; background: #f8fafc; display: flex; align-items: center; justify-content: center; z-index: 10000; font-family: 'Outfit', sans-serif; overflow: hidden;">
+        style="position: fixed; inset: 0; background: #0f172a url('images/sales_bg_dark.png') no-repeat center center; background-size: cover; display: flex; align-items: center; justify-content: center; z-index: 10000; font-family: 'Outfit', sans-serif; overflow: hidden;">
         
-        <!-- Fondo Soft -->
-        <div style="position: absolute; inset: 0; background: radial-gradient(circle at top right, rgba(79, 70, 229, 0.05), transparent 40%); opacity: 0.8;"></div>
+        <!-- Overlay blurred -->
+        <div style="position: absolute; inset: 0; background: rgba(255, 255, 255, 0.4); backdrop-filter: blur(8px); z-index: 1;"></div>
 
         <!-- Contenedor Premium -->
-        <div style="position: relative; z-index: 10; text-align: center; background: #ffffff; border: 1px solid #e2e8f0; padding: 4rem 3rem; border-radius: 2.5rem; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1); animation: splashFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;">
+        <div style="position: relative; z-index: 10; text-align: center; background: rgba(255, 255, 255, 0.98); border: 4px solid #4f46e5; padding: 4rem 3rem; border-radius: 3rem; box-shadow: 0 50px 100px -20px rgba(0, 0, 0, 0.6), 0 0 30px rgba(79, 70, 229, 0.3); animation: splashFadeIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;">
             
-            <div class="logo-animation" style="position: relative; width: 100px; height: 100px; margin: 0 auto 2rem; display: flex; align-items: center; justify-content: center;">
-                <div style="position: absolute; width: 100%; height: 100%; border: 3px solid #4f46e5; border-radius: 24px; animation: rotating-glow 4s linear infinite;"></div>
-                <div style="font-size: 3rem; z-index: 1; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));">🛒</div>
+            <div class="logo-animation" style="position: relative; width: 120px; height: 120px; margin: 0 auto 2.5rem; display: flex; align-items: center; justify-content: center;">
+                <div style="position: absolute; width: 100%; height: 100%; border: 4px solid #4f46e5; border-radius: 30px; animation: rotating-glow 4s linear infinite;"></div>
+                <div style="font-size: 4rem; z-index: 1; filter: drop-shadow(0 10px 15px rgba(0,0,0,0.2));">🛒</div>
             </div>
             
-            <h1 style="color: #0f172a; font-size: 2.5rem; font-weight: 800; margin: 0; letter-spacing: -1px; line-height: 1;">Caja<span style="color: #4f46e5;">Fácil</span></h1>
-            <p style="color: #64748b; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 4px; margin-top: 0.5rem; margin-bottom: 2.5rem; font-weight: 700;">Diseño Remodelado 2026</p>
+            <h1 style="color: #0f172a; font-size: 3rem; font-weight: 900; margin: 0; letter-spacing: -2px; line-height: 1;">Caja<span style="color: #4f46e5;">Fácil</span></h1>
+            <p style="color: #475569; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 5px; margin-top: 0.75rem; margin-bottom: 3rem; font-weight: 800;">DISEÑO REMODELADO 2026</p>
             
-            <!-- Barra de Progreso -->
-            <div style="width: 200px; height: 4px; background: #f1f5f9; border-radius: 10px; margin: 0 auto 1.25rem; overflow: hidden; position: relative;">
-                <div style="position: absolute; height: 100%; width: 50%; background: #4f46e5; border-radius: 10px; animation: infinite-smooth-scroll 1.5s ease-in-out infinite;"></div>
+            <!-- Barra de Progreso Mejorada -->
+            <div style="width: 280px; height: 8px; background: #e2e8f0; border-radius: 20px; margin: 0 auto 1.5rem; overflow: hidden; position: relative; border: 1px solid #cbd5e1;">
+                <div style="position: absolute; height: 100%; width: 60%; background: linear-gradient(90deg, #4f46e5, #818cf8); border-radius: 20px; animation: infinite-smooth-scroll 2s ease-in-out infinite;"></div>
             </div>
             
-            <p id="loading-text" style="color: #64748b; font-size: 0.875rem; font-family: 'Inter', sans-serif; font-weight: 500;">Iniciando sistema seguro...</p>
+            <p id="loading-text" style="color: #1e293b; font-size: 1rem; font-family: 'Inter', sans-serif; font-weight: 700;">Iniciando sistema seguro...</p>
         </div>
     </div>
 
@@ -120,7 +116,7 @@
             <div class="sidebar-content">
                 <div class="logo">
                     <h2 id="sidebar-business-name">🛒 CajaFácil</h2>
-                    <small style="opacity: 0.7; font-size: 0.75rem;">v1.0.0</small>
+                    <small style="opacity: 0.7; font-size: 0.75rem;">v1.4.2</small>
                 </div>
                 <div class="sidebar-top-row">
                     <div class="sidebar-status-group">
@@ -139,18 +135,19 @@
                     </div>
                 </div>
                 <ul class="nav-menu">
+                    <li><a href="#" data-view="dashboard"><span class="icon">📊</span> Dashboard</a></li>
                     <li><a href="#" data-view="pos" class="active"><span class="icon">🛒</span> Punto de Venta</a></li>
                     <li><a href="#" data-view="products"><span class="icon">📦</span> Productos</a></li>
                     <li><a href="#" data-view="customers"><span class="icon">👥</span> Clientes</a></li>
                     <li><a href="#" data-view="suppliers"><span class="icon">🚚</span> Provedores</a></li>
                     <li><a href="#" data-view="purchases"><span class="icon">📋</span> Compras</a></li>
-                    <li><a href="#" data-view="expenses"><span class="icon">💸</span> Gastos</a></li>
                     <li><a href="#" data-view="cash"><span class="icon">💰</span> Caja</a></li>
-                    <li><a href="#" data-view="inventory"><span class="icon">📊</span> Inventario</a></li>
+                    <li><a href="#" data-view="expenses"><span class="icon">💸</span> Gastos</a></li>
+                    <li><a href="#" data-view="inventory"><span class="icon">📊</span> Control Stock</a></li>
                     <li><a href="#" data-view="reports"><span class="icon">📈</span> Reportes</a></li>
                     <li><a href="#" data-view="sales"><span class="icon">📋</span> Historial Ventas</a></li>
                     <li><a href="#" data-view="settings"><span class="icon">⚙️</span> Configuración</a></li>
-                    <li><a href="#" data-view="auditLogs"><span class="icon">🕵️</span> Auditoría</a></li>
+                    <li><a href="#" data-view="auditLogs"><span class="icon">🕵️</span> Auditoría Sist.</a></li>
                 </ul>
             </div>
         </nav>
@@ -165,145 +162,138 @@
 
     <!-- Scripts en orden de dependencia -->
     <!-- v2.1 - Fixed payment duplication and payment method selector -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <!-- Librerías externas con defer para no bloquear el renderizado -->
+    <script src="js/libs/jspdf.umd.min.js" defer></script>
+    <script src="js/libs/jspdf.plugin.autotable.min.js" defer></script>
+    <script src="js/libs/xlsx.full.min.js" defer></script>
+    <!-- html5-qrcode: carga DINÁMICA solo cuando se necesita (ahorra ~200KB en carga inicial) -->
+    <script>
+        window._loadQrScanner = function() {
+            return new Promise((resolve, reject) => {
+                if (window.Html5Qrcode) return resolve();
+                const s = document.createElement('script');
+                s.src = 'js/libs/html5-qrcode.min.js';
+                s.onload = resolve;
+                s.onerror = reject;
+                document.head.appendChild(s);
+            });
+        };
+    </script>
+    <!-- === CORE: Deben ejecutarse en orden, sin defer === -->
     <script src="js/config.js"></script>
     <script src="js/utils/api-client.js"></script>
-    <script src="js/utils/formatter.js?v=2.1"></script>
-    <script src="js/utils/alerts.js?v=4.0"></script>
-    <script src="js/utils/backup.js?v=4.0"></script>
-    <script src="js/utils/debounce.js?v=2.4"></script>
-    <script src="js/utils/keyboard.js?v=2.3"></script>
-    <script src="js/utils/validator.js?v=2.1"></script>
-    <script src="js/db.js?v=20.10"></script>
+    <script src="js/db.js?v=20.11"></script>
+
+    <!-- === RESTO DE SCRIPTS: defer permite parsear HTML mientras se descargan === -->
+    <script src="js/utils/formatter.js?v=2.1" defer></script>
+    <script src="js/utils/dom-patcher.js" defer></script>
+    <script src="js/utils/alerts.js?v=2026.final.2" defer></script>
+    <script src="js/utils/backup.js?v=4.0" defer></script>
+    <script src="js/utils/debounce.js?v=2.4" defer></script>
+    <script src="js/utils/keyboard.js?v=2.3" defer></script>
+    <script src="js/utils/validator.js?v=2.1" defer></script>
     <!-- Repositories -->
-    <script src="js/repositories/BaseRepository.js?v=2.3"></script>
-    <script src="js/repositories/productRepository.js?v=2.2"></script>
-    <script src="js/repositories/SaleRepository.js?v=4.0"></script>
-    <script src="js/repositories/CustomerRepository.js?v=4.0"></script>
-    <script src="js/repositories/PaymentRepository.js?v=4.0"></script>
-    <script src="js/repositories/PurchaseRepository.js?v=4.0"></script>
-    <script src="js/repositories/StockMovementRepository.js?v=4.0"></script>
-    <script src="js/repositories/CashRegisterRepository.js?v=4.0"></script>
-    <script src="js/repositories/CashMovementRepository.js?v=4.0"></script>
-    <script src="js/repositories/SupplierRepository.js?v=4.0"></script>
-    <script src="js/repositories/UserRepository.js?v=4.0"></script>
-    <script src="js/repositories/PasswordResetRepository.js?v=4.0"></script>
-    <script src="js/repositories/ExpenseRepository.js?v=4.0"></script>
-    <script src="js/repositories/CustomerCreditDepositRepository.js?v=4.0"></script>
-    <script src="js/repositories/CustomerCreditUseRepository.js?v=4.0"></script>
-    <script src="js/repositories/SaleReturnRepository.js?v=4.0"></script>
-    <script src="js/repositories/SupplierPaymentRepository.js?v=1.0"></script>
-    <script src="js/repositories/ProductPriceHistoryRepository.js?v=1.0"></script>
-    <!-- Graficos -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="js/repositories/BaseRepository.js?v=2.3" defer></script>
+    <script src="js/repositories/productRepository.js?v=2.2" defer></script>
+    <script src="js/repositories/SaleRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/CustomerRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/PaymentRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/PurchaseRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/StockMovementRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/CashRegisterRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/CashMovementRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/SupplierRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/UserRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/PasswordResetRepository.js?v=1.0" defer></script>
+    <script src="js/repositories/CustomerCreditUseRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/CustomerCreditDepositRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/SaleReturnRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/SupplierPaymentRepository.js?v=1.0" defer></script>
+    <script src="js/repositories/ProductPriceHistoryRepository.js?v=1.0" defer></script>
+    <!-- Gráficos (Chart.js — 100% Local) -->
+    <script src="js/libs/chart.js"></script>
+    <!-- Excel (XLSX — 100% Local. Ya cargado arriba con defer en línea 172) -->
     <!-- Services -->
-    <script src="js/services/PermissionService.js?v=1.0"></script>
-    <script src="js/services/AuditLogService.js?v=1.0"></script>
-    <script src="js/services/StockService.js?v=2.3"></script>
-    <script src="js/services/PaymentService.js?v=2.4"></script>
-    <script src="js/services/AccountService.js?v=2.3"></script>
-    <script src="js/services/SaleService.js?v=2.3"></script>
-    <script src="js/services/SaleReturnService.js?v=1.0"></script>
-    <script src="js/services/SupplierPaymentService.js?v=6.0"></script>
-    <script src="js/services/CustomerAccountService.js?v=1.0"></script>
+    <script src="js/services/PermissionService.js?v=1.0" defer></script>
+    <script src="js/services/AuditLogService.js?v=1.0" defer></script>
+    <script src="js/services/StockService.js?v=2.3" defer></script>
+    <script src="js/services/PaymentService.js?v=2.4" defer></script>
+    <script src="js/services/AccountService.js?v=2.3" defer></script>
+    <script src="js/services/SaleService.js?v=2.4" defer></script>
+    <script src="js/services/SaleReturnService.js?v=1.1" defer></script>
+    <script src="js/services/SupplierPaymentService.js?v=6.1" defer></script>
+    <script src="js/services/CustomerAccountService.js?v=1.1" defer></script>
     <!-- Validators -->
-    <script src="js/validators/PaymentValidator.js?v=2.2"></script>
-    <script src="js/validators/SaleValidator.js?v=2.2"></script>
-    <script src="js/validators/ProductValidator.js?v=2.2"></script>
+    <script src="js/validators/PaymentValidator.js?v=2.2" defer></script>
+    <script src="js/validators/SaleValidator.js?v=2.2" defer></script>
+    <script src="js/validators/ProductValidator.js?v=2.2" defer></script>
     <!-- Models -->
-    <script src="js/models/User.js?v=2.3"></script>
-    <script src="js/models/PasswordReset.js?v=1.0"></script>
-    <script src="js/auth.js?v=2.1"></script>
-    <script src="js/utils/db-utilities.js?v=2.1"></script>
-    <script src="js/utils/fixCashMovementsSync.js?v=1.0"></script>
-    <script src="js/models/product.js?v=2.1"></script>
-    <script src="js/models/ProductPriceHistory.js?v=1.0"></script>
-    <script src="js/services/ProductService.js?v=1.0"></script>
-    <script src="js/models/Sale.js?v=2.3"></script>
-    <script src="js/models/SaleReturn.js?v=1.0"></script>
-    <script src="js/models/Customer.js?v=2.1"></script>
-    <script src="js/models/Supplier.js?v=2.1"></script>
-    <script src="js/models/Purchase.js?v=6.0"></script>
-    <script src="js/models/SupplierPayment.js?v=1.0"></script>
-    <script src="js/models/CashRegister.js?v=2.3"></script>
-    <script src="js/models/StockMovement.js?v=2.1"></script>
-    <script src="js/models/CashMovement.js?v=2.1"></script>
-    <script src="js/models/Payment.js?v=2.1"></script>
-    <script src="js/models/CustomerCreditDeposit.js?v=1.0"></script>
-    <script src="js/models/CustomerCreditUse.js?v=1.0"></script>
-    <script src="js/models/Expense.js?v=1.0"></script>
-    <script src="js/utils/migrateHistoricalCost.js?v=1.0"></script>
-    <script src="js/utils/createHistoricalCashRegister.js?v=1.0"></script>
-    <script src="js/utils/verifyCashRegister.js?v=1.0"></script>
-    <script src="js/utils/deleteCashRegister.js?v=1.0"></script>
-    <script src="js/utils/updateCashRegister6.js?v=1.0"></script>
-    <script src="js/controllers/ProductController.js?v=2.1"></script>
-    <script src="js/controllers/POSController.js?v=2.2"></script>
-    <script src="js/controllers/CustomerController.js?v=2.1"></script>
-    <script src="js/controllers/SupplierController.js?v=5.0"></script>
-    <script src="js/controllers/CashController.js?v=2.1"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="js/controllers/ReportController.js?v=2.4"></script>
-    <script src="js/controllers/ExpenseController.js?v=1.0"></script>
-    <script src="js/views/pos.js?v=4.0"></script>
-    <script src="js/views/products.js?v=20.10"></script>
-    <script src="js/views/customers.js?v=20.10"></script>
-    <script src="js/views/suppliers.js?v=5.0"></script>
-    <script src="js/views/purchases.js?v=6.0"></script>
-    <script src="js/views/cash.js?v=2.1"></script>
-    <script src="js/views/inventory.js?v=2.1"></script>
-    <script src="js/views/reports.js?v=2.8"></script>
-    <script src="js/views/expenses.js?v=4.0"></script>
-    <script src="js/views/sales.js?v=4.0"></script>
-    <script src="js/views/settings.js?v=4.0"></script>
-    <script src="js/views/auditLogs.js?v=4.0"></script>
-    <script src="js/app.js?v=2026.3.1"></script>
-    <script src="js/utils/zeroBrankitoAccount.js?v=1.0"></script>
+    <script src="js/models/User.js?v=2.3" defer></script>
+    <script src="js/models/PasswordReset.js?v=1.0" defer></script>
+    <script src="js/auth.js?v=2.1" defer></script>
+    <script src="js/utils/db-utilities.js?v=2.1" defer></script>
+    <script src="js/models/product.js?v=2.1" defer></script>
+    <script src="js/models/ProductPriceHistory.js?v=1.0" defer></script>
+    <script src="js/services/ProductService.js?v=1.0" defer></script>
+    <script src="js/models/Sale.js?v=2.4" defer></script>
+    <script src="js/models/SaleReturn.js?v=1.0" defer></script>
+    <script src="js/models/Customer.js?v=2.1" defer></script>
+    <script src="js/models/Supplier.js?v=2.1" defer></script>
+    <script src="js/models/Purchase.js?v=7.1" defer></script>
+    <script src="js/models/SupplierPayment.js?v=1.0" defer></script>
+    <script src="js/models/CashRegister.js?v=2.3" defer></script>
+    <script src="js/models/StockMovement.js?v=2.1" defer></script>
+    <script src="js/models/CashMovement.js?v=2.1" defer></script>
+    <script src="js/models/Payment.js?v=2.2" defer></script>
+    <script src="js/models/CustomerCreditUse.js?v=1.0" defer></script>
+    <script src="js/models/CustomerCreditDeposit.js?v=1.0" defer></script>
+    <script src="js/controllers/ProductController.js?v=2.1" defer></script>
+    <script src="js/controllers/POSController.js?v=2.2" defer></script>
+    <script src="js/controllers/CustomerController.js?v=2.1" defer></script>
+    <script src="js/controllers/SupplierController.js?v=5.1" defer></script>
+    <script src="js/controllers/CashController.js?v=2026.final" defer></script>
+    <script src="js/controllers/ReportController.js?v=2.5" defer></script>
+    <script src="js/views/pos.js?v=4.3" defer></script>
+    <script src="js/views/products.js?v=20.10" defer></script>
+    <script src="js/views/customers.js?v=20.10" defer></script>
+    <script src="js/views/suppliers.js?v=5.1" defer></script>
+    <script src="js/views/purchases.js?v=7.1" defer></script>
+    <script src="js/views/cash.js?v=2026.final.3" defer></script>
+    <script src="js/views/inventory.js?v=2.2" defer></script>
+    <script src="js/views/reports.js?v=2026.final" defer></script>
+    <script src="js/views/sales.js?v=4.1" defer></script>
+    <script src="js/helpers/bluetoothPrinter.js?v=1.0" defer></script>
+    <script src="js/views/settings.js?v=4.1" defer></script>
+    <script src="js/views/auditLogs.js?v=4.0" defer></script>
+    <script src="js/views/expenses.js?v=1.0" defer></script>
+    <script src="js/views/dashboard.js?v=1.0" defer></script>
+    <script src="js/app.js?v=2026.final" defer></script>
+    <script src="js/utils/auto-backup.js?v=1.0" defer></script>
 
     <script>
-        // Registro de Service Worker para PWA (Celulares)
-        if ('serviceWorker' in navigator && (window.location.protocol === 'http:' || window.location.protocol === 'https:')) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js?v=2026.3')
-                    .then(reg => console.log('✅ Service Worker registrado para modo App'))
-                    .catch(err => console.warn('❌ Falló el registro del Service Worker', err));
-            });
-        }
-
-        // Ocultar splash screen cuando todo cargue
+        // Nombre del negocio en sidebar (splash lo controla app.js)
         window.addEventListener('load', () => {
-            setTimeout(() => {
-                const splash = document.getElementById('splash-screen');
-                const appDiv = document.getElementById('app');
-                if (splash) splash.style.display = 'none';
-                if (appDiv) appDiv.style.display = 'flex';
-
-                // Mostrar nombre del negocio en el sidebar
-                try {
-                    const businessData = localStorage.getItem('CURRENT_BUSINESS');
-                    if (businessData) {
-                        const business = JSON.parse(businessData);
-                        const sidebarName = document.getElementById('sidebar-business-name');
-                        if (sidebarName && business.name) {
-                            sidebarName.textContent = '🛒 ' + business.name;
-                        }
+            try {
+                const businessData = localStorage.getItem('CURRENT_BUSINESS');
+                if (businessData) {
+                    const business = JSON.parse(businessData);
+                    const sidebarName = document.getElementById('sidebar-business-name');
+                    if (sidebarName && business.name) {
+                        sidebarName.textContent = '🛒 ' + business.name;
                     }
-                } catch (e) { }
-            }, 200);
+                }
+            } catch (e) { }
         });
 
         // Monitorear estado de red
         window.addEventListener('online', () => {
             const indicator = document.getElementById('online-indicator');
-            if (indicator) indicator.innerHTML = '🟢 Sistema Listo';
+            if (indicator) indicator.innerHTML = '🟢 Sistema Local Listo';
         });
 
         window.addEventListener('offline', () => {
             const indicator = document.getElementById('online-indicator');
-            if (indicator) indicator.innerHTML = '🔴 Modo Offline';
+            if (indicator) indicator.innerHTML = '🟢 Sistema Local (Sin Internet)';
         });
 
         function toggleSidebar() {
@@ -315,6 +305,8 @@
     </script>
 
 
+    <div id="brightness-overlay"></div>
 </body>
+
 
 </html>

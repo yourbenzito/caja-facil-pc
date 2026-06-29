@@ -24,8 +24,21 @@ class Product {
             // C3: Trazabilidad — quién creó/modificó
             createdBy: AuditLogService.getCurrentUserId(),
             updatedBy: AuditLogService.getCurrentUserId(),
-            lastSoldAt: null // Track product rotation
+            lastSoldAt: null, // Track product rotation
+            lastSupplierId: data.lastSupplierId || null
         };
+
+        if (db.mode === 'sqlite') {
+            const result = await window.ApiClient.post('complex/product', product);
+            const id = result.id || result;
+            
+            AuditLogService.log({
+                entity: 'product', entityId: id, action: 'create',
+                summary: `Producto creado: "${data.name}" (SQLite)`,
+                metadata: { name: data.name, barcode: data.barcode || '', price: product.price, cost: product.cost, stock: product.stock }
+            });
+            return id;
+        }
 
         const id = await this._repository.create(product);
 
@@ -73,6 +86,22 @@ class Product {
 
         // C3: Trazabilidad — quién modificó
         data.updatedBy = AuditLogService.getCurrentUserId();
+
+        if (db.mode === 'sqlite') {
+            await window.ApiClient.put('complex/product', id, data);
+            
+            // Audit log handling is tricky in complex mode, but we can do a simple one here
+            // because server.js doesn't log automatically for complex/product yet
+            AuditLogService.log({
+                entity: 'product',
+                entityId: id,
+                action: 'update',
+                summary: `Modificó producto (SQLite): ${id}`,
+                metadata: { id, changes: Object.keys(data) }
+            });
+            return true;
+        }
+
         const result = await this._repository.update(id, data);
 
         // C7: Registrar cambio de precio si hubo cambio real
@@ -361,9 +390,8 @@ class Product {
 
         const averageCost = (totalCurrent + totalNew) / totalStock;
 
-        // Redondear a número entero (sin decimales) para mantener consistencia
-        // Pero asegurarnos de que nunca sea 0 si hay stock
-        const rounded = Math.round(averageCost);
+        // Redondear a 2 decimales para precisión contable
+        const rounded = Math.round(averageCost * 100) / 100;
         return rounded > 0 ? rounded : nCost;
     }
 
@@ -399,22 +427,51 @@ class Product {
 
     static async importProducts(products) {
         const results = [];
-        for (const productData of products) {
-            try {
-                const id = await this.create(productData);
-                results.push({ success: true, id, name: productData.name });
-            } catch (error) {
-                results.push({ success: false, error: error.message, name: productData.name });
-            }
+        const batchSize = 10;
+        
+        // Optimización FASE 5: Procesar en lotes para mayor velocidad (paralelismo controlado)
+        for (let i = 0; i < products.length; i += batchSize) {
+            const batch = products.slice(i, i + batchSize);
+            const batchPromises = batch.map(async (productData) => {
+                try {
+                    const id = await this.create(productData);
+                    return { success: true, id, name: productData.name };
+                } catch (error) {
+                    return { success: false, error: error.message, name: productData.name };
+                }
+            });
+            
+            const batchResults = await Promise.all(batchPromises);
+            results.push(...batchResults);
         }
+        
         return results;
     }
 
-    /**
-     * Update last sold date
-     * @param {number} id - Product ID
-     * @param {string} date - ISO date string
-     */
+
+    static async getCategoryStats() {
+        if (db.mode === 'sqlite' && window.ApiClient) {
+            return await window.ApiClient.get('products/stats/categories');
+        }
+        // Fallback local (IndexedDB)
+        const products = await this.getAll();
+        const stats = {};
+        products.forEach(p => {
+            const cat = p.category || 'General';
+            if (!stats[cat]) stats[cat] = { category: cat, total: 0, low: 0, out: 0 };
+            stats[cat].total++;
+            const stock = parseFloat(p.stock) || 0;
+            const minStock = parseFloat(p.minStock) || 0;
+            if (stock <= 0) stats[cat].out++;
+            else if (stock <= minStock) stats[cat].low++;
+        });
+        return Object.values(stats);
+    }
+
+    static async getByCategory(category) {
+        return await this._repository.findByCategory(category);
+    }
+
     static async updateLastSoldAt(id, date = new Date().toISOString()) {
         const product = await this.getById(id);
         if (!product) return;
@@ -434,5 +491,9 @@ class Product {
         }
 
         return updated;
+    }
+
+    static async getByLastSupplier(supplierId) {
+        return await this._repository.findByLastSupplier(supplierId);
     }
 }

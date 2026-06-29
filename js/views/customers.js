@@ -1,18 +1,33 @@
 const CustomersView = {
     async render() {
-        const customers = await Customer.getAll();
-        const pendingSales = await Sale.getPendingSales();
-
-        // Calculate debt map
-        const debtMap = {};
-        pendingSales.forEach(sale => {
-            if (sale.customerId) {
-                const debt = (parseFloat(sale.total) || 0) - (parseFloat(sale.paidAmount) || 0);
-                if (debt > 0) {
-                    debtMap[sale.customerId] = (debtMap[sale.customerId] || 0) + debt;
-                }
+        let customers = [];
+        let debtMap = {};
+        
+        if (db.mode === 'sqlite') {
+            const summary = await CustomerAccountService.getCustomersWithBalance();
+            if (summary) {
+                customers = summary.map(c => ({
+                    ...c,
+                    balanceCredit: c.balanceCredit || 0
+                }));
+                summary.forEach(c => {
+                    debtMap[c.id] = c.totalDebt || 0;
+                });
+            } else {
+                customers = await Customer.getAll();
             }
-        });
+        } else {
+            customers = await Customer.getAll();
+            const pendingSales = await Sale.getPendingSales();
+            pendingSales.forEach(sale => {
+                if (sale.customerId) {
+                    const debt = (parseFloat(sale.total) || 0) - (parseFloat(sale.paidAmount) || 0);
+                    if (debt > 0) {
+                        debtMap[sale.customerId] = (debtMap[sale.customerId] || 0) + debt;
+                    }
+                }
+            });
+        }
 
         // Calculate Top Customers (by volume) from last 30 days
         const thirtyDaysAgo = new Date();
@@ -37,7 +52,8 @@ const CustomersView = {
             }
         });
 
-        // Sort customers by debt (Highest first), then by name
+        // C10: PRIORIDAD - Ordenar por DEUDA (Mayor a menor)
+        // Si la deuda es igual, ordenar por nombre (A-Z)
         customers.sort((a, b) => {
             const debtA = debtMap[a.id] || 0;
             const debtB = debtMap[b.id] || 0;
@@ -75,7 +91,7 @@ const CustomersView = {
                     <div style="background: #ffffff; border: 1.5px solid ${['#fde68a','#e2e8f0','#fecaca'][i]}; border-left: 5px solid ${['#f59e0b','#94a3b8','#f87171'][i]}; border-radius: 1.25rem; padding: 1.5rem; position: relative; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 2px 10px rgba(0,0,0,0.05);" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 12px 28px rgba(0,0,0,0.1)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 2px 10px rgba(0,0,0,0.05)'">
                         <div style="position: absolute; right: 1rem; top: 0.5rem; font-size: 4rem; opacity: 0.08; font-weight: 900; color: #111827;">${i + 1}</div>
                         <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">${['\ud83e\udd47', '\ud83e\udd48', '\ud83e\udd49'][i]}</div>
-                        <h3 style="margin:0; font-size: 1.05rem; color: #111827; font-weight: 800; text-transform: capitalize;">${c.name}</h3>
+                        <h3 style="margin:0; font-size: 1.05rem; color: #111827; font-weight: 800; text-transform: capitalize;">${safeHTML(c.name)}</h3>
                         <p style="color: ${['#b45309','#475569','#f87171'][i]}; font-weight: 800; font-size: 1.2rem; margin: 0.25rem 0;">${formatCLP(volumeMap[c.id])}</p>
                         <span style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase; font-weight: 700;">Volumen Total Compras</span>
                     </div>
@@ -98,6 +114,11 @@ const CustomersView = {
         `;
     },
 
+    focusSearch() {
+        const el = document.getElementById('searchCustomers');
+        if (el) { el.focus(); el.select?.(); }
+    },
+
     async init() {
         const searchInput = document.getElementById('searchCustomers');
 
@@ -105,23 +126,30 @@ const CustomersView = {
             const term = e.target.value;
             const customers = term ? await Customer.search(term) : await Customer.getAll();
 
-            // Re-fetch debt map for search results (could be optimized, but this is safe)
+            // Re-fetch debt and oldest sale date for search results
             const pendingSales = await Sale.getPendingSales();
             const debtMap = {};
+            const oldestDebtMap = {};
+            
             pendingSales.forEach(sale => {
                 if (sale.customerId) {
                     const debt = (parseFloat(sale.total) || 0) - (parseFloat(sale.paidAmount) || 0);
                     if (debt > 0) {
                         debtMap[sale.customerId] = (debtMap[sale.customerId] || 0) + debt;
+                        
+                        const saleDate = new Date(sale.date);
+                        if (!oldestDebtMap[sale.customerId] || saleDate < oldestDebtMap[sale.customerId]) {
+                            oldestDebtMap[sale.customerId] = saleDate;
+                        }
                     }
                 }
             });
 
-            document.getElementById('customersTable').innerHTML = this.renderCustomersTable(customers, debtMap);
+            updateDOM(document.getElementById('customersTable'), this.renderCustomersTable(customers, debtMap, oldestDebtMap));
         });
     },
 
-    renderCustomersTable(customers, debtMap = {}) {
+    renderCustomersTable(customers, debtMap = {}, oldestDebtMap = {}) {
         if (customers.length === 0) {
             return '<div class="empty-state"><div class="empty-state-icon">👥</div>No hay clientes</div>';
         }
@@ -136,6 +164,36 @@ const CustomersView = {
             const netDebt = Math.max(0, Math.round((debt - credit) * 100) / 100);
             const netCredit = Math.max(0, Math.round((credit - debt) * 100) / 100);
 
+            // Cálculo de Semáforo Personalizado
+            let statusColor = '#10b981'; // Verde (Al día)
+            let statusLabel = 'Al Día';
+            let statusIcon = '🟢';
+            
+            if (netDebt > 0) {
+                if (netDebt > 30000) {
+                    statusColor = '#a855f7'; // Morado (> 30k)
+                    statusLabel = 'Deuda Crítica';
+                    statusIcon = '🟣';
+                } else if (netDebt >= 15000) {
+                    statusColor = '#ef4444'; // Rojo (15k - 30k)
+                    statusLabel = 'Deuda Alta';
+                    statusIcon = '🔴';
+                } else {
+                    statusColor = '#f59e0b'; // Amarillo (< 15k)
+                    statusLabel = 'Deuda Leve';
+                    statusIcon = '🟡';
+                }
+            }
+
+            // Cálculo de Antigüedad de Deuda
+            let ageHtml = '';
+            if (netDebt > 0 && oldestDebtMap[c.id]) {
+                const oldestDate = new Date(oldestDebtMap[c.id]);
+                const diffTime = Math.abs(new Date() - oldestDate);
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                ageHtml = `<div style="font-size: 0.7rem; color: #64748b; margin-top: 0.2rem; font-weight: 600;">⏳ Pendiente hace ${diffDays} días</div>`;
+            }
+
             const nameParts = (c.name || 'Sin Nombre').trim().split(' ');
             const initials = ((nameParts[0]?.[0] || '') + (nameParts[1]?.[0] || '')).toUpperCase() || '?';
 
@@ -144,18 +202,32 @@ const CustomersView = {
             const bgColor = colors[Math.abs(hash) % colors.length];
 
             return `
-                    <div class="customer-card" style="background: #ffffff; border: 1.5px solid ${netDebt > 0 ? '#fecaca' : '#e5e7eb'}; border-radius: 1.25rem; padding: 1.5rem; transition: all 0.25s ease; position: relative; display: flex; flex-direction: column; gap: 1.25rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); ${netDebt > 0 ? 'border-left: 4px solid #ef4444;' : ''}"
-                         onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 16px 32px rgba(0,0,0,0.1)'; this.style.borderColor='${netDebt > 0 ? '#f87171' : '#9ca3af'}';"
-                         onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)'; this.style.borderColor='${netDebt > 0 ? '#fecaca' : '#e5e7eb'}';">
+                    <div class="customer-card" style="background: #ffffff; border: 1.5px solid ${netDebt > 0 ? statusColor + '44' : '#e5e7eb'}; border-radius: 1.25rem; padding: 1.5rem; transition: all 0.25s ease; position: relative; display: flex; flex-direction: column; gap: 1.25rem; box-shadow: 0 2px 8px rgba(0,0,0,0.05); ${netDebt > 0 ? `border-left: 5px solid ${statusColor};` : ''}"
+                         onmouseover="this.style.transform='translateY(-5px)'; this.style.boxShadow='0 16px 32px rgba(0,0,0,0.1)'; this.style.borderColor='${statusColor}';"
+                         onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)'; this.style.borderColor='${netDebt > 0 ? statusColor + '44' : '#e5e7eb'}';">
+                        
+                        <!-- Badge de Estado -->
+                        <div style="position: absolute; top: 1rem; right: 1rem; background: ${statusColor}15; color: ${statusColor}; padding: 0.25rem 0.6rem; border-radius: 2rem; font-size: 0.65rem; font-weight: 800; display: flex; align-items: center; gap: 0.3rem; border: 1px solid ${statusColor}33;">
+                            ${statusIcon} ${statusLabel}
+                        </div>
                         
                         <!-- Cabecera: Inicial + Nombre -->
                         <div style="display: flex; align-items: center; gap: 1rem;">
                             <div style="width: 56px; height: 56px; background: ${bgColor}; color: white; border-radius: 1rem; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; font-weight: 800; box-shadow: 0 4px 10px ${bgColor}55; flex-shrink: 0;">
                                 ${initials}
                             </div>
-                            <div>
-                                <h3 style="margin: 0; font-size: 1.2rem; color: #111827; line-height: 1.1; font-weight: 800; text-transform: capitalize;">${c.name}</h3>
-                                ${c.phone ? `<div style="font-size: 0.78rem; color: #6b7280; margin-top: 0.2rem;">📞 ${c.phone}</div>` : ''}
+                            <div style="overflow: hidden;">
+                                <h3 style="margin: 0; font-size: 1.2rem; color: #111827; line-height: 1.1; font-weight: 800; text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${safeHTML(c.name)}</h3>
+                                <div style="display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem;">
+                                    ${c.rut ? `<span style="font-size: 0.7rem; color: #475569; background: #f1f5f9; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-weight: 700;">🆔 ${safeHTML(c.rut)}</span>` : ''}
+                                    ${c.phone ? `<span style="font-size: 0.7rem; color: #475569; background: #f1f5f9; padding: 0.1rem 0.4rem; border-radius: 0.25rem; font-weight: 700;">📞 ${safeHTML(c.phone)}</span>` : ''}
+                                </div>
+                                ${ageHtml}
+                                ${c.paymentDay && parseInt(c.paymentDay) > 0 ? `
+                                    <div style="margin-top: 0.25rem; font-size: 0.65rem; font-weight: 800; color: ${parseInt(c.paymentDay) === new Date().getDate() ? '#dc2626' : '#64748b'};">
+                                        🗓️ Paga el día: ${c.paymentDay} ${parseInt(c.paymentDay) === new Date().getDate() ? '<span style="background: #fee2e2; color: #dc2626; padding: 0.1rem 0.3rem; border-radius: 1rem; margin-left: 0.25rem;">¡HOY!</span>' : ''}
+                                    </div>
+                                ` : ''}
                             </div>
                         </div>
 
@@ -184,7 +256,7 @@ const CustomersView = {
                                     <span>💳 Ver Estado</span>
                                 </button>
                                 <button class="btn" style="flex: 1; background: #10b981; color: #fff; border-radius: 0.75rem; padding: 0.7rem; font-weight: 700; font-size: 0.875rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: all 0.2s; border: none;" 
-                                        onclick="CustomersView.showAddCreditForm(${c.id})"
+                                        onclick="CustomersView.showUnifiedAbonoModal('${c.id}')"
                                         onmouseover="this.style.background='#059669'" onmouseout="this.style.background='#10b981'">
                                     <span>➕ Abono</span>
                                 </button>
@@ -192,9 +264,9 @@ const CustomersView = {
                             
                             <div style="display: flex; justify-content: flex-end; gap: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #f3f4f6;">
                                 ${PermissionService.can('customers.edit') ? `
-                                <button class="btn btn-sm" style="background: #f9fafb; color: #374151; border: 1.5px solid #e5e7eb; width: 36px; height: 36px; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; padding: 0;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'" onclick="CustomersView.showCustomerForm(${c.id})" title="Editar Datos">✏️</button>` : ''}
+                                <button class="btn btn-sm" style="background: #f9fafb; color: #374151; border: 1.5px solid #e5e7eb; width: 36px; height: 36px; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; padding: 0;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'" onclick="CustomersView.showCustomerForm('${c.id}')" title="Editar Datos">✏️</button>` : ''}
                                 ${PermissionService.can('customers.delete') ? `
-                                <button class="btn btn-sm" style="background: #fef2f2; color: #dc2626; border: 1.5px solid #fecaca; width: 36px; height: 36px; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; padding: 0;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'" onclick="CustomersView.deleteCustomer(${c.id})" title="Desactivar Cliente">🗑️</button>` : ''}
+                                <button class="btn btn-sm" style="background: #fef2f2; color: #dc2626; border: 1.5px solid #fecaca; width: 36px; height: 36px; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; padding: 0;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'" onclick="CustomersView.deleteCustomer('${c.id}')" title="Desactivar Cliente">🗑️</button>` : ''}
                             </div>
                         </div>
                     </div>
@@ -209,9 +281,15 @@ const CustomersView = {
 
         const content = `
             <form id="customerForm" onsubmit="CustomersView.saveCustomer(event, ${id})">
-                <div class="form-group">
-                    <label>Nombre *</label>
-                    <input type="text" name="name" class="form-control" value="${customer?.name || ''}" required>
+                <div class="form-row" style="display: flex; gap: 1rem;">
+                    <div class="form-group" style="flex: 2;">
+                        <label>Nombre *</label>
+                        <input type="text" name="name" class="form-control" value="${customer?.name || ''}" required>
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label>RUT / ID</label>
+                        <input type="text" name="rut" class="form-control" value="${customer?.rut || ''}" placeholder="Ej: 12.345.678-9">
+                    </div>
                 </div>
                 
                 <div class="form-group">
@@ -227,7 +305,15 @@ const CustomersView = {
                 <div class="form-group">
                     <label>Límite de crédito (opcional)</label>
                     <input type="number" name="creditLimit" class="form-control" value="${customer?.creditLimit ?? ''}" min="0" step="1" placeholder="Ej: 500000">
-                    <small style="color: var(--secondary); display: block; margin-top: 0.25rem;">Si se define, no se podrá fiar por encima de este monto (deuda actual + nueva venta).</small>
+                    <small style="color: var(--secondary); display: block; margin-top: 0.25rem;">Si se define, no se podrá fiar por encima de este monto.</small>
+                </div>
+
+                <div class="form-group" style="margin-top: 1rem; padding: 1rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 0.5rem;">
+                    <label style="color: #166534; font-weight: 700;">📅 Día de Pago Acordado</label>
+                    <input type="number" name="paymentDay" class="form-control" value="${customer?.paymentDay ?? '0'}" min="0" max="31" placeholder="Ej: 15" style="border: 1px solid #166534;">
+                    <small style="color: #166534; display: block; margin-top: 0.25rem;">
+                        Indica qué día del mes suele pagar este cliente (1-31). El sistema te avisará ese día. (0 = Sin día fijo)
+                    </small>
                 </div>
             </form>
         `;
@@ -239,6 +325,7 @@ const CustomersView = {
             </button>
         `;
 
+        window._focusSearchAfterClose = () => CustomersView.focusSearch();
         showModal(content, {
             title: id ? 'Editar Cliente' : 'Nuevo Cliente',
             footer,
@@ -263,84 +350,215 @@ const CustomersView = {
         }
     },
 
-    async showAddCreditForm(customerId) {
+    async showUnifiedAbonoModal(customerId) {
         const customer = await Customer.getById(customerId);
-        const currentCredit = (customer && (customer.balanceCredit != null)) ? parseFloat(customer.balanceCredit) || 0 : 0;
+        const balance = await CustomerAccountService.getCustomerBalance(customerId);
         const cashOpen = await CashRegister.getOpen();
 
         if (!cashOpen) {
-            showNotification('Abre la caja para poder sumar dinero a favor (el monto se registra en caja por método de pago).', 'warning');
+            showNotification('Abre la caja para poder registrar movimientos de dinero.', 'warning');
             return;
         }
 
+        const totalDebt = parseFloat(balance.totalDebt) || 0;
+        const currentCredit = parseFloat(balance.balanceCredit) || 0;
+
+        // Decidir el modo inicial sugerido
+        const initialMode = totalDebt > 0 ? 'debt' : 'credit';
+
         const content = `
-            <div style="margin-bottom: 1rem;">
-                <div style="font-size: 0.9rem; color: #374151;">Cliente: <strong>${customer?.name || ''}</strong></div>
-                ${currentCredit > 0 ? `<div style="font-size: 0.9rem; margin-top: 0.25rem; color: #374151;">Dinero a favor actual: <strong>${formatCLP(currentCredit)}</strong></div>` : ''}
+            <div style="margin-bottom: 1.5rem; text-align: center;">
+                <div style="font-size: 1.1rem; color: #1e293b;">Cliente: <strong style="color: var(--primary);">${safeHTML(customer?.name || '')}</strong></div>
             </div>
-            <div class="form-group">
-                <label>Monto a sumar (dinero a favor) *</label>
-                <input type="number" id="creditAmount" class="form-control" min="0.01" step="1" placeholder="Ej: 5000" autofocus>
-                <small style="color: #64748b;">Este monto se suma a la cuenta del cliente y se registra en caja por el método de pago elegido.</small>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                <div id="mode_debt" onclick="CustomersView.setAbonoMode('debt')" 
+                     style="cursor: pointer; padding: 1rem; border-radius: 0.75rem; border: 2px solid ${initialMode === 'debt' ? '#3b82f6' : '#e2e8f0'}; background: ${initialMode === 'debt' ? '#eff6ff' : 'white'}; text-align: center; transition: all 0.2s;">
+                    <div style="font-size: 1.5rem; margin-bottom: 0.25rem;">📉</div>
+                    <div style="font-weight: 800; font-size: 0.85rem; color: #1e293b;">PAGAR DEUDA</div>
+                    <div style="font-size: 0.75rem; color: #ef4444; font-weight: 700;">Debe: ${formatCLP(totalDebt)}</div>
+                </div>
+                <div id="mode_credit" 
+                     ${totalDebt > 0 ? '' : 'onclick="CustomersView.setAbonoMode(\'credit\')"'} 
+                     style="cursor: ${totalDebt > 0 ? 'not-allowed' : 'pointer'}; padding: 1rem; border-radius: 0.75rem; border: 2px solid ${initialMode === 'credit' ? '#10b981' : '#e2e8f0'}; background: ${totalDebt > 0 ? '#f8fafc' : (initialMode === 'credit' ? '#f0fdf4' : 'white')}; text-align: center; transition: all 0.2s; opacity: ${totalDebt > 0 ? '0.6' : '1'};">
+                    <div style="font-size: 1.5rem; margin-bottom: 0.25rem;">💰</div>
+                    <div style="font-weight: 800; font-size: 0.85rem; color: ${totalDebt > 0 ? '#94a3b8' : '#1e293b'};">DINERO A FAVOR</div>
+                    <div style="font-size: 0.75rem; color: #10b981; font-weight: 700;">Saldo: ${formatCLP(currentCredit)}</div>
+                    ${totalDebt > 0 ? '<div style="font-size: 0.65rem; color: #ef4444; font-weight: 700; margin-top: 5px;">PAGAR DEUDA PRIMERO</div>' : ''}
+                </div>
             </div>
+
+            <input type="hidden" id="abonoMode" value="${initialMode}">
+
             <div class="form-group">
-                <label>Método de pago (ingreso en caja)</label>
-                <select id="creditPaymentMethod" class="form-control">
+                <label id="abonoAmountLabel">${initialMode === 'debt' ? 'Monto a pagar de la deuda *' : 'Monto a cargar a favor *'}</label>
+                <input type="number" id="abonoAmount" class="form-control" min="1" step="1" placeholder="Ej: 5000" autofocus>
+                <small id="abonoAmountHelp" style="color: #64748b;">
+                    ${initialMode === 'debt' ? `Máximo permitido: ${formatCLP(totalDebt)}` : 'Este monto se sumará al saldo del cliente.'}
+                </small>
+            </div>
+
+            <div class="form-group">
+                <label>Método de Pago</label>
+                <select id="abonoPaymentMethod" class="form-control">
                     <option value="cash">💵 Efectivo</option>
                     <option value="card">💳 Tarjeta</option>
                     <option value="qr">📱 QR</option>
                     <option value="other">➕ Otro</option>
                 </select>
-                <small style="color: #64748b;">El monto se suma a efectivo esperado o al método de pago correspondiente en la caja.</small>
+            </div>
+
+            <div class="form-group">
+                <label>Notas (opcional)</label>
+                <textarea id="abonoNotes" class="form-control" rows="2" placeholder="Observaciones del abono..."></textarea>
             </div>
         `;
 
         const footer = `
             <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-            <button class="btn btn-success" onclick="CustomersView.processAddCredit(${customerId})">
-                Sumar a favor
+            <button class="btn btn-primary" id="abonoConfirmBtn" onclick="CustomersView.processUnifiedAbono('${customerId}')" style="background: ${initialMode === 'debt' ? '#3b82f6' : '#10b981'}; border: none;">
+                Confirmar Abono
             </button>
         `;
 
-        showModal(content, { title: '💰 Dinero a favor', footer, width: '500px' });
+        showModal(content, { title: 'Registrar Abono / Pago', footer, width: '500px' });
+        
+        // Guardar máximos para validación en tiempo real
+        window._currentMaxDebt = totalDebt;
     },
 
-    async processAddCredit(customerId) {
-        const openCash = await CashRegister.getOpen();
-        if (!openCash) {
-            showNotification('Abre la caja para poder sumar dinero a favor.', 'warning');
-            return;
+    setAbonoMode(mode) {
+        const debtBox = document.getElementById('mode_debt');
+        const creditBox = document.getElementById('mode_credit');
+        const modeInput = document.getElementById('abonoMode');
+        const label = document.getElementById('abonoAmountLabel');
+        const help = document.getElementById('abonoAmountHelp');
+        const btn = document.getElementById('abonoConfirmBtn');
+
+        if (!modeInput) return;
+
+        modeInput.value = mode;
+        
+        if (mode === 'debt') {
+            debtBox.style.borderColor = '#3b82f6';
+            debtBox.style.background = '#eff6ff';
+            creditBox.style.borderColor = '#e2e8f0';
+            creditBox.style.background = 'white';
+            label.textContent = 'Monto a pagar de la deuda *';
+            help.textContent = `Máximo permitido: ${formatCLP(window._currentMaxDebt || 0)}`;
+            btn.style.background = '#3b82f6';
+            btn.textContent = 'Confirmar Pago de Deuda';
+        } else {
+            creditBox.style.borderColor = '#10b981';
+            creditBox.style.background = '#f0fdf4';
+            debtBox.style.borderColor = '#e2e8f0';
+            debtBox.style.background = 'white';
+            label.textContent = 'Monto a cargar a favor *';
+            help.textContent = 'Este monto se sumará al saldo del cliente.';
+            btn.style.background = '#10b981';
+            btn.textContent = 'Confirmar Carga de Saldo';
         }
-        const amountInput = document.getElementById('creditAmount');
-        const methodSelect = document.getElementById('creditPaymentMethod');
-        if (!amountInput) {
-            showNotification('Error: No se encontró el campo de monto', 'error');
-            return;
-        }
+    },
+
+    async processUnifiedAbono(customerId) {
+        const mode = document.getElementById('abonoMode').value;
+        const amountInput = document.getElementById('abonoAmount');
         const amount = parseFloat(amountInput.value);
-        const paymentMethod = (methodSelect && methodSelect.value) ? methodSelect.value : 'cash';
+        const paymentMethod = document.getElementById('abonoPaymentMethod').value;
+        const notes = document.getElementById('abonoNotes').value.trim();
+        const openCash = await CashRegister.getOpen();
+
         if (!amount || amount <= 0) {
             showNotification('Ingresa un monto válido mayor a 0', 'warning');
             return;
         }
-        try {
-            await CustomerAccountService.registerCreditDeposit(
-                customerId,
-                amount,
-                paymentMethod,
-                openCash.id,
-                'Abono dinero a favor - UI'
-            );
 
-            const customer = await Customer.getById(customerId);
-            const newCredit = (customer.balanceCredit != null) ? parseFloat(customer.balanceCredit) || 0 : 0;
-            const methodName = this.getPaymentMethodName(paymentMethod);
-            showNotification(`Se sumaron ${formatCLP(amount)} a favor del cliente (${methodName}). Total a favor: ${formatCLP(newCredit)}`, 'success');
+        const totalDebt = window._currentMaxDebt || 0;
+
+        // C10: PRIORIDAD ABSOLUTA - Si hay deuda, el dinero va a la deuda primero, 
+        // sin importar si el usuario seleccionó "Saldo a Favor".
+        if (totalDebt > 0) {
+            if (amount > totalDebt) {
+                const surplus = amount - totalDebt;
+                
+                // Excedente detectado: Preguntar qué hacer con el resto
+                const decisionContent = `
+                    <div style="text-align: center; padding: 1rem;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">⚖️</div>
+                        <h3 style="margin-bottom: 1rem;">El monto (${formatCLP(amount)}) supera la deuda (${formatCLP(totalDebt)})</h3>
+                        <p style="color: #64748b; margin-bottom: 2rem;">¿Qué deseas hacer con el excedente de <strong>${formatCLP(surplus)}</strong>?</p>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 1rem;">
+                            <button class="btn btn-lg" onclick="window._abonoDecision('credit')" style="background: #10b981; color: white; height: 4rem; font-weight: 800;">
+                                💰 PAGAR DEUDA Y DEJAR EL RESTO A FAVOR
+                            </button>
+                            <button class="btn btn-lg" onclick="window._abonoDecision('only_debt')" style="background: #3b82f6; color: white; height: 4rem; font-weight: 800;">
+                                💵 SOLO PAGAR DEUDA (DAR VUELTO)
+                            </button>
+                            <button class="btn btn-outline-secondary" onclick="closeModal(); CustomersView.showUnifiedAbonoModal('${customerId}')">
+                                CANCELAR Y CORREGIR MONTO
+                            </button>
+                        </div>
+                    </div>
+                `;
+
+                window._abonoDecision = async (choice) => {
+                    try {
+                        closeModal();
+                        showNotification('Procesando pago total...', 'info');
+                        
+                        // 1. Pagar deuda completa
+                        await CustomerAccountService.registerAccountPayment(customerId, totalDebt, paymentMethod, openCash.id, notes || 'Pago total de deuda con excedente');
+                        
+                        if (choice === 'credit') {
+                            // 2. Cargar el resto como saldo a favor
+                            await CustomerAccountService.registerCreditDeposit(customerId, surplus, paymentMethod, openCash.id, 'Excedente de pago de deuda');
+                            showNotification(`Deuda saldada. Se cargaron ${formatCLP(surplus)} a favor del cliente.`, 'success');
+                        } else {
+                            showNotification(`Deuda saldada. Entrega ${formatCLP(surplus)} de vuelto al cliente.`, 'success');
+                        }
+                        
+                        await CustomersView.refresh();
+                        if (CustomersView._lastAccountDetailsId === customerId) await CustomersView.showAccountDetails(customerId);
+                    } catch (e) {
+                        showNotification('Error: ' + e.message, 'error');
+                    }
+                };
+
+                showModal(decisionContent, { title: 'Decisión de Excedente', width: '450px' });
+                return;
+            } else {
+                // El monto es menor o igual a la deuda -> Se va TODO a la deuda
+                try {
+                    showNotification('Procesando abono a deuda...', 'info');
+                    const result = await CustomerAccountService.registerAccountPayment(customerId, amount, paymentMethod, openCash.id, notes || 'Abono a cuenta corriente');
+                    showNotification(`Se abonaron ${formatCLP(result.totalPaid || amount)} a la deuda del cliente.`, 'success');
+                    closeModal();
+                    await CustomersView.refresh();
+                    if (CustomersView._lastAccountDetailsId === customerId) await CustomersView.showAccountDetails(customerId);
+                } catch (e) {
+                    showNotification('Error: ' + e.message, 'error');
+                }
+                return;
+            }
+        }
+
+        // Si NO hay deuda, entonces sí permitimos cargar como saldo a favor normalmente
+        try {
+            showNotification('Cargando saldo a favor...', 'info');
+            await CustomerAccountService.registerCreditDeposit(customerId, amount, paymentMethod, openCash.id, notes || 'Carga de dinero a favor');
+            showNotification(`Se cargaron ${formatCLP(amount)} como saldo a favor.`, 'success');
             closeModal();
             await this.refresh();
+            if (this._lastAccountDetailsId === customerId) await this.showAccountDetails(customerId);
         } catch (error) {
             showNotification('Error: ' + error.message, 'error');
         }
+    },
+
+    async showAddCreditForm(customerId) {
+        // Redirigir a la nueva versión unificada
+        return this.showUnifiedAbonoModal(customerId);
     },
 
     async deleteCustomer(id) {
@@ -363,6 +581,7 @@ const CustomersView = {
         const deleted = await Customer.getDeleted();
 
         if (deleted.length === 0) {
+            window._focusSearchAfterClose = () => CustomersView.focusSearch();
             showModal(
                 '<div class="empty-state"><div class="empty-state-icon">✅</div>No hay clientes desactivados</div>',
                 { title: 'Clientes Desactivados', footer: '<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>', width: '600px' }
@@ -387,11 +606,11 @@ const CustomersView = {
                     <tbody>
                         ${deleted.map(c => `
                             <tr style="opacity: 0.8;">
-                                <td><strong>${c.name}</strong></td>
-                                <td>${c.phone || '-'}</td>
+                                <td><strong>${safeHTML(c.name)}</strong></td>
+                                <td>${safeHTML(c.phone || '-')}</td>
                                 <td>${c.deletedAt ? new Date(c.deletedAt).toLocaleDateString('es-CL') : '-'}</td>
                                 <td>
-                                    <button class="btn btn-sm btn-success" onclick="CustomersView.restoreCustomer(${c.id})">
+                                    <button class="btn btn-sm btn-success" onclick="CustomersView.restoreCustomer('${c.id}')">
                                         Restaurar
                                     </button>
                                 </td>
@@ -402,6 +621,7 @@ const CustomersView = {
             </div>
         `;
 
+        window._focusSearchAfterClose = () => CustomersView.focusSearch();
         showModal(content, {
             title: `Clientes Desactivados (${deleted.length})`,
             footer: '<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>',
@@ -421,355 +641,494 @@ const CustomersView = {
     },
 
     async refresh() {
-        const customers = await Customer.getAll();
+        // C10: Limpiar caché para asegurar datos reales en tiempo real (SQLite)
+        if (typeof db !== 'undefined' && db.clearCache) {
+            db.clearCache('sales');
+            db.clearCache('customers');
+            db.clearCache('payments');
+            db.clearCache('customerCreditDeposits');
+            db.clearCache('customerCreditUses');
+        }
+
+        const searchInput = document.getElementById('searchCustomers');
+        const term = searchInput ? searchInput.value : '';
+        const scrollPos = window.scrollY; // Preservar scroll de la página
+        
+        // Obtener clientes filtrados por el término actual
+        const customers = term ? await Customer.search(term) : await Customer.getAll();
+        
         const pendingSales = await Sale.getPendingSales();
         const debtMap = {};
+        const oldestDebtMap = {};
+        
         pendingSales.forEach(sale => {
             if (sale.customerId) {
                 const debt = (parseFloat(sale.total) || 0) - (parseFloat(sale.paidAmount) || 0);
                 if (debt > 0) {
                     debtMap[sale.customerId] = (debtMap[sale.customerId] || 0) + debt;
+                    const saleDate = new Date(sale.date);
+                    if (!oldestDebtMap[sale.customerId] || saleDate < oldestDebtMap[sale.customerId]) {
+                        oldestDebtMap[sale.customerId] = saleDate;
+                    }
                 }
             }
         });
-        document.getElementById('customersTable').innerHTML = this.renderCustomersTable(customers, debtMap);
+
+        // C10: PRIORIDAD - Ordenar por DEUDA (Mayor a menor)
+        // Si la deuda es igual, ordenar por nombre (A-Z)
+        customers.sort((a, b) => {
+            const debtA = debtMap[a.id] || 0;
+            const debtB = debtMap[b.id] || 0;
+            if (debtB !== debtA) return debtB - debtA;
+            return (a.name || '').localeCompare(b.name || '');
+        });
+        
+        const tableContainer = document.getElementById('customersTable');
+        if (tableContainer) {
+            // Actualizar solo el contenido de la tabla, manteniendo el buscador intacto
+            updateDOM(tableContainer, this.renderCustomersTable(customers, debtMap, oldestDebtMap));
+            
+            // Restaurar scroll si es necesario (evita saltos bruscos)
+            if (scrollPos > 0) window.scrollTo(0, scrollPos);
+        }
     },
 
-    async showAccountDetails(customerId) {
-        const customer = await Customer.getById(customerId);
-        const balance = await Customer.getAccountBalance(customerId);
-        const rawPayments = await Customer.getPaymentHistory(customerId);
-        const deposits = await CustomerCreditDeposit.getByCustomer(customerId);
-        const creditUses = await CustomerCreditUse.getByCustomer(customerId);
+    async showAccountDetails(customerId, initialTab = 'tab-resumen') {
+        // CRITICAL: Remove any existing modals to avoid stacking/overlapping
+        document.querySelectorAll('.modal').forEach(m => m.remove());
+        
+        // C10: Autocorrección - Conciliar saldos si tiene deuda y saldo a favor a la vez antes de mostrar
+        try {
+            if (typeof CustomerAccountService !== 'undefined' && CustomerAccountService.reconcileBalances) {
+                await CustomerAccountService.reconcileBalances(customerId);
+            }
+        } catch (e) { console.warn('Error en reconciliación automática:', e); }
+
+        // CRITICAL: NUCLEAR CACHE CLEAR to ensure fresh data
+        if (typeof db !== 'undefined') {
+            db.cache = {}; // Clear everything
+            if (db.clearCache) db.clearCache();
+        }
+
+        let customer, balance, payments = [], creditHistory = [], allSales = [], sessions = [];
         const cashOpen = !!(await CashRegister.getOpen());
 
-        // Enriquecer pagos con número de venta
-        const payments = [];
-        for (const p of rawPayments) {
-            let saleNumber = p.saleId;
+        // Obtener todos los datos necesarios
+        customer = await Customer.getById(customerId);
+        
+        // En SQLite usamos la ruta optimizada pero traemos también ventas pagadas para la pestaña de verificación
+        if (db.mode === 'sqlite') {
+            const fullStatus = await CustomerAccountService.getFullAccountStatus(customerId);
+            if (fullStatus) {
+                balance = {
+                    totalDebt: fullStatus.summary?.totalDebt || 0,
+                    balanceCredit: fullStatus.summary?.balanceCredit || 0,
+                    displayBalance: (fullStatus.summary?.totalDebt || 0) - (fullStatus.summary?.balanceCredit || 0),
+                    pendingSales: (fullStatus.pendingSales || []).map(s => ({
+                        ...s,
+                        remaining: (parseFloat(s.total) || 0) - (parseFloat(s.paidAmount) || 0)
+                    }))
+                };
+                payments = fullStatus.movements || [];
+                creditHistory = fullStatus.creditHistory || [];
+            }
+            // Traer ventas completadas para la pestaña de verificación
+            const allSalesRaw = await Sale.getByCustomer(customerId);
+            allSales = allSalesRaw.filter(s => s.status === 'completed' || s.status === 'paid');
+            // Traer sesiones de pago de deuda (nueva funcionalidad)
             try {
-                const sale = await Sale.getById(p.saleId);
-                if (sale && sale.saleNumber) saleNumber = sale.saleNumber;
-            } catch (_) { /* fallback: usar saleId */ }
-            payments.push({ ...p, saleNumber });
+                const raw = await ApiClient.get(`customers/${customerId}/debt-payment-sessions`);
+                sessions = Array.isArray(raw) ? raw : [];
+            } catch(e) { sessions = []; }
+        } else {
+            const rawBalance = await Customer.getAccountBalance(customerId);
+            balance = {
+                ...rawBalance,
+                pendingSales: (rawBalance.pendingSales || []).map(s => ({
+                    ...s,
+                    remaining: (parseFloat(s.total || s.amount) || 0) - (parseFloat(s.paidAmount || s.paid) || 0)
+                }))
+            };
+            payments = await Customer.getPaymentHistory(customerId);
+            const deposits = await CustomerCreditDeposit.getByCustomer(customerId);
+            const creditUses = await CustomerCreditUse.getByCustomer(customerId);
+            creditHistory = [
+                ...deposits.map(d => ({ date: d.date, type: 'deposit', amount: parseFloat(d.amount) || 0, paymentMethod: d.paymentMethod, saleNumber: null })),
+                ...creditUses.map(u => ({ date: u.date, type: 'use', amount: parseFloat(u.amount) || 0, paymentMethod: null, saleNumber: u.saleNumber }))
+            ];
+            const allSalesRaw = await Sale.getByCustomer(customerId);
+            allSales = allSalesRaw.filter(s => s.status === 'completed' || s.status === 'paid');
         }
 
         const displayBalance = balance.displayBalance != null ? parseFloat(balance.displayBalance) : (balance.totalDebt || 0) - (balance.balanceCredit || 0);
         const netDebt = Math.max(0, displayBalance);
         const netCredit = Math.max(0, -displayBalance);
+        
+        // Calcular Total Histórico Pagado
+        const totalPaid = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
 
-        // Movimientos de saldo a favor: depósitos (+), usos (-), ordenados por fecha descendente
-        const creditMovements = [
-            ...deposits.map(d => ({ date: d.date, type: 'deposit', amount: parseFloat(d.amount) || 0, paymentMethod: d.paymentMethod, saleNumber: null })),
-            ...creditUses.map(u => ({ date: u.date, type: 'use', amount: parseFloat(u.amount) || 0, paymentMethod: null, saleNumber: u.saleNumber }))
+        // Crear un mapa de totales de venta para identificar pagos totales
+        const saleTotals = {};
+        [...allSales, ...(balance.pendingSales || [])].forEach(s => {
+            saleTotals[s.id || s.saleId] = parseFloat(s.total) || 0;
+        });
+
+        // --- Lógica de Agrupación de Abonos (Punto 3 y 4) ---
+        const unifiedLedger = [
+            ...payments.map(p => {
+                const saleTotal = saleTotals[p.saleId] || 0;
+                // Es pago total si el monto del pago es igual al total de la venta (margen de 1 peso por redondeo)
+                const isTotal = p.saleId && Math.abs((parseFloat(p.amount) || 0) - saleTotal) < 2;
+
+                return {
+                    date: p.date,
+                    type: 'payment',
+                    isTotal: isTotal,
+                    title: isTotal ? 'Pago Total Venta' : 'Abono a Deuda',
+                    icon: isTotal ? '✅' : '💵',
+                    amount: parseFloat(p.amount) || 0,
+                    method: this.getPaymentMethodName(p.paymentMethod),
+                    reference: p.saleNumber ? `Venta #${p.saleNumber}` : 'Varias ventas',
+                    notes: p.notes,
+                    color: isTotal ? '#16a34a' : '#10b981'
+                };
+            }),
+            ...creditHistory.map(h => ({
+                date: h.date,
+                type: h.type === 'deposit' ? 'credit_in' : 'credit_out',
+                isTotal: false,
+                title: h.type === 'deposit' ? 'Carga de Saldo' : 'Uso de Saldo',
+                icon: h.type === 'deposit' ? '💰' : '🛒',
+                amount: parseFloat(h.amount) || 0,
+                method: h.type === 'deposit' ? this.getPaymentMethodName(h.paymentMethod) : 'Descontado de saldo',
+                reference: h.saleNumber ? `Venta #${h.saleNumber}` : '-',
+                notes: h.notes,
+                color: h.type === 'deposit' ? '#3b82f6' : '#64748b'
+            }))
         ].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        const groupedLedger = [];
+        unifiedLedger.forEach(item => {
+            const last = groupedLedger[groupedLedger.length - 1];
+            // Agrupar si tienen exactamente la misma fecha (timestamp) y tipo, y no son pagos totales individuales
+            if (last && last.type === item.type && last.date === item.date && last.type === 'payment' && !item.isTotal && !last.isTotal) {
+                last.amount += item.amount;
+                if (!last.references) last.references = [last.reference];
+                if (!last.references.includes(item.reference)) last.references.push(item.reference);
+                
+                // Si agrupa varias ventas, cambiar título a "Pago Consolidado"
+                last.title = 'Pago Consolidado';
+                last.reference = `${last.references.length} ventas`;
+            } else {
+                groupedLedger.push({ ...item });
+            }
+        });
+
+        // Filtrar historial de abonos para mostrar solo abonos o parciales (según petición del usuario)
+        const finalAbonosLedger = groupedLedger.filter(m => m.title !== 'Pago Total Venta');
+
         const content = `
-            <div style="margin-bottom: 1.5rem; padding: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border-radius: 0.5rem;">
-                <h2 style="margin: 0 0 0.5rem 0; font-size: 1.5rem;">${customer.name}</h2>
-                <div style="font-size: 0.9rem; opacity: 0.9;">
-                    ${customer.phone || ''} ${customer.email ? '• ' + customer.email : ''}
-                </div>
-                <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.75rem; font-size: 0.95rem;">
-                    ${netDebt > 0 ? `
-                    <span style="background: rgba(239,68,68,0.9); padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 600;">
-                        Deuda: ${formatCLP(netDebt)}
-                    </span>
-                    ` : `
-                    <span style="background: rgba(16,185,129,0.9); padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 600;">
-                        ✓ Sin deuda
-                    </span>
-                    `}
-                    ${netCredit > 0 ? `
-                    <span style="background: rgba(16,185,129,0.9); padding: 0.25rem 0.5rem; border-radius: 0.25rem; font-weight: 600;">
-                        💰 A favor: ${formatCLP(netCredit)}
-                    </span>
-                    ` : ''}
+            <style>
+                .account-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; border-bottom: 2px solid #f1f5f9; padding-bottom: 0.5rem; }
+                .account-tab { padding: 0.75rem 1.25rem; border-radius: 0.75rem; cursor: pointer; font-weight: 700; color: #64748b; transition: all 0.2s; border: none; background: none; font-size: 0.9rem; }
+                .account-tab.active { background: #eff6ff; color: #3b82f6; }
+                .account-tab:hover:not(.active) { background: #f8fafc; color: #1e293b; }
+                .summary-card { padding: 1.25rem; border-radius: 1rem; border: 1.5px solid #e2e8f0; background: white; text-align: center; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+                .tab-content { display: none; animation: fadeIn 0.3s ease; }
+                .tab-content.active { display: block; }
+                @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+                .sale-item-row { padding: 1rem; border: 1px solid #e2e8f0; border-radius: 0.75rem; background: white; margin-bottom: 0.75rem; transition: all 0.2s; }
+                .sale-item-row:hover { border-color: #3b82f6; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.08); }
+            </style>
+
+            <div style="background: #f8fafc; margin: -1.5rem -1.5rem 1.5rem -1.5rem; padding: 2rem 1.5rem; border-radius: 1rem 1rem 0 0; border-bottom: 1px solid #e2e8f0;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 1.25rem;">
+                        <div style="width: 64px; height: 64px; background: #3b82f6; color: white; border-radius: 1.25rem; display: flex; align-items: center; justify-content: center; font-size: 1.75rem; font-weight: 800; box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3);">
+                            ${(customer.name?.[0] || 'C').toUpperCase()}
+                        </div>
+                        <div>
+                            <h2 style="margin: 0; font-size: 1.5rem; font-weight: 800; color: #1e293b;">${safeHTML(customer.name)}</h2>
+                            <div style="display: flex; gap: 0.75rem; margin-top: 0.25rem;">
+                                ${customer.phone ? `<span style="font-size: 0.85rem; color: #64748b; display: flex; align-items: center; gap: 0.25rem;">📞 ${safeHTML(customer.phone)}</span>` : ''}
+                                <span style="font-size: 0.85rem; padding: 0.1rem 0.6rem; border-radius: 2rem; font-weight: 700; ${netDebt > 0 ? 'background: #fee2e2; color: #dc2626;' : 'background: #dcfce7; color: #16a34a;'}">
+                                    ${netDebt > 0 ? 'Con Deuda' : 'Al Día'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 0.5rem;">
+                        ${customer.phone ? `
+                            <button class="btn" onclick="CustomersView.shareAccountStatusViaWhatsApp(${customerId})" style="background: #25d366; color: white; border-radius: 0.75rem; padding: 0.6rem 1rem; font-weight: 700; border: none; display: flex; align-items: center; gap: 0.5rem;">
+                                <span>WhatsApp</span>
+                            </button>
+                        ` : ''}
+                        <button class="btn btn-outline-secondary" onclick="window.print()" style="border-radius: 0.75rem; padding: 0.6rem 1rem;">Imprimir</button>
+                    </div>
                 </div>
             </div>
-            
-            ${!cashOpen && netDebt > 0 ? `
-                <div style="margin-bottom: 1.5rem; padding: 1rem; background: #fef3c7; border: 2px solid #f59e0b; border-radius: 0.5rem;">
-                    <div style="font-weight: 600; color: #92400e; margin-bottom: 0.5rem;">⚠️ Caja cerrada</div>
-                    <p style="margin: 0 0 1rem 0; font-size: 0.9rem; color: #78350f;">Abre la caja para poder registrar pagos de deuda.</p>
-                    <button class="btn btn-primary" onclick="app.navigate('cash'); closeModal();">Ir a Caja</button>
+
+            <div class="account-tabs">
+                <button class="account-tab ${initialTab === 'tab-resumen' ? 'active' : ''}" onclick="CustomersView.switchAccountTab(event, 'tab-resumen')">📊 Resumen</button>
+                <button class="account-tab ${initialTab === 'tab-pendientes' ? 'active' : ''}" onclick="CustomersView.switchAccountTab(event, 'tab-pendientes')">📝 Ventas Pendientes (${balance.pendingSales.length})</button>
+                <button class="account-tab ${initialTab === 'tab-historial' ? 'active' : ''}" onclick="CustomersView.switchAccountTab(event, 'tab-historial')">🕒 Historial de Abonos</button>
+                <button class="account-tab ${initialTab === 'tab-pagos-deuda' ? 'active' : ''}" onclick="CustomersView.switchAccountTab(event, 'tab-pagos-deuda')">💳 Pagos de Deuda (${sessions.length})</button>
+            </div>
+
+            <!-- TAB: RESUMEN -->
+            <div id="tab-resumen" class="tab-content ${initialTab === 'tab-resumen' ? 'active' : ''}">
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem;">
+                    <div class="summary-card" style="border-top: 5px solid #ef4444;">
+                        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Deuda Actual</div>
+                        <div style="font-size: 1.75rem; font-weight: 900; color: #dc2626; margin: 0.5rem 0;">${formatCLP(netDebt)}</div>
+                        <div style="font-size: 0.7rem; color: #94a3b8;">Total acumulado pendiente</div>
+                    </div>
+                    <div class="summary-card" style="border-top: 5px solid #10b981;">
+                        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Total Pagado</div>
+                        <div style="font-size: 1.75rem; font-weight: 900; color: #16a34a; margin: 0.5rem 0;">${formatCLP(totalPaid)}</div>
+                        <div style="font-size: 0.7rem; color: #94a3b8;">Abonos históricos realizados</div>
+                    </div>
+                    <div class="summary-card" style="border-top: 5px solid #3b82f6;">
+                        <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Saldo a Favor</div>
+                        <div style="font-size: 1.75rem; font-weight: 900; color: #2563eb; margin: 0.5rem 0;">${formatCLP(netCredit)}</div>
+                        <div style="font-size: 0.7rem; color: #94a3b8;">Dinero disponible del cliente</div>
+                    </div>
                 </div>
-            ` : ''}
-            
-            <div style="margin-bottom: 1.5rem; padding: 1.5rem; background: ${netDebt > 0 ? '#fee2e2' : '#d1fae5'}; border-radius: 0.5rem; border: 2px solid ${netDebt > 0 ? '#ef4444' : '#10b981'};">
-                <div style="font-size: 0.9rem; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">SALDO TOTAL</div>
-                <div style="font-size: 2.5rem; font-weight: bold; color: ${netDebt > 0 ? '#dc2626' : '#059669'};">
-                    ${netDebt > 0 ? formatCLP(netDebt) : (netCredit > 0 ? formatCLP(netCredit) : formatCLP(0))}
-                </div>
-                ${netDebt > 0
-                ? '<div style="margin-top: 0.5rem; font-size: 0.85rem; color: #991b1b;">Pago parcial / Pendiente de pago</div>'
-                : netCredit > 0
-                    ? '<div style="margin-top: 0.5rem; font-size: 0.85rem; color: #065f46;">💰 Saldo a favor del cliente</div>'
-                    : '<div style="margin-top: 0.5rem; font-size: 0.85rem; color: #065f46;">✓ Pago completo — Sin deudas pendientes</div>'}
-                ${customer.creditLimit != null && !isNaN(customer.creditLimit) ? `<div style="margin-top: 0.25rem; font-size: 0.9rem; color: #374151;">Límite de crédito: <strong>${formatCLP(customer.creditLimit)}</strong></div>` : ''}
-                
-                ${netDebt > 0 && cashOpen ? `
-                    <div style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
-                        <button class="btn btn-success" style="flex: 1; min-width: 140px;" onclick="CustomersView.showPayTotalDebtForm(${customerId}, ${netDebt})">
-                            Pagar Deuda Total (${formatCLP(netDebt)})
-                        </button>
-                        <button class="btn btn-warning" style="flex: 1; min-width: 100px;" onclick="CustomersView.showAbonarFromSaldoForm(${customerId}, ${netDebt})">
-                            Abonar
-                        </button>
+
+                ${cashOpen && (netDebt > 0 || netCredit >= 0) ? `
+                    <div style="background: white; padding: 1.5rem; border-radius: 1rem; border: 1.5px solid #3b82f622; display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.05);">
+                        <div style="flex: 1;">
+                            <h4 style="margin: 0; font-weight: 800; color: #1e293b;">Acciones de Cobro</h4>
+                            <p style="margin: 0; font-size: 0.85rem; color: #64748b;">Registra un nuevo abono a la deuda general o carga saldo.</p>
+                        </div>
+                        <div style="display: flex; gap: 0.75rem;">
+                            ${netDebt > 0 ? `
+                                <button class="btn" style="background: #10b981; color: white; padding: 0.75rem 1.5rem; border-radius: 0.75rem; font-weight: 800; border: none;" onclick="CustomersView.showUnifiedAbonoModal('${customerId}')">
+                                    ➕ Registrar Abono / Pago
+                                </button>
+                                <button class="btn" style="background: #3b82f6; color: white; padding: 0.75rem 1.5rem; border-radius: 0.75rem; font-weight: 800; border: none;" onclick="CustomersView.showPayTotalDebtForm(${customerId}, ${netDebt})">
+                                    💰 Saldar Todo (${formatCLP(netDebt)})
+                                </button>
+                            ` : `
+                                <button class="btn" style="background: #10b981; color: white; padding: 0.75rem 1.5rem; border-radius: 0.75rem; font-weight: 800; border: none;" onclick="CustomersView.showUnifiedAbonoModal('${customerId}')">
+                                    💰 Cargar Saldo
+                                </button>
+                            `}
+                        </div>
+                    </div>
+                ` : !cashOpen ? `
+                    <div style="padding: 1.5rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: 1rem; text-align: center; color: #92400e; font-weight: 700;">
+                        ⚠️ Abre la caja para registrar pagos o movimientos.
                     </div>
                 ` : ''}
             </div>
-            
-            ${balance.pendingSales.length > 0 ? `
-                <div style="margin-bottom: 1.5rem;">
-                    <h3 style="margin-bottom: 1rem; font-size: 1.15rem; font-weight: 700; color: #0f172a;">📝 Detalle por venta pendiente</h3>
-                    <div style="max-height: 360px; overflow-y: auto;">
+
+            <!-- TAB: PENDIENTES -->
+            <div id="tab-pendientes" class="tab-content ${initialTab === 'tab-pendientes' ? 'active' : ''}">
+                ${balance.pendingSales.length > 0 ? `
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 450px; overflow-y: auto; padding-right: 0.5rem;">
                         ${balance.pendingSales.map(sale => `
-                            <div style="padding: 1rem; margin-bottom: 0.75rem; border: 1px solid #cbd5e1; border-radius: 0.5rem; background: #ffffff;">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
-                                    <span style="font-weight: 700; font-size: 1.05rem; color: #0f172a;">Venta #${sale.saleNumber}</span>
-                                    <span style="font-size: 0.9rem; font-weight: 500; color: #334155;">${formatDateTime(sale.date)}</span>
+                            <div class="sale-item-row">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                                    <div>
+                                        <div style="font-weight: 800; color: #1e293b; font-size: 1.05rem;">Venta #${sale.saleNumber || sale.saleId}</div>
+                                        <div style="font-size: 0.8rem; color: #64748b; margin-top: 0.1rem;">📅 ${formatDateTime(sale.date)}</div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-size: 1.15rem; font-weight: 900; color: #dc2626;">${formatCLP(sale.remaining)}</div>
+                                        <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 700;">Deuda Restante</div>
+                                    </div>
                                 </div>
-                                <div style="padding: 0.6rem 0.75rem; background: #f1f5f9; border-radius: 0.375rem;">
-                                    ${(sale.items || []).map(item => `
-                                        <div style="display: flex; justify-content: space-between; padding: 0.35rem 0; font-size: 0.95rem;">
-                                            <span style="color: #0f172a; font-weight: 500;">${item.name} (x${item.quantity})</span>
-                                            <span style="color: #0f172a; font-weight: 600;">${formatCLP(item.total)}</span>
-                                        </div>
-                                    `).join('')}
+                                <div style="margin: 0.75rem 0; height: 6px; background: #f1f5f9; border-radius: 10px; overflow: hidden;">
+                                    <div style="height: 100%; background: #3b82f6; width: ${(sale.paidAmount / sale.total) * 100}%"></div>
                                 </div>
-                                <div style="display: flex; justify-content: space-between; margin-top: 0.5rem; padding: 0.4rem 0.75rem; font-size: 0.9rem;">
-                                    <span style="color: #64748b;">Total: <strong style="color: #0f172a;">${formatCLP(sale.total)}</strong></span>
-                                    <span style="color: #64748b;">Pagado: <strong style="color: #059669;">${formatCLP(sale.paid || 0)}</strong></span>
-                                    <span style="color: #dc2626; font-weight: 700;">Debe: ${formatCLP(sale.remaining)}</span>
+                                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem;">
+                                    <div style="color: #64748b;">
+                                        Pagado: <strong style="color: #10b981;">${formatCLP(sale.paidAmount)}</strong> de <strong>${formatCLP(sale.total)}</strong>
+                                    </div>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <button class="btn btn-sm btn-outline-primary" style="font-size: 0.75rem; font-weight: 700; border-radius: 0.5rem;" onclick="CustomersView.toggleSaleDetail(this, ${sale.id || sale.saleId})">📦 Ver Productos</button>
+                                        ${cashOpen ? `<button class="btn btn-sm btn-success" style="font-size: 0.75rem; font-weight: 700; border-radius: 0.5rem;" onclick="CustomersView.showPaymentForm(${sale.id || sale.saleId}, ${customerId}, ${sale.remaining})">Saldar</button>` : ''}
+                                    </div>
                                 </div>
-                                ${cashOpen ? `
-                                <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-                                    <button class="btn btn-sm btn-success" style="flex: 1;" onclick="CustomersView.showPaymentForm(${sale.saleId}, ${customerId}, ${sale.remaining})">
-                                        Pagar Total (${formatCLP(sale.remaining)})
-                                    </button>
-                                    <button class="btn btn-sm btn-warning" style="flex: 1;" onclick="CustomersView.showPartialPaymentForm(${sale.saleId}, ${customerId}, ${sale.remaining})">
-                                        Abono Parcial
-                                    </button>
+                                <div id="detail-${sale.id || sale.saleId}" style="display: none; margin-top: 1rem; padding-top: 1rem; border-top: 1.5px dashed #e2e8f0;">
+                                    <div style="display: flex; flex-direction: column; gap: 0.25rem;">
+                                        ${(sale.items || []).map(item => `
+                                            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: #334155;">
+                                                <span>${item.quantity}x ${item.name}</span>
+                                                <span style="font-weight: 700;">${formatCLP(item.total)}</span>
+                                            </div>
+                                        `).join('')}
+                                    </div>
                                 </div>
-                                ` : ''}
                             </div>
                         `).join('')}
                     </div>
-                </div>
-            ` : ''}
-            
-            ${payments.length > 0 ? (() => {
-                // Separar pagos reales de pagos de descuento (tipo 'discount')
-                // Los pagos 'discount' son registros técnicos para que la caja no descuadre;
-                // NO representan dinero real recibido, solo deuda perdonada.
-                const realPayments = payments.filter(p => p.paymentMethod !== 'discount');
-                const discountPayments = payments.filter(p => p.paymentMethod === 'discount');
-                const totalDiscounted = discountPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
+                ` : '<div style="text-align: center; padding: 3rem; color: #94a3b8;">No hay ventas pendientes de pago.</div>'}
+            </div>
 
-                // Agrupar pagos REALES en transacciones independientes
-                // Pagos con la misma fecha (mismo segundo) y mismas notas = misma transacción
-                const txGroups = [];
-                const sorted = [...realPayments].sort((a, b) => new Date(b.date) - new Date(a.date));
-                for (const p of sorted) {
-                    const pDateKey = p.date ? p.date.substring(0, 19) : '';
-                    const pNotes = p.notes || '';
-                    const existing = txGroups.find(g => g.dateKey === pDateKey && g.notes === pNotes && g.method === p.paymentMethod);
-                    if (existing) {
-                        existing.payments.push(p);
-                        existing.totalAmount += (parseFloat(p.amount) || 0);
-                    } else {
-                        txGroups.push({
-                            dateKey: pDateKey,
-                            date: p.date,
-                            notes: pNotes,
-                            method: p.paymentMethod,
-                            payments: [p],
-                            totalAmount: parseFloat(p.amount) || 0
-                        });
-                    }
-                }
-
-                const totalPaid = realPayments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-                const totalCash = realPayments.filter(p => p.paymentMethod === 'cash').reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-                const totalOther = realPayments.filter(p => p.paymentMethod !== 'cash').reduce((s, p) => s + (parseFloat(p.amount) || 0), 0);
-
-                return `
-                <div style="margin-top: 1.5rem;">
-                    <h3 style="margin-bottom: 1rem; font-size: 1.1rem;">💰 Historial de Pagos (${txGroups.length} transacción${txGroups.length !== 1 ? 'es' : ''} — ${realPayments.length} registro${realPayments.length !== 1 ? 's' : ''})</h3>
-
-                    <div style="display: grid; grid-template-columns: repeat(${totalDiscounted > 0 ? 4 : 3}, 1fr); gap: 0.5rem; margin-bottom: 1rem; padding: 0.75rem; background: var(--light); border-radius: 0.5rem; font-size: 0.85rem;">
-                        <div style="text-align: center;">
-                            <div style="font-weight: 600; color: var(--success); font-size: 1.1rem;">${formatCLP(totalPaid)}</div>
-                            <div style="color: var(--secondary); font-size: 0.8rem;">Total pagado</div>
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="font-weight: 600; font-size: 1.1rem;">${formatCLP(totalCash)}</div>
-                            <div style="color: var(--secondary); font-size: 0.8rem;">En efectivo</div>
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="font-weight: 600; font-size: 1.1rem;">${formatCLP(totalOther)}</div>
-                            <div style="color: var(--secondary); font-size: 0.8rem;">Otros métodos</div>
-                        </div>
-                        ${totalDiscounted > 0 ? `
-                        <div style="text-align: center;">
-                            <div style="font-weight: 600; color: #f59e0b; font-size: 1.1rem;">${formatCLP(totalDiscounted)}</div>
-                            <div style="color: var(--secondary); font-size: 0.8rem;">Descontado</div>
-                        </div>
-                        ` : ''}
-                    </div>
-
-                    <div style="max-height: 500px; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem;">
-                        ${txGroups.map((tx, txIdx) => {
-                    const hasDiscount = tx.notes && (tx.notes.includes('descuento') || tx.notes.includes('Descuento'));
-                    const methodIcon = tx.method === 'cash' ? '💵' : tx.method === 'card' ? '💳' : tx.method === 'qr' ? '📱' : '➕';
-                    const methodName = this.getPaymentMethodName(tx.method);
-                    const borderColor = hasDiscount ? '#f59e0b' : '#10b981';
-                    const bgColor = hasDiscount ? 'rgba(251, 191, 36, 0.06)' : 'rgba(16, 185, 129, 0.04)';
-
-                    // Parsear info de deuda y descuento desde las notas
-                    let originalDebt = 0;
-                    let discountAmount = 0;
-                    let discountDesc = '';
-                    let userNotes = '';
-
-                    // Intentar parsear "Deuda: $X" de las notas (presente en pagos con y sin descuento)
-                    const deudaMatch = tx.notes ? tx.notes.match(/Deuda:\s*\$?([\d.,]+)/i) : null;
-                    const pagadoMatch = tx.notes ? tx.notes.match(/Pagado:\s*\$?([\d.,]+)/i) : null;
-
-                    if (hasDiscount) {
-                        // Formato: "Pago con descuento (÷1.4) | Deuda: $15.000 | Descuento: $4.286 | Pagado: $10.714 | notas"
-                        const descuentoMatch = tx.notes.match(/Descuento:\s*\$?([\d.,]+)/i);
-                        const descMatch = tx.notes.match(/\(([^)]+)\)/);
-                        if (deudaMatch) originalDebt = parseFloat(deudaMatch[1].replace(/\./g, '').replace(',', '.')) || 0;
-                        if (descuentoMatch) discountAmount = parseFloat(descuentoMatch[1].replace(/\./g, '').replace(',', '.')) || 0;
-                        if (descMatch) discountDesc = descMatch[1];
-                        // Fallbacks
-                        if (!originalDebt && discountAmount > 0) originalDebt = tx.totalAmount + discountAmount;
-                        if (!originalDebt) originalDebt = tx.totalAmount;
-                    } else if (deudaMatch) {
-                        // Formato nuevo sin descuento: "Pago de deuda total | Deuda: $15.000 | Pagado: $15.000"
-                        originalDebt = parseFloat(deudaMatch[1].replace(/\./g, '').replace(',', '.')) || tx.totalAmount;
-                    } else {
-                        // Pagos antiguos sin formato estructurado
-                        originalDebt = tx.totalAmount;
-                    }
-
-                    // Extraer notas de usuario (último segmento que no sea campo de sistema)
-                    if (tx.notes) {
-                        const parts = tx.notes.split('|').map(s => s.trim());
-                        const lastPart = parts[parts.length - 1];
-                        if (lastPart && !lastPart.match(/^(Pago|Deuda|Descuento|Pagado)/i)) userNotes = lastPart;
-                    }
-
-                    return `
-                            <div style="border: 1px solid ${borderColor}44; border-left: 4px solid ${borderColor}; border-radius: 0.5rem; background: ${bgColor}; overflow: hidden;">
-                                <!-- Cabecera -->
-                                <div style="padding: 0.75rem 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
-                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                        <span style="font-size: 1.3rem;">${methodIcon}</span>
+            <!-- TAB: HISTORIAL DE ABONOS -->
+            <div id="tab-historial" class="tab-content ${initialTab === 'tab-historial' ? 'active' : ''}">
+                ${finalAbonosLedger.length > 0 ? `
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem; max-height: 450px; overflow-y: auto; padding-right: 0.5rem;">
+                        ${finalAbonosLedger.map(m => `
+                            <div style="background: white; border: 1.5px solid #e2e8f0; border-left: 4px solid ${m.color}; border-radius: 0.875rem; padding: 1rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div style="display: flex; gap: 0.875rem; align-items: center;">
+                                        <div style="width: 40px; height: 40px; border-radius: 12px; background: ${m.color}15; color: ${m.color}; display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">
+                                            ${m.icon}
+                                        </div>
                                         <div>
-                                            <div style="font-size: 0.85rem; color: var(--secondary);">${formatDateTime(tx.date)}</div>
-                                            <div style="font-size: 0.8rem; color: var(--secondary);">${methodName}</div>
+                                            <div style="font-weight: 800; color: #1e293b; font-size: 0.95rem;">${m.title}</div>
+                                            <div style="font-size: 0.8rem; color: #64748b;">
+                                                ${formatDateTime(m.date)} • ${m.method}
+                                            </div>
                                         </div>
                                     </div>
                                     <div style="text-align: right;">
-                                        <span style="font-size: 0.8rem; padding: 0.15rem 0.5rem; border-radius: 1rem; background: ${borderColor}22; color: ${borderColor}; font-weight: 600;">
-                                            ${tx.payments.length === 1 ? 'Pago individual' : tx.payments.length + ' ventas saldadas'}
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <!-- Desglose: Deuda original → Descuento → Total pagado -->
-                                <div style="padding: 0.5rem 1rem; display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 0.25rem; align-items: center; text-align: center;">
-                                    <div>
-                                        <div style="font-size: 0.7rem; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.5px;">Deuda inicial</div>
-                                        <div style="font-size: 1.1rem; font-weight: 700; color: #dc2626;">${formatCLP(originalDebt)}</div>
-                                    </div>
-                                    <div style="font-size: 1.2rem; color: var(--secondary);">→</div>
-                                    <div>
-                                        <div style="font-size: 0.7rem; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.5px;">Descuento${discountDesc ? ' (' + discountDesc + ')' : ''}</div>
-                                        <div style="font-size: 1.1rem; font-weight: 700; color: ${discountAmount > 0 ? '#f59e0b' : 'var(--secondary)'};">
-                                            ${discountAmount > 0 ? '-' + formatCLP(discountAmount) : 'Sin dcto.'}
+                                        <div style="font-size: 1.1rem; font-weight: 900; color: ${m.type === 'credit_out' ? '#dc2626' : '#10b981'};">
+                                            ${m.type === 'credit_out' ? '-' : '+'}${formatCLP(m.amount)}
                                         </div>
-                                    </div>
-                                    <div style="font-size: 1.2rem; color: var(--secondary);">→</div>
-                                    <div>
-                                        <div style="font-size: 0.7rem; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.5px;">Total pagado</div>
-                                        <div style="font-size: 1.2rem; font-weight: 800; color: #059669;">${formatCLP(tx.totalAmount)}</div>
+                                        <div style="font-size: 0.7rem; color: #94a3b8; font-weight: 700;">Ref: ${m.reference}</div>
                                     </div>
                                 </div>
-
-                                ${userNotes ? `
-                                <div style="padding: 0.3rem 1rem; font-size: 0.8rem; color: var(--secondary); font-style: italic;">
-                                    📝 ${userNotes}
-                                </div>
-                                ` : ''}
-
-                                <!-- Detalle por venta -->
-                                <div style="padding: 0.4rem 1rem 0.6rem;">
-                                    <table style="width: 100%; font-size: 0.8rem; border-collapse: collapse;">
-                                        <thead>
-                                            <tr style="color: var(--secondary);">
-                                                <th style="padding: 0.3rem 0; text-align: left; font-weight: 500;">Venta</th>
-                                                <th style="padding: 0.3rem 0; text-align: right; font-weight: 500;">Monto aplicado</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${tx.payments.map(p => `
-                                            <tr style="border-top: 1px solid var(--border);">
-                                                <td style="padding: 0.3rem 0; font-weight: 500;">#${p.saleNumber}</td>
-                                                <td style="padding: 0.3rem 0; text-align: right; font-weight: 600; color: var(--success);">${formatCLP(p.amount)}</td>
-                                            </tr>
-                                            `).join('')}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                ${m.notes ? `<div style="margin-top: 0.5rem; font-size: 0.75rem; color: #475569; background: #f8fafc; padding: 0.4rem; border-radius: 0.4rem; font-style: italic;">📝 ${m.notes}</div>` : ''}
                             </div>
-                            `;
-                }).join('')}
+                        `).join('')}
                     </div>
-                </div>
-                `;
-            })() : ''}
-            
-            ${creditMovements.length > 0 ? `
-                <div style="margin-top: 1.5rem;">
-                    <h3 style="margin-bottom: 1rem; font-size: 1.1rem;">📋 Movimientos de saldo a favor</h3>
-                    <div style="max-height: 220px; overflow-y: auto;">
-                        <table style="width: 100%; font-size: 0.9rem;">
-                            <thead style="background: var(--light); position: sticky; top: 0;">
-                                <tr>
-                                    <th style="padding: 0.5rem;">Fecha</th>
-                                    <th style="padding: 0.5rem;">Concepto</th>
-                                    <th style="padding: 0.5rem; text-align: right;">Monto</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${creditMovements.map(m => `
-                                    <tr style="border-bottom: 1px solid var(--border);">
-                                        <td style="padding: 0.5rem;">${formatDateTime(m.date)}</td>
-                                        <td style="padding: 0.5rem;">${m.type === 'deposit' ? 'Depósito (' + (this.getPaymentMethodName ? this.getPaymentMethodName(m.paymentMethod) : m.paymentMethod) + ')' : 'Uso en venta' + (m.saleNumber != null ? ' #' + m.saleNumber : '')}</td>
-                                        <td style="padding: 0.5rem; text-align: right; font-weight: 600; color: ${m.type === 'deposit' ? 'var(--success)' : '#64748b'};">
-                                            ${m.type === 'deposit' ? '+' : '-'}${formatCLP(m.amount)}
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
+                ` : '<div style="text-align: center; padding: 3rem; color: #94a3b8;">No se han registrado abonos o cargos parciales.</div>'}
+            </div>
+
+            <!-- TAB: PAGOS DE DEUDA -->
+            <div id="tab-pagos-deuda" class="tab-content ${initialTab === 'tab-pagos-deuda' ? 'active' : ''}">
+                <style>
+                    .session-card { background:white; border:1.5px solid #e2e8f0; border-radius:1rem; overflow:hidden; margin-bottom:0.75rem; transition:box-shadow 0.2s; }
+                    .session-card:hover { box-shadow:0 4px 14px rgba(0,0,0,0.08); }
+                    .session-hdr { display:flex; justify-content:space-between; align-items:center; padding:1rem 1.25rem; cursor:pointer; }
+                    .session-hdr:hover { background:#f8fafc; }
+                    .session-body { border-top:1.5px solid #f1f5f9; padding:1rem 1.25rem; background:#fafcff; }
+                    .ssale-row { border:1px solid #e2e8f0; border-radius:0.5rem; margin-bottom:0.5rem; overflow:hidden; }
+                    .ssale-hdr { display:flex; justify-content:space-between; align-items:center; padding:0.6rem 0.875rem; cursor:pointer; background:white; font-size:0.88rem; }
+                    .ssale-hdr:hover { background:#f8fafc; }
+                    .ssale-products { padding:0.5rem 0.875rem 0.75rem; background:#f8fafc; border-top:1px dashed #e2e8f0; }
+                </style>
+                ${sessions.length > 0 ? `
+                    <div style="max-height:500px;overflow-y:auto;padding-right:0.5rem;">
+                        ${sessions.map(session => {
+                            const methods = session.methods || {};
+                            const methodNames = Object.entries(methods)
+                                .filter(([_, v]) => v > 0)
+                                .map(([m, v]) => {
+                                    const icons = {cash:'\uD83D\uDCB5',card:'\uD83D\uDCB3',other:'\uD83C\uDFE6',credit:'\uD83D\uDCB0',qr:'\uD83D\uDCF1',discount:'\uD83C\uDFF7\uFE0F'};
+                                    return `${icons[m]||'\uD83D\uDCB3'} ${formatCLP(v)}`;
+                                }).join(' + ') || '—';
+                            const salesData = session.salesData || [];
+                            const cnt = salesData.length;
+                            return `
+                            <div class="session-card">
+                                <div class="session-hdr" onclick="CustomersView.toggleSession('${session.id}')">
+                                    <div>
+                                        <div style="font-weight:800;color:#1e293b;font-size:1rem;">\uD83D\uDCB3 Pago de Deuda</div>
+                                        <div style="font-size:0.8rem;color:#64748b;margin-top:0.15rem;">
+                                            \uD83D\uDCC5 ${formatDateTime(session.date)}
+                                            &nbsp;&bull;&nbsp; ${cnt} venta${cnt !== 1 ? 's' : ''}
+                                            &nbsp;&bull;&nbsp; ${methodNames}
+                                        </div>
+                                        ${session.discount > 0 ? `<div style="font-size:0.75rem;color:#16a34a;font-weight:700;">\uD83C\uDFF7\uFE0F Descuento: ${formatCLP(session.discount)}</div>` : ''}
+                                    </div>
+                                    <div style="display:flex;align-items:center;gap:0.875rem;">
+                                        <div style="text-align:right;">
+                                            <div style="font-size:1.25rem;font-weight:900;color:#16a34a;">${formatCLP(session.totalPaid)}</div>
+                                            <div style="font-size:0.65rem;color:#94a3b8;font-weight:700;text-transform:uppercase;">Total Pagado</div>
+                                        </div>
+                                        <div id="sarrow-${session.id}" style="font-size:1.1rem;color:#94a3b8;transition:transform 0.25s;">\u25BC</div>
+                                    </div>
+                                </div>
+                                <div id="sdetail-${session.id}" style="display:none;">
+                                    <div class="session-body">
+                                        ${salesData.length === 0
+                                            ? '<p style="color:#94a3b8;font-size:0.85rem;">Sin detalle de ventas disponible.</p>'
+                                            : salesData.map((sale, si) => {
+                                                const items = sale.items || [];
+                                                return `
+                                                <div class="ssale-row">
+                                                    <div class="ssale-hdr" onclick="CustomersView.toggleSessionSale('${session.id}', ${si})">
+                                                        <span style="font-weight:700;color:#334155;">
+                                                            \uD83D\uDCC4 Venta #${sale.saleNumber || sale.saleId}
+                                                            <span style="font-weight:400;color:#94a3b8;"> &mdash; ${formatDateTime(sale.date)}</span>
+                                                        </span>
+                                                        <span style="font-weight:800;color:#1e293b;white-space:nowrap;">
+                                                            ${formatCLP(sale.total)}
+                                                            <span id="sarr-${session.id}-${si}" style="color:#94a3b8;margin-left:0.3rem;">\u25BC</span>
+                                                        </span>
+                                                    </div>
+                                                    <div id="sprods-${session.id}-${si}" style="display:none;">
+                                                        <div class="ssale-products">
+                                                            ${items.length === 0
+                                                                ? '<span style="color:#94a3b8;font-size:0.8rem;">Sin productos detallados.</span>'
+                                                                : items.map(item => `
+                                                                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;color:#334155;padding:0.25rem 0;border-bottom:1px dashed #f1f5f9;">
+                                                                        <span>${item.quantity || 1}x ${safeHTML(item.name || '')}</span>
+                                                                        <span style="font-weight:700;">${formatCLP(item.total || (item.price * item.quantity) || 0)}</span>
+                                                                    </div>
+                                                                `).join('')
+                                                            }
+                                                        </div>
+                                                    </div>
+                                                </div>`;
+                                            }).join('')
+                                        }
+                                    </div>
+                                </div>
+                            </div>`;
+                        }).join('')}
                     </div>
-                </div>
-            ` : ''}
+                ` : `
+                    <div style="text-align:center;padding:3rem 1rem;color:#94a3b8;">
+                        <div style="font-size:3rem;margin-bottom:1rem;">\uD83D\uDCB3</div>
+                        <div style="font-weight:700;color:#64748b;font-size:1rem;">No hay pagos de deuda registrados aún</div>
+                        <div style="font-size:0.85rem;margin-top:0.5rem;">Los pagos aparecerán aquí cuando el cliente salde su cuenta</div>
+                    </div>
+                `}
+            </div>
         `;
+
 
         const footer = `
-            <button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
+            <button class="btn btn-secondary" style="border-radius: 0.75rem; padding: 0.75rem 1.5rem; font-weight: 700;" onclick="closeModal()">Cerrar Ventana</button>
         `;
 
+        window._focusSearchAfterClose = () => CustomersView.focusSearch();
         showModal(content, {
-            title: `Cuenta Corriente - ${customer.name}`,
+            title: `Estado de Cuenta: ${safeHTML(customer.name)}`,
             footer,
-            width: '800px'
+            width: '850px'
         });
+        
+        // Mantener ID para refrescar
+        this._lastAccountDetailsId = customerId;
+    },
+
+    switchAccountTab(event, tabId) {
+        // Desactivar todos los botones de pestaña
+        document.querySelectorAll('.account-tab').forEach(btn => btn.classList.remove('active'));
+        // Activar el botón clickeado
+        event.currentTarget.classList.add('active');
+        
+        // Ocultar todos los contenidos
+        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+        // Mostrar el contenido seleccionado
+        const tab = document.getElementById(tabId);
+        if (tab) tab.classList.add('active');
+    },
+
+    toggleSaleDetail(btn, saleId) {
+        const detail = document.getElementById(`detail-${saleId}`);
+        if (detail) {
+            const isHidden = detail.style.display === 'none';
+            detail.style.display = isHidden ? 'block' : 'none';
+            btn.textContent = isHidden ? '🔼 Ocultar' : '📦 Ver Productos';
+        }
     },
 
     async showPaymentForm(saleId, customerId, amount) {
@@ -798,7 +1157,7 @@ const CustomersView = {
         `;
 
         const footer = `
-            <button class="btn btn-secondary" onclick="CustomersView.showAccountDetails(${customerId})">Volver</button>
+            <button class="btn btn-secondary" onclick="CustomersView.showAccountDetails('${customerId}')">Volver</button>
             <button class="btn btn-success" onclick="CustomersView.processPayment(${saleId}, ${customerId}, ${amount})">
                 Confirmar Pago de ${formatCLP(amount)}
             </button>
@@ -839,7 +1198,7 @@ const CustomersView = {
         `;
 
         const footer = `
-            <button class="btn btn-secondary" onclick="CustomersView.showAccountDetails(${customerId})">Volver</button>
+            <button class="btn btn-secondary" onclick="CustomersView.showAccountDetails('${customerId}')">Volver</button>
             <button class="btn btn-success" onclick="CustomersView.processPartialPayment(${saleId}, ${customerId}, ${maxAmount})">
                 Confirmar Pago
             </button>
@@ -875,6 +1234,23 @@ const CustomersView = {
                 paymentMethod: paymentMethod,
                 notes: notes
             });
+
+            // NUEVO: Registrar sesión de pago
+            try {
+                const fullSale = await Sale.getById(saleId);
+                const rawItems = fullSale ? (typeof fullSale.items === 'string' ? JSON.parse(fullSale.items || '[]') : (fullSale.items || [])) : [];
+                await this.createDebtPaymentSession({
+                    customerId,
+                    date: new Date().toISOString(),
+                    totalPaid: amount,
+                    totalDebt: amount,
+                    discount: 0,
+                    methods: { [paymentMethod]: amount },
+                    salesData: [{ saleId, saleNumber: fullSale?.saleNumber || saleId, date: fullSale?.date, total: parseFloat(fullSale?.total) || amount, items: rawItems }],
+                    notes: notes || '',
+                    cashRegisterId: openCash.id
+                });
+            } catch(se) { console.warn('[PaymentSession] processPayment:', se); }
 
             const methodName = this.getPaymentMethodName(paymentMethod);
             showNotification(`Pago de ${formatCLP(amount)} registrado exitosamente (${methodName})`, 'success');
@@ -941,16 +1317,19 @@ const CustomersView = {
         }
     },
 
-    async showAbonarFromSaldoForm(customerId, maxAmount) {
+    async showUnifiedAbonoModal(customerId) {
+        const fullStatus = await CustomerAccountService.getFullAccountStatus(customerId);
+        const maxAmount = fullStatus ? fullStatus.summary.totalDebt : 9999999;
+        
         const content = `
             <div style="text-align: center; margin-bottom: 1.5rem;">
-                <div style="font-size: 1.1rem; margin-bottom: 0.5rem;">Abonar a la deuda (saldo total)</div>
-                <div style="font-size: 1.25rem; font-weight: bold; color: #0f172a;">Máximo: ${formatCLP(maxAmount)}</div>
+                <div style="font-size: 1.1rem; margin-bottom: 0.5rem;">Registrar Abono a la Deuda</div>
+                <div style="font-size: 1.25rem; font-weight: bold; color: #0f172a;">Máximo sugerido: ${formatCLP(maxAmount)}</div>
             </div>
             <div class="form-group">
                 <label>Monto a abonar *</label>
-                <input type="number" id="abonarAmount" class="form-control" min="1" max="${maxAmount}" step="10" placeholder="Ingresa el monto">
-                <small style="color: #64748b;">Máximo: ${formatCLP(maxAmount)}</small>
+                <input type="number" id="abonarAmount" class="form-control" min="1" step="10" placeholder="Ingresa el monto" autofocus>
+                <small style="color: #64748b;">El monto se distribuirá entre las ventas más antiguas.</small>
             </div>
             <div class="form-group">
                 <label>Método de Pago</label>
@@ -967,15 +1346,15 @@ const CustomersView = {
             </div>
         `;
         const footer = `
-            <button class="btn btn-secondary" onclick="CustomersView.showAccountDetails(${customerId})">Volver</button>
-            <button class="btn btn-warning" onclick="CustomersView.processAbonarFromSaldo(${customerId}, ${maxAmount})">
-                Confirmar abono
+            <button class="btn btn-secondary" onclick="CustomersView.showAccountDetails('${customerId}')">Volver</button>
+            <button class="btn btn-success" style="font-weight:800;" onclick="CustomersView.processUnifiedAbono('${customerId}', ${maxAmount})">
+                Confirmar Abono
             </button>
         `;
-        showModal(content, { title: 'Abonar a la deuda', footer, width: '500px' });
+        showModal(content, { title: 'Nuevo Abono / Pago', footer, width: '500px' });
     },
 
-    async processAbonarFromSaldo(customerId, maxAmount) {
+    async processUnifiedAbono(customerId, maxAmount) {
         const openCash = await CashRegister.getOpen();
         if (!openCash) {
             showNotification('Abre la caja para registrar pagos de deuda.', 'warning');
@@ -984,27 +1363,18 @@ const CustomersView = {
         const amountInput = document.getElementById('abonarAmount');
         const paymentMethodSelect = document.getElementById('paymentMethod');
         const notesElement = document.getElementById('paymentNotes');
-        if (!amountInput) {
-            showNotification('Error: No se encontró el campo de monto', 'error');
-            return;
-        }
-        if (!paymentMethodSelect) {
-            showNotification('Error: No se encontró el selector de método de pago', 'error');
-            return;
-        }
+        
         const amount = parseFloat(amountInput.value);
         const paymentMethod = paymentMethodSelect.value || 'cash';
-        const notes = notesElement ? notesElement.value.trim() : 'Abono a deuda';
+        const notes = notesElement ? notesElement.value.trim() : 'Abono general';
+
         if (!amount || amount <= 0) {
             showNotification('Ingresa un monto válido', 'warning');
             return;
         }
-        if (amount > maxAmount) {
-            showNotification(`El monto no puede ser mayor a ${formatCLP(maxAmount)}`, 'warning');
-            return;
-        }
+
         try {
-            const result = await CustomerAccountService.registerAccountPayment(
+            await CustomerAccountService.registerAccountPayment(
                 customerId,
                 amount,
                 paymentMethod,
@@ -1012,147 +1382,378 @@ const CustomersView = {
                 notes
             );
 
-            const methodName = this.getPaymentMethodName(paymentMethod);
-            showNotification(`Abono de ${formatCLP(result.totalPaid)} registrado (${methodName})`, 'success');
-            this.showAccountDetails(customerId);
-            this.refresh();
+            // C10: Forzar limpieza y reconciliación para evitar datos viejos
+            if (CustomerAccountService.reconcileBalances) await CustomerAccountService.reconcileBalances(customerId);
+            if (db.clearCache) db.clearCache();
+
+            showNotification(`Abono de ${formatCLP(amount)} registrado correctamente`, 'success');
+            
+            // C10: Limpiar TODAS las ventanas antes de refrescar
+            document.querySelectorAll('.modal').forEach(m => m.remove());
+            
+            setTimeout(async () => {
+                await this.showAccountDetails(customerId, 'tab-historial');
+                this.refresh();
+            }, 100);
         } catch (error) {
-            showNotification('Error al registrar el abono: ' + error.message, 'error');
+            showNotification('Error al registrar abono: ' + error.message, 'error');
         }
     },
 
     async showPayTotalDebtForm(customerId, totalDebt) {
+        const customer = await Customer.getById(customerId);
+        const netCredit = parseFloat(customer.balanceCredit) || 0;
+
         const content = `
-            <div style="text-align: center; margin-bottom: 1rem;">
-                <div style="font-size: 1rem; margin-bottom: 0.5rem;">Deuda total</div>
-                <div style="font-size: 1.75rem; font-weight: bold; color: var(--danger);">${formatCLP(totalDebt)}</div>
-            </div>
-            
-            <div class="form-group" style="background: var(--light); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1rem;">
-                <label style="margin-bottom: 0.5rem;">Descuento (opcional)</label>
-                <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.75rem;">
-                    <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
-                        <input type="radio" name="discountType" value="divisor" checked>
-                        <span>Dividir por (ej: 1.4)</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
-                        <input type="radio" name="discountType" value="clp">
-                        <span>Monto (CLP)</span>
-                    </label>
+            <div class="payment-modal-pro">
+                <!-- Columna Izquierda: Métodos de Pago (como POS) -->
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div style="background: var(--danger-bg); border: 2px solid var(--danger); padding: 1rem 1.25rem; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: space-between; gap: 1rem;">
+                        <div>
+                            <div style="font-size: 0.65rem; font-weight: 800; color: var(--danger); text-transform: uppercase; letter-spacing: 1px;">Deuda Total</div>
+                            <div style="font-size: 2rem; font-weight: 950; color: var(--danger); line-height: 1;">${formatCLP(totalDebt)}</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 0.7rem; font-weight: 700; color: var(--text-muted);">Descuento (opcional)</div>
+                            <div style="display: flex; align-items: center; gap: 0.25rem;">
+                                <select id="discountType" class="form-control" style="width: 60px; height: 2.5rem; font-size: 0.8rem; font-weight: 700; padding: 2px;">
+                                    <option value="percentage">%</option>
+                                    <option value="fixed">CLP</option>
+                                </select>
+                                <input type="number" id="discountValue" class="form-control" min="0" step="any" placeholder="0" 
+                                    style="width: 80px; font-size: 1.1rem; font-weight: 800; text-align: center; height: 2.5rem;">
+                            </div>
+                            <small id="discountHelp" style="font-size: 0.65rem; color: var(--text-muted);">Ej: 10% o $1.000</small>
+                        </div>
+                    </div>
+
+                    <div class="payment-method-card">
+                        <div class="payment-icon" style="background: var(--info-bg); color: var(--info-text);">💵</div>
+                        <div style="flex: 1;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted);">EFECTIVO</div>
+                                <button class="btn-fill-diff" onclick="CustomersView.fillDebtAmount('pay_cash')">DIFERENCIA</button>
+                            </div>
+                            <input type="number" id="pay_cash" class="pay-input-pro debt-pay-input" placeholder="0">
+                        </div>
+                    </div>
+
+                    <div class="payment-method-card">
+                        <div class="payment-icon" style="background: var(--success-bg); color: var(--success-text);">💳</div>
+                        <div style="flex: 1;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted);">TARJETA / QR</div>
+                                <button class="btn-fill-diff" onclick="CustomersView.fillDebtAmount('pay_card')">DIFERENCIA</button>
+                            </div>
+                            <input type="number" id="pay_card" class="pay-input-pro debt-pay-input" placeholder="0">
+                        </div>
+                    </div>
+
+                    <div class="payment-method-card">
+                        <div class="payment-icon" style="background: var(--warning-bg); color: var(--warning-text);">🏦</div>
+                        <div style="flex: 1;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted);">TRANSFERENCIA</div>
+                                <button class="btn-fill-diff" onclick="CustomersView.fillDebtAmount('pay_other')">DIFERENCIA</button>
+                            </div>
+                            <input type="number" id="pay_other" class="pay-input-pro debt-pay-input" placeholder="0">
+                        </div>
+                    </div>
+
+                    ${netCredit > 0 ? `
+                    <div class="payment-method-card" style="border-color: var(--success); background: var(--success-bg);">
+                        <div class="payment-icon" style="background: white; color: var(--success);">💰</div>
+                        <div style="flex: 1;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <div style="font-size: 0.75rem; font-weight: 800; color: var(--success-text);">SALDO A FAVOR (${formatCLP(netCredit)})</div>
+                                <button class="btn-fill-diff" onclick="CustomersView.fillDebtAmount('pay_credit', ${netCredit})">TODO</button>
+                            </div>
+                            <input type="number" id="pay_credit" class="pay-input-pro debt-pay-input" placeholder="0" style="color: var(--success-text) !important;">
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <div class="form-group" style="margin-top: 0.5rem;">
+                        <textarea id="paymentNotes" class="form-control" rows="2" placeholder="Notas opcionales..." style="font-size: 0.85rem; border-radius: 0.5rem;"></textarea>
+                    </div>
                 </div>
-                <div style="display: flex; gap: 0.5rem; align-items: center;">
-                    <input type="number" id="discountValue" class="form-control" min="0" step="0.01" placeholder="1.4" value="" style="max-width: 140px;">
-                    <span id="discountSuffix">(total ÷ valor = a pagar)</span>
+
+                <!-- Columna Derecha: Resumen y Acción -->
+                <div class="payment-summary-card">
+                    <div>
+                        <div class="payment-total-header">
+                            <div style="font-size: 0.8rem; font-weight: 800; opacity: 0.9; letter-spacing: 1.5px; margin-bottom: 0.5rem;">TOTAL A PAGAR</div>
+                            <div id="finalAmountDisplay" style="font-size: 2.5rem; font-weight: 950; line-height: 1; color: var(--success);">${formatCLP(totalDebt)}</div>
+                            <div id="discountSavings" style="font-size: 0.85rem; color: var(--success-text); margin-top: 0.5rem; font-weight: 600;">Sin descuento</div>
+                        </div>
+
+                        <div style="display: flex; flex-direction: column; gap: 1.25rem; padding: 0.5rem;">
+                            <div style="text-align: center;">
+                                <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Estado del Pago</div>
+                                <div id="payment_status_text" style="font-size: 1.2rem; font-weight: 900; color: var(--danger);">PENDIENTE</div>
+                            </div>
+                            
+                            <hr style="border: 0; border-top: 2.5px dashed var(--border); margin: 0.5rem 0;">
+
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 700; color: var(--text-muted); font-size: 1rem;">Recibido:</span>
+                                <strong id="sum_paid_debt" style="font-size: 1.15rem; font-weight: 900; color: var(--text-main);">$0</strong>
+                            </div>
+
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span id="diff_label_debt" style="font-weight: 800; color: var(--text-main); font-size: 1.15rem;">Falta:</span>
+                                <strong id="sum_diff_debt" style="font-size: 1.75rem; font-weight: 950; color: var(--danger);">${formatCLP(totalDebt)}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1.5rem;">
+                        <button id="btnConfirmPayTotalDebt" class="btn btn-success pos-total-btn" style="height: 4rem; font-size: 1.25rem; margin-top: 0; font-weight: 900;" disabled>
+                            CONFIRMAR PAGO
+                        </button>
+                    </div>
                 </div>
-                <small id="discountHint" style="color: var(--text-muted); margin-top: 0.35rem; display: block;">Ej: 15650 ÷ 1.4 = 11.178 → pagas 11.178</small>
-            </div>
-            
-            <div style="text-align: center; padding: 0.75rem; background: rgba(34, 197, 94, 0.15); border-radius: 0.5rem; margin-bottom: 1rem;">
-                <div style="font-size: 0.9rem; color: var(--text-muted);">Total a pagar</div>
-                <div id="finalAmountDisplay" style="font-size: 1.5rem; font-weight: bold; color: var(--success);">${formatCLP(totalDebt)}</div>
-                <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem;">Este monto entra a caja con el método de pago que elijas abajo.</div>
-            </div>
-            
-            <div class="form-group">
-                <label>Método de Pago</label>
-                <select id="paymentMethod" class="form-control">
-                    <option value="cash">💵 Efectivo</option>
-                    <option value="card">💳 Tarjeta</option>
-                    <option value="qr">📱 QR</option>
-                    <option value="other">➕ Otro</option>
-                </select>
-            </div>
-            
-            <div class="form-group">
-                <label>Notas (opcional)</label>
-                <textarea id="paymentNotes" class="form-control" rows="2" placeholder="Observaciones del pago..."></textarea>
             </div>
         `;
 
         const footer = `
-            <button class="btn btn-secondary" onclick="CustomersView.showAccountDetails(${customerId})">Volver</button>
-            <button class="btn btn-success" id="btnConfirmPayTotalDebt">
-                Confirmar Pago
-            </button>
+            <button class="btn btn-secondary" onclick="CustomersView.showAccountDetails('${customerId}')">Volver</button>
         `;
 
-        showModal(content, { title: 'Pagar Deuda Total', footer, width: '500px' });
+        showModal(content, { title: '💰 Liquidar Deuda Total', footer, width: '850px' });
 
-        const totalDebtNum = parseFloat(totalDebt) || 0;
+        // Inicialización: solo % — 40 → total / 1.4
+        this.currentTotalDebt = parseFloat(totalDebt) || 0;
+        this.finalToPay = this.currentTotalDebt;
+
         const discountInput = document.getElementById('discountValue');
-        const discountSuffix = document.getElementById('discountSuffix');
+        const discountTypeSelect = document.getElementById('discountType');
         const finalDisplay = document.getElementById('finalAmountDisplay');
-        const radios = document.querySelectorAll('input[name="discountType"]');
+        const payInputs = document.querySelectorAll('.debt-pay-input');
 
-        function updateFinalAmount() {
-            const type = document.querySelector('input[name="discountType"]:checked')?.value || 'divisor';
-            const val = parseFloat(discountInput?.value) || 0;
-            let final = totalDebtNum;
-            if (type === 'divisor') {
-                if (val >= 0.01) final = totalDebtNum / val;
+        const updateAll = () => {
+            const val = parseFloat(discountInput.value) || 0;
+            const type = discountTypeSelect.value;
+            
+            if (type === 'percentage') {
+                // Mantener lógica anterior: 40% -> total / 1.4
+                const divisor = val > 0 ? (1 + val / 100) : 1;
+                this.finalToPay = roundPrice(this.currentTotalDebt / divisor);
             } else {
-                final = Math.max(0, totalDebtNum - Math.min(totalDebtNum, Math.max(0, val)));
+                this.finalToPay = Math.max(0, this.currentTotalDebt - val);
             }
-            final = Math.max(0, Math.round(final * 10) / 10);
-            if (finalDisplay) finalDisplay.textContent = formatCLP(final);
-            const btn = document.getElementById('btnConfirmPayTotalDebt');
-            if (btn) btn.textContent = 'Confirmar Pago de ' + formatCLP(final);
-        }
 
-        radios.forEach(r => r.addEventListener('change', () => {
-            const hint = document.getElementById('discountHint');
-            if (r.value === 'divisor') {
-                discountSuffix.textContent = '(total ÷ valor = a pagar)';
-                discountInput.placeholder = '1.4';
-                if (hint) hint.textContent = 'Ej: 15650 ÷ 1.4 = 11.178 → pagas 11.178';
+            finalDisplay.textContent = formatCLP(this.finalToPay);
+            const savings = this.currentTotalDebt - this.finalToPay;
+            const savingsEl = document.getElementById('discountSavings');
+            savingsEl.textContent = savings > 0 ? `Ahorro: ${formatCLP(savings)}` : 'Sin descuento';
+
+            let totalIn = 0;
+            payInputs.forEach(input => totalIn += parseFloat(input.value) || 0);
+            const diff = this.finalToPay - totalIn;
+            const sumPaidEl = document.getElementById('sum_paid_debt');
+            const sumDiffEl = document.getElementById('sum_diff_debt');
+            const diffLabelEl = document.getElementById('diff_label_debt');
+            const statusText = document.getElementById('payment_status_text');
+            const btnActual = document.getElementById('btnConfirmPayTotalDebt');
+
+            sumPaidEl.textContent = formatCLP(totalIn);
+            sumDiffEl.textContent = formatCLP(Math.abs(diff));
+
+            if (diff > 0.9) {
+                diffLabelEl.textContent = "Falta:";
+                sumDiffEl.style.color = "var(--danger)";
+                if (statusText) statusText.textContent = "PENDIENTE";
+                btnActual.disabled = true;
             } else {
-                discountSuffix.textContent = 'CLP';
-                discountInput.placeholder = '0';
-                if (hint) hint.textContent = 'Monto fijo a descontar de la deuda.';
+                diffLabelEl.textContent = diff < -0.9 ? "Excedente:" : "Saldado:";
+                sumDiffEl.style.color = "var(--success)";
+                if (statusText) statusText.textContent = diff < -0.9 ? "ENTREGAR VUELTO" : "LISTO";
+                btnActual.disabled = false;
             }
-            discountInput.value = '';
-            updateFinalAmount();
-        }));
-        if (discountInput) discountInput.addEventListener('input', updateFinalAmount);
+        };
 
-        document.getElementById('btnConfirmPayTotalDebt').addEventListener('click', () => {
-            const type = document.querySelector('input[name="discountType"]:checked')?.value || 'divisor';
-            const val = parseFloat(document.getElementById('discountValue').value) || 0;
-            let amountToPay = totalDebtNum;
-            let discountAmount = 0;
-            if (type === 'divisor') {
-                if (val >= 0.01) amountToPay = totalDebtNum / val;
-            } else {
-                amountToPay = Math.max(0, totalDebtNum - Math.min(totalDebtNum, Math.max(0, val)));
-            }
-            amountToPay = Math.max(0, Math.round(amountToPay * 10) / 10);
-            discountAmount = Math.max(0, Math.round((totalDebtNum - amountToPay) * 10) / 10);
+        discountInput.addEventListener('input', updateAll);
+        discountTypeSelect.addEventListener('change', updateAll);
+        payInputs.forEach(input => input.addEventListener('input', updateAll));
 
-            const paymentMethod = document.getElementById('paymentMethod')?.value || 'cash';
-            const userNotes = (document.getElementById('paymentNotes')?.value || '').trim();
+        document.getElementById('btnConfirmPayTotalDebt').addEventListener('click', async () => {
+            const payments = {
+                cash: parseFloat(document.getElementById('pay_cash').value) || 0,
+                card: parseFloat(document.getElementById('pay_card').value) || 0,
+                other: parseFloat(document.getElementById('pay_other').value) || 0,
+                credit: netCredit > 0 ? (parseFloat(document.getElementById('pay_credit').value) || 0) : 0
+            };
 
-            // Construir notas con detalle completo (siempre incluir deuda original)
+            const userNotes = (document.getElementById('paymentNotes').value || '').trim();
+            const discountAmount = this.currentTotalDebt - this.finalToPay;
+            const val = parseFloat(discountInput.value) || 0;
+            const type = discountTypeSelect.value;
+
             let notes = '';
             if (discountAmount > 0) {
-                const discountDesc = type === 'divisor' ? `÷${val}` : `-${formatCLP(val)}`;
-                notes = `Pago con descuento (${discountDesc}) | Deuda: ${formatCLP(totalDebtNum)} | Descuento: ${formatCLP(discountAmount)} | Pagado: ${formatCLP(amountToPay)}`;
+                notes = `Pago con descuento (${val}${type === 'percentage' ? '%' : ' CLP'}) | Deuda: ${formatCLP(this.currentTotalDebt)} | Descuento: ${formatCLP(discountAmount)} | Pagado: ${formatCLP(this.finalToPay)}`;
             } else {
-                notes = `Pago de deuda total | Deuda: ${formatCLP(totalDebtNum)} | Pagado: ${formatCLP(amountToPay)}`;
+                notes = `Pago de deuda total | Deuda: ${formatCLP(this.currentTotalDebt)} | Pagado: ${formatCLP(this.finalToPay)}`;
             }
             if (userNotes) notes += ' | ' + userNotes;
 
-            // Pasar info de descuento para metadata
             const discountInfo = discountAmount > 0 ? {
-                originalDebt: totalDebtNum,
+                originalDebt: this.currentTotalDebt,
                 discountType: type,
                 discountValue: val,
                 discountAmount: discountAmount,
-                finalAmount: amountToPay
+                finalAmount: this.finalToPay
             } : null;
 
             closeModal();
-            CustomersView.payTotalDebt(customerId, amountToPay, paymentMethod, notes, discountInfo);
+            CustomersView.payTotalDebtMulti(customerId, payments, notes, discountInfo);
         });
+
+        setTimeout(() => discountInput.focus(), 200);
+    },
+
+    fillDebtAmount(targetId, maxVal = Infinity) {
+        const inputs = ['pay_cash', 'pay_card', 'pay_other', 'pay_credit'];
+        let alreadyIn = 0;
+        inputs.forEach(id => {
+            const el = document.getElementById(id);
+            if (el && id !== targetId) alreadyIn += parseFloat(el.value) || 0;
+        });
+
+        let remaining = Math.max(0, this.finalToPay - alreadyIn);
+        if (remaining > maxVal) remaining = maxVal;
+
+        const target = document.getElementById(targetId);
+        if (target) {
+            target.value = remaining > 0 ? remaining : '';
+            const ev = new Event('input');
+            target.dispatchEvent(ev);
+        }
+    },
+
+    async payTotalDebtMulti(customerId, payments, notes, discountInfo) {
+        const openCash = await CashRegister.getOpen();
+        if (!openCash) {
+            showNotification('Abre la caja para registrar pagos.', 'warning');
+            return;
+        }
+
+        try {
+            const balance = await Customer.getAccountBalance(customerId);
+            const methods = Object.entries(payments).filter(([_, amt]) => amt > 0);
+
+            // NUEVO: Recopilar datos de ventas para la sesión de pago
+            const salesDataForSession = [];
+            for (const saleSummary of balance.pendingSales) {
+                try {
+                    const fullSale = await Sale.getById(saleSummary.saleId);
+                    if (fullSale) {
+                        const rawItems = typeof fullSale.items === 'string' ? JSON.parse(fullSale.items || '[]') : (fullSale.items || []);
+                        salesDataForSession.push({
+                            saleId: fullSale.id,
+                            saleNumber: fullSale.saleNumber || fullSale.id,
+                            date: fullSale.date,
+                            total: parseFloat(fullSale.total) || 0,
+                            items: rawItems
+                        });
+                    }
+                } catch(e) { /* skip */ }
+            }
+
+            // 1. Distribuir pagos reales entre las ventas pendientes
+            for (const [method, totalMethodAmount] of methods) {
+                let remainingFromMethod = totalMethodAmount;
+                
+                // Si el método es 'credit', debemos usar el CustomerAccountService.useCreditToPayDebt (si existe) 
+                // o manejar la reducción del balance aquí.
+                // Dado el diseño atómico buscado, lo distribuiremos manualmente si es IndexedDB o vía Api si es SQLite.
+                
+                // Buscar ventas que aún tengan deuda
+                const updatedBalance = await Customer.getAccountBalance(customerId);
+                for (const sale of updatedBalance.pendingSales) {
+                    if (remainingFromMethod <= 0) break;
+                    
+                    const paymentAmount = Math.min(sale.remaining, remainingFromMethod);
+                    if (paymentAmount <= 0) continue;
+
+                    if (method === 'credit') {
+                        // El método 'credit' es especial: descuenta del saldo a favor del cliente
+                        await Customer.useCreditForPayment(customerId, paymentAmount, {
+                            saleId: sale.saleId,
+                            notes: notes
+                        });
+                    } else {
+                        await Payment.create({
+                            saleId: sale.saleId,
+                            customerId: customerId,
+                            amount: paymentAmount,
+                            paymentMethod: method,
+                            notes: notes
+                        });
+                    }
+
+                    remainingFromMethod -= paymentAmount;
+                }
+            }
+
+            // 2. Aplicar descuentos (perdonar deuda restante)
+            const finalBalance = await Customer.getAccountBalance(customerId);
+            const nowISO = new Date().toISOString();
+            
+            for (const sale of finalBalance.pendingSales) {
+                const fullSale = await Sale.getById(sale.saleId);
+                if (!fullSale) continue;
+                
+                const remaining = parseFloat(fullSale.total) - (parseFloat(fullSale.paidAmount) || 0);
+                if (remaining > 0.9) {
+                    await Payment.createPaymentRecord({
+                        saleId: sale.saleId,
+                        customerId: customerId,
+                        amount: Math.round(remaining),
+                        paymentMethod: 'discount',
+                        date: nowISO,
+                        notes: notes,
+                        cashRegisterId: openCash.id
+                    });
+                    await Sale.updateSale(sale.saleId, { paidAmount: fullSale.total, status: 'completed' });
+                }
+            }
+
+            // 3. Auditoría
+            if (discountInfo) {
+                try {
+                    AuditLogService.log({
+                        entity: 'customer', entityId: customerId, action: 'discountPaymentMulti',
+                        summary: `Pago mixto con descuento: deuda ${formatCLP(discountInfo.originalDebt)} -> pagó ${formatCLP(discountInfo.finalAmount)}`,
+                        metadata: { customerId, ...discountInfo, payments }
+                    });
+                } catch (_) {}
+            }
+
+            // NUEVO: Crear sesión de pago de deuda
+            const totalPaidAmount = methods.reduce((s, [_, a]) => s + a, 0);
+            try {
+                await this.createDebtPaymentSession({
+                    customerId,
+                    date: new Date().toISOString(),
+                    totalPaid:  totalPaidAmount,
+                    totalDebt:  (discountInfo ? discountInfo.originalDebt : totalPaidAmount) || totalPaidAmount,
+                    discount:   discountInfo ? (discountInfo.discountAmount || 0) : 0,
+                    methods:    payments,
+                    salesData:  salesDataForSession,
+                    notes:      notes || '',
+                    cashRegisterId: openCash.id
+                });
+            } catch(se) { console.warn('[PaymentSession] payTotalDebtMulti:', se); }
+
+            showNotification('Deuda saldada exitosamente', 'success');
+            this.showAccountDetails(customerId);
+            this.refresh();
+        } catch (error) {
+            showNotification('Error al procesar pago: ' + error.message, 'error');
+            console.error(error);
+        }
     },
 
     async payTotalDebt(customerId, amountToPay, paymentMethodFromForm = null, notesFromForm = null, discountInfo = null) {
@@ -1180,6 +1781,24 @@ const CustomersView = {
             const balance = await Customer.getAccountBalance(customerId);
             let remainingToPay = parseFloat(amountToPay) || 0;
             let totalPaid = 0;
+
+            // NUEVO: Recopilar datos de ventas para la sesión
+            const salesDataForSession = [];
+            for (const saleSummary of balance.pendingSales) {
+                try {
+                    const fullSale = await Sale.getById(saleSummary.saleId);
+                    if (fullSale) {
+                        const rawItems = typeof fullSale.items === 'string' ? JSON.parse(fullSale.items || '[]') : (fullSale.items || []);
+                        salesDataForSession.push({
+                            saleId: fullSale.id,
+                            saleNumber: fullSale.saleNumber || fullSale.id,
+                            date: fullSale.date,
+                            total: parseFloat(fullSale.total) || 0,
+                            items: rawItems
+                        });
+                    }
+                } catch(e) { /* skip */ }
+            }
 
             // Registrar pago por cada venta pendiente hasta cubrir amountToPay (monto con descuento)
             for (const sale of balance.pendingSales) {
@@ -1263,8 +1882,88 @@ const CustomersView = {
             qr: 'QR',
             other: 'Otro',
             pending: 'Anotado',
-            discount: 'Descuento'
+            discount: 'Descuento',
+            debt: 'Anotado',
+            creditBalance: 'Saldo Favor'
         };
         return names[method] || method;
+    },
+
+    // ---- HELPERS: SESIONES DE PAGO DE DEUDA ----
+
+    /**
+     * Crea un registro en debtPaymentSessions en el backend.
+     * No-blocking: si falla, no interrumpe el flujo de pago.
+     */
+    async createDebtPaymentSession(sessionData) {
+        if (db.mode !== 'sqlite') return;
+        try {
+            await ApiClient.post('complex/debt-payment-session', { session: sessionData });
+        } catch(e) {
+            console.warn('[PaymentSession] Error al crear sesión:', e);
+        }
+    },
+
+    /** Expande/colapsa el detalle de una sesión de pago */
+    toggleSession(sessionId) {
+        const detail = document.getElementById(`sdetail-${sessionId}`);
+        const arrow  = document.getElementById(`sarrow-${sessionId}`);
+        if (!detail) return;
+        const open = detail.style.display === 'none';
+        detail.style.display = open ? 'block' : 'none';
+        if (arrow) arrow.style.transform = open ? 'rotate(180deg)' : 'rotate(0deg)';
+    },
+
+    /** Expande/colapsa los productos de una venta dentro de una sesión */
+    toggleSessionSale(sessionId, saleIndex) {
+        const products = document.getElementById(`sprods-${sessionId}-${saleIndex}`);
+        const arrow    = document.getElementById(`sarr-${sessionId}-${saleIndex}`);
+        if (!products) return;
+        const open = products.style.display === 'none';
+        products.style.display = open ? 'block' : 'none';
+        if (arrow) arrow.textContent = open ? '\u25B2' : '\u25BC';
+    },
+
+    async shareAccountStatusViaWhatsApp(customerId) {
+        const customer = await Customer.getById(customerId);
+        const balance = await Customer.getAccountBalance(customerId);
+        
+        const netDebt = balance.totalDebt;
+        const netCredit = balance.balanceCredit;
+        const finalBalance = Math.max(0, netDebt - netCredit);
+        
+        const businessName = localStorage.getItem('business_name') || 'nuestro negocio';
+        
+        let message = `Hola *${customer.name}*, te envío un resumen de tu cuenta en *${businessName}*:\n\n`;
+        
+        if (netDebt > 0) {
+            message += `Deuda pendiente: *${formatCLP(netDebt)}*\n`;
+        }
+        if (netCredit > 0) {
+            message += `Saldo a favor: *${formatCLP(netCredit)}*\n`;
+        }
+        
+        message += `-------------------\n`;
+        message += `*Total a pagar: ${formatCLP(finalBalance)}*\n\n`;
+        
+        if (balance.pendingSales.length > 0) {
+            message += `Detalle de deudas:\n`;
+            balance.pendingSales.slice(0, 5).forEach(s => {
+                message += `- Venta #${s.saleNumber} (${formatDate(s.date)}): ${formatCLP(s.remaining)}\n`;
+            });
+            if (balance.pendingSales.length > 5) {
+                message += `- ... y ${balance.pendingSales.length - 5} más.\n`;
+            }
+        }
+        
+        message += `\nQuedamos atentos a cualquier duda. ¡Gracias!`;
+        
+        const encodedMessage = encodeURIComponent(message);
+        const phone = customer.phone.replace(/\D/g, '');
+        // Si no tiene código de país, asumir Chile (+56)
+        const finalPhone = phone.length === 9 ? `56${phone}` : phone;
+        
+        const url = `https://wa.me/${finalPhone}?text=${encodedMessage}`;
+        window.open(url, '_blank');
     }
 };

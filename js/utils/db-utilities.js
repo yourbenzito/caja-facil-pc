@@ -55,10 +55,10 @@ async function createDefaultUser() {
         console.log(`Usuarios existentes: ${userCount}`);
         
         if (userCount === 0) {
-            await User.create('admin', 'admin123');
+            await User.create('admin', 'Admin@2024!');
             console.log('✅ Usuario admin creado exitosamente');
             console.log('Usuario: admin');
-            console.log('Contraseña: admin123');
+            console.log('Contraseña: Admin@2024! (DEBE CAMBIARSE EN PRIMER LOGIN)');
         } else {
             console.log('ℹ️ Ya existen usuarios en el sistema');
             const users = await User.getAll();

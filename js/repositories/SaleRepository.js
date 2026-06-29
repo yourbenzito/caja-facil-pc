@@ -17,7 +17,7 @@ class SaleRepository extends BaseRepository {
      * @param {number} customerId - Customer ID
      * @returns {Promise<Array>} - All sales for the customer
      */
-    async findByCustomerId(customerId) {
+    async findByCustomerId(customerId, params = {}) {
         if (!customerId) return [];
 
         const numericCustomerId = typeof customerId === 'string' ? parseInt(customerId, 10) : customerId;
@@ -28,12 +28,12 @@ class SaleRepository extends BaseRepository {
 
         try {
             // C4: Usar índice 'customerId' para lookup O(k) en vez de full scan O(n)
-            return await this.findByIndex('customerId', numericCustomerId);
+            return await this.findByIndex('customerId', numericCustomerId, params);
         } catch (indexError) {
             // C4: Fallback seguro — full scan con normalización de tipos si el índice falla
             console.warn('SaleRepository.findByCustomerId: index fallback', indexError);
             try {
-                const allSales = await this.findAll();
+                const allSales = await this.findAll(params);
                 return allSales.filter(sale => {
                     if (sale.customerId == null) return false;
                     const saleCid = typeof sale.customerId === 'string' ? parseInt(sale.customerId, 10) : sale.customerId;
@@ -92,16 +92,16 @@ class SaleRepository extends BaseRepository {
      * @param {Date|string} endDate - End date
      * @returns {Promise<Array>}
      */
-    async findByDateRange(startDate, endDate) {
+    async findByDateRange(startDate, endDate, params = {}) {
         try {
             // C4: Usar índice 'date' con IDBKeyRange.bound() para range scan O(k) vs full scan O(n)
             const start = new Date(startDate).toISOString();
             const end = new Date(endDate).toISOString();
-            return await this.findByIndexRange('date', start, end);
+            return await this.findByIndexRange('date', start, end, params);
         } catch (indexError) {
             // C4: Fallback seguro — full scan con comparación de Date
             console.warn('SaleRepository.findByDateRange: index range fallback', indexError);
-            const sales = await this.findAll();
+            const sales = await this.findAll(params);
             return sales.filter(sale => {
                 const saleDate = new Date(sale.date);
                 return saleDate >= new Date(startDate) && saleDate <= new Date(endDate);
@@ -132,30 +132,51 @@ class SaleRepository extends BaseRepository {
      * C4: Optimizado — usa dos lookups por índice 'status' en paralelo.
      * @returns {Promise<Array>}
      */
-    async findPending() {
+    async findPending(params = {}) {
         try {
             // C4: Dos lookups por índice en paralelo — O(k1+k2) en vez de full scan O(n)
             const [pending, partial] = await Promise.all([
-                this.findByStatus('pending'),
-                this.findByStatus('partial')
+                this.findByStatus('pending', params),
+                this.findByStatus('partial', params)
             ]);
             return [...pending, ...partial];
         } catch (error) {
             // C4: Fallback seguro
             console.warn('SaleRepository.findPending: index fallback', error);
-            const sales = await this.findAll();
+            const sales = await this.findAll(params);
             return sales.filter(sale => sale.status === 'pending' || sale.status === 'partial');
         }
     }
 
     /**
-     * Get last sale (most recent)
-     * @returns {Promise<Object|null>}
+     * Get latest sales with pagination
+     * @param {number} limit 
+     * @param {number} offset 
+     * @returns {Promise<Array>}
+     */
+    async findLatest(limit = 50, offset = 0) {
+        if (db.mode === 'sqlite') {
+            const results = await window.ApiClient.get('sales/list/latest', { limit, offset });
+            return Array.isArray(results) ? results : [];
+        }
+        return await this.findAll({ limit, offset });
+    }
+
+    /**
+     * Get last sale (most recent). En SQLite usa API optimizada.
      */
     async findLast() {
-        const sales = await this.findAll();
+        if (db.mode === 'sqlite') {
+            try {
+                const rows = await window.ApiClient.get('sales/list/latest', { limit: 1, offset: 0 });
+                return Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+            } catch (e) {
+                console.warn('findLast fallback:', e);
+            }
+        }
+        const sales = await this.findAll({ limit: 1 });
         if (!sales || sales.length === 0) return null;
-        const sorted = sales.sort((a, b) => new Date(b.date) - new Date(a.date));
+        const sorted = [...sales].sort((a, b) => new Date(b.date) - new Date(a.date));
         return sorted[0];
     }
 
@@ -191,9 +212,26 @@ class SaleRepository extends BaseRepository {
             other: 0
         };
 
+        // OPTIMIZATION: Only fetch payments related to the sales in this session or made directly to this register
+        // Instead of Payment.getAll(), we use the session-specific payments
+        const paymentsInThisRegister = await Payment.getByCashRegister(cashRegisterId);
+        
+        const paymentsBySale = {};
+        if (paymentsInThisRegister && paymentsInThisRegister.length > 0) {
+            paymentsInThisRegister.forEach(p => {
+                if (p.saleId) {
+                    if (!paymentsBySale[p.saleId]) paymentsBySale[p.saleId] = [];
+                    paymentsBySale[p.saleId].push(p);
+                }
+            });
+        }
+
         // 1) Pagos iniciales de las ventas creadas en esta sesión
         for (const sale of sales) {
-            const allPaymentsForSale = await Payment.getBySale(sale.id);
+            // C6 FIX: No contar dinero de ventas canceladas en el total de caja
+            if (sale.status === 'cancelled') continue;
+
+            const allPaymentsForSale = paymentsBySale[sale.id] || [];
             const totalPaymentsForSale = allPaymentsForSale.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
 
             // Pago inicial = Lo que se pagó al momento de crear la venta
@@ -213,15 +251,15 @@ class SaleRepository extends BaseRepository {
                     }
                 } else {
                     const method = sale.paymentMethod || 'cash';
-                    const methodKey = (method && totals[method] !== undefined) ? method : 'cash';
-                    totals[methodKey] += initialPaidAmount;
+                    if (method !== 'creditBalance' && totals[method] !== undefined) {
+                        totals[method] += initialPaidAmount;
+                    }
                 }
             }
         }
 
         // 2) TODOS los pagos (abonos) registrados EN ESTA sesión de caja
         // Esto incluye abonos a ventas de esta sesión o de sesiones anteriores
-        const paymentsInThisRegister = await Payment.getByCashRegister(cashRegisterId);
         if (paymentsInThisRegister && paymentsInThisRegister.length > 0) {
             paymentsInThisRegister.forEach(payment => {
                 const method = payment.paymentMethod || 'cash';

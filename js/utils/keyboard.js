@@ -31,7 +31,7 @@ const KeyboardManager = {
             }
 
             // Handle Enter for modal primary buttons (only if no specific handler)
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' && !e.defaultPrevented) {
                 this.handleGlobalEnter(e);
                 return;
             }

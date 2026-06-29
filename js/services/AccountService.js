@@ -24,9 +24,20 @@ class AccountService {
         }
 
         try {
-            // CRITICAL: Get ALL sales for this customer from database (fresh, not cached)
-            // Sale.getByCustomer() -> SaleRepository.findByCustomerId() -> db queries
-            // This ensures we get the latest sales including any recently updated paidAmount
+            // FASE 5: Optimización para SQLite - Usar endpoint de agregación en el servidor
+            if (db.mode === 'sqlite') {
+                const result = await window.ApiClient.get(`customers/${customerId}/account-status`);
+                if (result && result.balance) {
+                    return {
+                        totalDebt: result.balance.totalDebt,
+                        pendingSales: result.pendingSales,
+                        balanceCredit: result.balance.totalCredit,
+                        displayBalance: result.balance.totalDebt - result.balance.totalCredit
+                    };
+                }
+            }
+
+            // Fallback para IndexedDB o si falla el API
             const allSales = await Sale.getByCustomer(customerId);
 
             // Ensure sales is an array
@@ -166,5 +177,67 @@ class AccountService {
         }
 
         return totalDebt;
+    }
+
+    /**
+     * Obtiene alertas de cobranza basadas en:
+     * 1. Antigüedad de la PRIMERA deuda pendiente (>7 días)
+     * 2. Si hoy es el día de pago acordado del cliente
+     * @returns {Promise<Array>}
+     */
+    static async getCollectionAlerts() {
+        const now = new Date();
+        const todayDay = now.getDate();
+        const threshold = new Date();
+        threshold.setDate(threshold.getDate() - 7); // Deudas de más de 1 semana
+
+        // 1. Obtener todas las ventas pendientes (créditos)
+        const pendingSales = await Sale.getPendingSales();
+        
+        // 2. Agrupar por cliente e identificar la fecha de la DEUDA MÁS ANTIGUA
+        const debtorsMap = {};
+        for (const sale of pendingSales) {
+            const cid = sale.customerId;
+            const saleDate = new Date(sale.date);
+            
+            // Si es la primera vez que vemos al cliente o esta venta es MÁS ANTIGUA que la que teníamos
+            if (!debtorsMap[cid] || saleDate < debtorsMap[cid].oldestDebtDate) {
+                if (!debtorsMap[cid]) debtorsMap[cid] = { totalDebt: 0 };
+                debtorsMap[cid].customerId = cid;
+                debtorsMap[cid].oldestDebtDate = saleDate;
+            }
+        }
+
+        const alerts = [];
+        for (const cid in debtorsMap) {
+            const balance = await this.getCustomerBalance(cid);
+            if (balance.totalDebt > 0) {
+                const customer = await Customer.getById(cid);
+                const oldestDate = debtorsMap[cid].oldestDebtDate;
+                const isLate = oldestDate < threshold;
+                const isPaymentDay = customer && customer.paymentDay === todayDay;
+
+                if (isLate || isPaymentDay) {
+                    alerts.push({
+                        id: cid,
+                        name: customer ? customer.name : 'Cliente Desconocido',
+                        phone: customer ? customer.phone : '',
+                        totalDebt: balance.totalDebt,
+                        oldestDebtDate: oldestDate,
+                        daysOwed: Math.floor((now - oldestDate) / (1000 * 60 * 60 * 24)),
+                        isPaymentDay: isPaymentDay,
+                        isLate: isLate,
+                        paymentDay: customer ? customer.paymentDay : 0
+                    });
+                }
+            }
+        }
+
+        // Ordenar: Primero los que tienen día de pago hoy, luego los más antiguos
+        return alerts.sort((a, b) => {
+            if (a.isPaymentDay && !b.isPaymentDay) return -1;
+            if (!a.isPaymentDay && b.isPaymentDay) return 1;
+            return b.daysOwed - a.daysOwed;
+        });
     }
 }

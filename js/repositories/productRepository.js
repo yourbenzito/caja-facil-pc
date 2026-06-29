@@ -14,6 +14,7 @@ class ProductRepository extends BaseRepository {
      * @returns {Promise<Array>}
      */
     async findAll() {
+        if (db.mode === 'sqlite') return await super.findAll({ isActive: 1 });
         const all = await super.findAll();
         return all.filter(p => p.isActive !== false);
     }
@@ -23,6 +24,7 @@ class ProductRepository extends BaseRepository {
      * @returns {Promise<Array>}
      */
     async findAllIncludingDeleted() {
+        if (db.mode === 'sqlite') return await super.findAll({ isActive_gte: 0 });
         return await super.findAll();
     }
 
@@ -31,6 +33,7 @@ class ProductRepository extends BaseRepository {
      * @returns {Promise<Array>}
      */
     async findDeleted() {
+        if (db.mode === 'sqlite') return await super.findAll({ isActive: 0 });
         const all = await super.findAll();
         return all.filter(p => p.isActive === false);
     }
@@ -42,8 +45,9 @@ class ProductRepository extends BaseRepository {
      * @returns {Promise<Object|null>}
      */
     async findByBarcode(barcode) {
-        const products = await this.findByIndex('barcode', barcode);
-        // C4: Filtrar soft-deleted para no devolver productos desactivados
+        const products = await this.findByIndex('barcode', barcode, { isActive: 1 });
+        if (db.mode === 'sqlite') return products.length > 0 ? products[0] : null;
+        // C4: Filtrar soft-deleted para no devolver productos desactivados (solo para IndexedDB)
         const active = products.filter(p => p.isActive !== false);
         return active.length > 0 ? active[0] : null;
     }
@@ -64,35 +68,11 @@ class ProductRepository extends BaseRepository {
      * @returns {Promise<Array>}
      */
     async search(term) {
-        const products = await this.findAll();
-        const searchTerm = term.toLowerCase();
-        
-        // Filter first
-        const filtered = products.filter(p => 
-            p.name.toLowerCase().includes(searchTerm) ||
-            p.barcode.includes(searchTerm) ||
-            p.description.toLowerCase().includes(searchTerm)
-        );
-
-        // Sort by relevance
-        return filtered.sort((a, b) => {
-            const nameA = a.name.toLowerCase();
-            const nameB = b.name.toLowerCase();
-            
-            // Exact match priority
-            if (nameA === searchTerm && nameB !== searchTerm) return -1;
-            if (nameB === searchTerm && nameA !== searchTerm) return 1;
-            
-            // Starts with priority
-            const startsA = nameA.startsWith(searchTerm);
-            const startsB = nameB.startsWith(searchTerm);
-            if (startsA && !startsB) return -1;
-            if (startsB && !startsA) return 1;
-            
-            // Fallback to alphabetical
-            return nameA.localeCompare(nameB);
-        });
+        // En modo SQLite, esto irá directo al backend con índices.
+        // En modo IndexedDB, hará un filter local.
+        return await super.search(term);
     }
+
 
     /**
      * Get products with low stock (solo activos)
@@ -105,5 +85,14 @@ class ProductRepository extends BaseRepository {
             const minStock = p.minStock != null && p.minStock !== '' ? parseFloat(p.minStock) : 0;
             return stock <= minStock;
         });
+    }
+
+    /**
+     * Find products by their last supplier (solo activos)
+     * @param {number} supplierId - Supplier ID
+     * @returns {Promise<Array>}
+     */
+    async findByLastSupplier(supplierId) {
+        return await this.findByIndex('lastSupplierId', supplierId);
     }
 }

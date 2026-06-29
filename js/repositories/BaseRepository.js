@@ -87,10 +87,11 @@ class BaseRepository {
 
     /**
      * Get all records
+     * @param {Object} params - Query parameters (limit, offset, filters)
      * @returns {Promise<Array>}
      */
-    async findAll() {
-        const results = await db.getAll(this.storeName);
+    async findAll(params = {}) {
+        const results = await db.getAll(this.storeName, params);
         return Array.isArray(results) ? results : [];
     }
 
@@ -98,10 +99,11 @@ class BaseRepository {
      * Find records by index
      * @param {string} indexName - Index name
      * @param {*} value - Value to search
+     * @param {Object} params - Additional query parameters
      * @returns {Promise<Array>}
      */
-    async findByIndex(indexName, value) {
-        const results = await db.getByIndex(this.storeName, indexName, value);
+    async findByIndex(indexName, value, params = {}) {
+        const results = await db.getByIndex(this.storeName, indexName, value, params);
         return Array.isArray(results) ? results : [];
     }
 
@@ -110,10 +112,11 @@ class BaseRepository {
      * @param {string} indexName - Index name
      * @param {*} lower - Lower bound (inclusive)
      * @param {*} upper - Upper bound (inclusive)
+     * @param {Object} params - Additional query parameters
      * @returns {Promise<Array>}
      */
-    async findByIndexRange(indexName, lower, upper) {
-        const results = await db.getByIndexRange(this.storeName, indexName, lower, upper);
+    async findByIndexRange(indexName, lower, upper, params = {}) {
+        const results = await db.getByIndexRange(this.storeName, indexName, lower, upper, params);
         return Array.isArray(results) ? results : [];
     }
 
@@ -134,6 +137,11 @@ class BaseRepository {
     async query(filterFn) {
         return await db.query(this.storeName, filterFn);
     }
+
+    async search(term) {
+        return await db.search(this.storeName, term);
+    }
+
 
     /**
      * Count records

@@ -1,15 +1,29 @@
 class Sale {
     static _repository = new SaleRepository();
+    
+    static _sanitize(data) {
+        if (!data) return data;
+        const numericFields = [
+            'total', 'subtotal', 'tax', 'paidAmount', 'base_amount', 
+            'tax_amount', 'commission_amount', 'customerId', 'saleNumber', 
+            'cashRegisterId', 'userId', 'updatedBy'
+        ];
+        const intFields = ['id', 'saleNumber', 'customerId', 'cashRegisterId', 'userId', 'updatedBy'];
+        intFields.forEach(field => {
+            if (data[field] !== undefined && data[field] !== null && data[field] !== '') {
+                const n = parseInt(data[field], 10);
+                if (!isNaN(n)) data[field] = n;
+            }
+        });
+        numericFields.forEach(field => {
+            if (intFields.includes(field)) return;
+            if (data[field] !== undefined && data[field] !== null) {
+                data[field] = parseFloat(data[field]) || 0;
+            }
+        });
+        return data;
+    }
 
-    /**
-     * Modelo IVA 19% + Comisión 40% (Chile/Notebook style)
-     * total = final_price; 
-     * price_with_tax = total / 1.40; 
-     * base = Math.round(price_with_tax / 1.19); 
-     * tax = price_with_tax - base; 
-     * commission = total - price_with_tax.
-     * @param {number} total 
-     */
     /**
      * Modelo IVA 19% + Comisión 40% (Chile/Notebook style)
      * total = final_price; 
@@ -106,12 +120,29 @@ class Sale {
         return await this._repository.findLast();
     }
 
-    static async getByDateRange(startDate, endDate) {
-        return await this._repository.findByDateRange(startDate, endDate);
+    static async getByDateRange(startDate, endDate, params = {}) {
+        return await this._repository.findByDateRange(startDate, endDate, params);
     }
 
-    static async getByCustomer(customerId) {
-        return await this._repository.findByCustomerId(customerId);
+    /**
+     * Get latest sales with pagination
+     */
+    static async getLatest(limit = 50, offset = 0) {
+        return await this._repository.findLatest(limit, offset);
+    }
+
+    /**
+     * Get statistical summary of sales
+     */
+    static async getStatsSummary() {
+        if (db.mode === 'sqlite') {
+            return await window.ApiClient.get('sales/stats/summary');
+        }
+        return null;
+    }
+
+    static async getByCustomer(customerId, params = {}) {
+        return await this._repository.findByCustomerId(customerId, params);
     }
 
     static async getByCashRegister(cashRegisterId) {
@@ -126,8 +157,12 @@ class Sale {
         return await this._repository.getTotalByPaymentMethod(cashRegisterId);
     }
 
-    static async getPendingSales() {
-        return await this._repository.findPending();
+    static async getPendingSales(params = {}) {
+        return await this._repository.findPending(params);
+    }
+
+    static async count() {
+        return await this._repository.count();
     }
 
     /**
@@ -184,12 +219,13 @@ class Sale {
         }
 
         // Create updated sale object (IMMUTABLE)
-        const updated = {
+        const updated = this._sanitize({
             ...sale,
             paidAmount: isFullyPaid ? originalTotal : newPaidAmount,
             status: newStatus,
-            updatedAt: new Date().toISOString() // B6
-        };
+            paidAt: isFullyPaid ? new Date().toISOString() : null,
+            updatedAt: new Date().toISOString()
+        });
 
         // Replace sale using repository
         await this._repository.replace(updated);
@@ -227,11 +263,11 @@ class Sale {
         if (!sale) throw new Error('Venta no encontrada');
 
         // Create updated sale object (IMMUTABLE)
-        const updated = {
+        const updated = this._sanitize({
             ...sale,
             paymentMethod: newMethod,
             paymentDetails: null // Reset mixed payment details
-        };
+        });
 
         await this._repository.replace(updated);
         return await this.getById(saleId);
@@ -247,10 +283,10 @@ class Sale {
         const sale = await this.getById(saleId);
         if (!sale) throw new Error('Venta no encontrada');
 
-        const updated = {
+        const updated = this._sanitize({
             ...sale,
-            customerId: customerId
-        };
+            customerId: parseFloat(customerId) || 0
+        });
 
         await this._repository.replace(updated);
     }
@@ -265,10 +301,10 @@ class Sale {
         const sale = await this.getById(saleId);
         if (!sale) throw new Error('Venta no encontrada');
 
-        const updated = {
+        const updated = this._sanitize({
             ...sale,
             status: status
-        };
+        });
 
         await this._repository.replace(updated);
     }
@@ -303,14 +339,14 @@ class Sale {
             newStatus = 'completed';
         }
 
-        const updated = {
+        const updated = this._sanitize({
             ...sale,
             items: newItems,
             subtotal: subtotal,
             total: total,
             paidAmount: newPaidAmount,
             status: newStatus
-        };
+        });
 
         await this._repository.replace(updated);
         return await this.getById(saleId);
@@ -413,10 +449,13 @@ class Sale {
         if (updateData.paidAmount !== undefined || itemsChanged) {
             if (finalPaid >= finalTotal && finalTotal > 0) {
                 updateData.status = 'completed';
+                updateData.paidAt = new Date().toISOString();
             } else if (finalPaid > 0) {
                 updateData.status = 'partial';
+                updateData.paidAt = null;
             } else {
                 updateData.status = 'pending';
+                updateData.paidAt = null;
             }
         }
 
@@ -425,16 +464,63 @@ class Sale {
             updateData.paymentDetails = null;
         }
 
-        const updated = {
+        // Limpieza de tipos de datos para evitar SQLITE_MISMATCH
+        const cleanData = { ...updateData };
+        const numericFields = [
+            'total', 'subtotal', 'tax', 'paidAmount', 'base_amount', 
+            'tax_amount', 'commission_amount', 'customerId', 'saleNumber', 
+            'cashRegisterId', 'userId', 'updatedBy'
+        ];
+        
+        numericFields.forEach(field => {
+            if (cleanData[field] !== undefined && cleanData[field] !== null) {
+                cleanData[field] = parseFloat(cleanData[field]) || 0;
+            }
+            if (sale[field] !== undefined && sale[field] !== null) {
+                sale[field] = parseFloat(sale[field]) || 0;
+            }
+        });
+
+        const updated = this._sanitize({
             ...sale,
-            ...updateData,
+            ...cleanData,
             updatedAt: new Date().toISOString(),
             updatedBy: AuditLogService.getCurrentUserId()
-        };
+        });
+
+        // Ensure paidAmount is never higher than total (double check)
+        if (updated.paidAmount > updated.total) {
+            updated.paidAmount = updated.total;
+        }
 
         // CRITICAL FIX: If there are stock operations, execute ALL changes
         // (stock + movements + sale update) in a SINGLE atomic transaction.
         // If any fails, everything rolls back - no orphan movements, no partial state.
+        // B5: Si estamos en modo SQLite, usamos la API compleja del backend
+        if (db.mode === 'sqlite') {
+            try {
+                // Notar que items y paymentChange deben venir en updateData si hay cambios
+                const payload = {
+                    saleData: { ...updated },
+                    items: updateData.items || sale.items,
+                    paymentChange: updateData.paymentChange || { diff: 0 }
+                };
+                // Limpiar campos que no van en la tabla sales si es necesario
+                delete payload.saleData.items;
+                delete payload.saleData.paymentChange;
+
+                const response = await ApiClient.put('complex/sale', saleId, payload);
+                db.clearCache('sales');
+                db.clearCache('customers');
+                db.clearCache('products');
+                db.clearCache('stockMovements');
+                return response;
+            } catch (error) {
+                console.error('Error en updateSale (SQLite):', error);
+                throw error;
+            }
+        }
+
         if (stockOps && stockOps.length > 0) {
             await new Promise((resolve, reject) => {
                 const tx = db.db.transaction(['sales', 'products', 'stockMovements'], 'readwrite');
@@ -528,14 +614,18 @@ class Sale {
         const items = (sale.items || []).filter(item => item && item.productId && parseFloat(item.quantity) > 0);
 
         if (db.mode === 'sqlite') {
-            const result = await ApiClient.delete(`complex/sale/${saleId}`);
-            if (!result.success) throw new Error(result.error || 'Error al eliminar venta en SQLite');
-            return;
+            const result = await ApiClient.delete('complex/sale', saleId);
+            db.clearCache('sales');
+            db.clearCache('customers');
+            db.clearCache('products');
+            db.clearCache('stockMovements');
+            db.clearCache('cashMovements');
+            return result;
         }
 
         await new Promise((resolve, reject) => {
             if (!db.db) return reject(new Error('Base de datos no inicializada'));
-            const tx = db.db.transaction(['sales', 'products', 'stockMovements', 'payments', 'saleReturns'], 'readwrite');
+            const tx = db.db.transaction(['sales', 'products', 'stockMovements', 'payments', 'saleReturns', 'cashMovements'], 'readwrite');
 
             tx.onerror = () => reject(new Error(`Error al eliminar venta: ${tx.error?.message || 'Error desconocido'}`));
             tx.onabort = () => reject(new Error('Eliminación abortada: todos los cambios fueron revertidos'));
@@ -546,6 +636,7 @@ class Sale {
             const movementStore = tx.objectStore('stockMovements');
             const paymentStore = tx.objectStore('payments');
             const returnStore = tx.objectStore('saleReturns');
+            const cashMovementStore = tx.objectStore('cashMovements');
 
             // Restore stock for each item (read product WITHIN transaction)
             for (const item of items) {
@@ -578,18 +669,83 @@ class Sale {
                 };
             }
 
-            // Delete payments
-            for (const payment of payments) {
-                paymentStore.delete(payment.id);
+            // Delete payments AND associated cash movements
+            // Use a counter to track when all async operations complete
+            let paymentsProcessed = 0;
+            const totalPayments = payments.length;
+            
+            const deletePaymentAndMovements = (paymentIndex) => {
+                if (paymentIndex >= totalPayments) {
+                    // All payments processed, proceed to delete returns and sale
+                    deleteReturnsAndSale();
+                    return;
+                }
+                
+                const payment = payments[paymentIndex];
+                const cashMovementIndex = cashMovementStore.index('paymentId');
+                
+                if (cashMovementIndex) {
+                    const cashMovementRequest = cashMovementIndex.getAll(payment.id);
+                    cashMovementRequest.onsuccess = () => {
+                        const cashMovements = cashMovementRequest.result || [];
+                        let movementsDeleted = 0;
+                        
+                        if (cashMovements.length === 0) {
+                            // No movements to delete, delete payment and move to next
+                            paymentStore.delete(payment.id);
+                            deletePaymentAndMovements(paymentIndex + 1);
+                            return;
+                        }
+                        
+                        // Delete each cash movement
+                        cashMovements.forEach(cm => {
+                            const deleteReq = cashMovementStore.delete(cm.id);
+                            deleteReq.onsuccess = () => {
+                                movementsDeleted++;
+                                if (movementsDeleted === cashMovements.length) {
+                                    // All movements deleted, now delete payment
+                                    paymentStore.delete(payment.id);
+                                    deletePaymentAndMovements(paymentIndex + 1);
+                                }
+                            };
+                            deleteReq.onerror = () => {
+                                // Continue even if deletion fails
+                                movementsDeleted++;
+                                if (movementsDeleted === cashMovements.length) {
+                                    paymentStore.delete(payment.id);
+                                    deletePaymentAndMovements(paymentIndex + 1);
+                                }
+                            };
+                        });
+                    };
+                    cashMovementRequest.onerror = () => {
+                        // If index lookup fails, just delete payment and continue
+                        paymentStore.delete(payment.id);
+                        deletePaymentAndMovements(paymentIndex + 1);
+                    };
+                } else {
+                    // No index exists, just delete payment
+                    paymentStore.delete(payment.id);
+                    deletePaymentAndMovements(paymentIndex + 1);
+                }
+            };
+            
+            const deleteReturnsAndSale = () => {
+                // Delete returns
+                for (const ret of returns) {
+                    returnStore.delete(ret.id);
+                }
+                
+                // Delete sale
+                saleStore.delete(saleId);
+            };
+            
+            // Start deleting payments
+            if (totalPayments === 0) {
+                deleteReturnsAndSale();
+            } else {
+                deletePaymentAndMovements(0);
             }
-
-            // Delete returns
-            for (const ret of returns) {
-                returnStore.delete(ret.id);
-            }
-
-            // Delete sale
-            saleStore.delete(saleId);
         });
 
         // C2: Audit log (after successful atomic transaction)

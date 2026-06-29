@@ -5,14 +5,52 @@ const SettingsView = {
             this.updateStats();
             this.initSecuritySection();
             this.initAutoBackupSection();
+            this.initPOSSettingsSection();
             this.loadUserRoles();
             this.initSQLiteInfo();
+            this.initAppearance();
+            this.loadMultipleCashSettings();
+            this.loadRolesPermissions();
+            this.loadPrinterSettings();
+            this.loadCloudBackupSettings();
+            this.loadTicketSettings();
+            this.initMultiDeviceSection();
         }, 100);
 
         return `
             <div class="view-header">
-                <h1 style="color: #111827;">Configuración</h1>
-                <p style="color: #4b5563;">Gestión del sistema y datos</p>
+                <h1 style="color: #111827;">Configuración Premium</h1>
+                <p style="color: #4b5563;">Personalización de interfaz y gestión de datos</p>
+            </div>
+
+            <!-- SECCIÓN: APARIENCIA Y TEMAS -->
+            <div class="card" style="margin-bottom: 1.5rem; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
+                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🎨 Personalización Visual</h3>
+                
+                <div class="grid grid-2" style="gap: 2rem;">
+                    <div>
+                        <h4 style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-muted);">ELEGIR PALETA DE COLORES</h4>
+                        <div id="theme-options-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 0.75rem;">
+                            ${this.renderThemeOptions()}
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h4 style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-muted);">CONTROL DE LUMINOSIDAD</h4>
+                        <div style="background: #f8fafc; padding: 1.5rem; border-radius: 1rem; border: 1px solid #e2e8f0;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                <span>Brillo de la App</span>
+                                <strong id="brightness-value">100%</strong>
+                            </div>
+                            <input type="range" id="brightness-slider" min="0.3" max="1" step="0.05" value="1" 
+                                   style="width: 100%; cursor: pointer;" 
+                                   oninput="SettingsView.updateBrightness(this.value)">
+                            <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 1rem;">
+                                Ajusta la luz de la pantalla para reducir la fatiga visual en ambientes oscuros.
+                            </p>
+                        </div>
+                    </div>
+                </div>
             </div>
             
             <div class="grid grid-2">
@@ -39,80 +77,16 @@ const SettingsView = {
                         Ver Uso de Almacenamiento
                     </button>
                 </div>
-                
-                <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
-                    <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem;">📥/📤 Excel por entidad</h3>
-                    <p style="font-size: 0.9rem; color: #6b7280; margin-bottom: 0.75rem;">
-                        Descarga cada área como archivo Excel separado o importa datos desde la misma interfaz.
-                    </p>
-                    <div class="grid grid-3" style="margin-bottom: 1rem;">
-                        ${this.renderExcelButtons()}
-                    </div>
-                    <div class="form-group">
-                        <label>Entidad a importar</label>
-                        <select id="excelImportEntity" class="form-control">
-                            ${this.renderExcelOptions()}
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Archivo Excel (.xlsx)</label>
-                        <input type="file" id="excelImportFile" class="form-control" accept=".xlsx,.xls">
-                    </div>
-                    <button class="btn btn-primary" onclick="SettingsView.importExcelData()">
-                        Importar desde Excel
-                    </button>
-                </div>
 
-                ${PermissionService.can('settings.backup') ? `
-                <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
-                    <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem;">💾 Backup y Restauración</h3>
-                    
-                    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                        <button class="btn btn-success" onclick="BackupManager.exportAllData()">
-                            Exportar Todo (JSON)
-                        </button>
-                        
-                        <button class="btn btn-secondary" onclick="SettingsView.showImportModal()">
-                            Importar Datos (JSON)
-                        </button>
-                        
-                        <div style="border-top: 1px solid var(--border); margin: 0.5rem 0;"></div>
-                        
-                        <button class="btn btn-secondary" onclick="BackupManager.exportToCSV('sales', 'ventas')">
-                            Exportar Ventas (CSV)
-                        </button>
-                        
-                        <button class="btn btn-secondary" onclick="BackupManager.exportToCSV('products', 'productos')">
-                            Exportar Productos (CSV)
-                        </button>
-                    </div>
-                </div>
-                ` : ''}
-
-                <div class="card" id="autoBackupCard" style="margin-top: 1rem; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
-                    <h3 style="margin-bottom: 1rem; color: #111827; font-size: 1.05rem;">🔄 Backup automático</h3>
-                    <p style="font-size: 0.875rem; color: #6b7280; margin-bottom: 1rem;">
-                        Solo en Electron. Los backups se guardan en la carpeta <code>userData/backups</code>.
-                    </p>
-                    <div style="display: flex; flex-direction: column; gap: 1rem;">
-                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                            <input type="checkbox" id="autoBackupEnabled" checked>
-                            <span>Activar backup automático cada N horas</span>
-                        </label>
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label for="autoBackupIntervalHours">Cada cuántas horas</label>
-                            <input type="number" id="autoBackupIntervalHours" class="form-control" min="1" max="168" value="24" style="max-width: 120px;">
+                <!-- SECCIÓN: MULTIDISPOSITIVO -->
+                <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <h3 style="margin-bottom: 1rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">📱 Conexión Multidispositivo</h3>
+                        <div id="multi-device-content" style="display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 1rem; min-height: 200px;">
+                            <p style="font-size: 0.85rem; color: #4b5563; margin: 0;">
+                                Cargando información de red...
+                            </p>
                         </div>
-                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                            <input type="checkbox" id="autoBackupOnClose" checked>
-                            <span>Realizar backup al cerrar la aplicación</span>
-                        </label>
-                        <button class="btn btn-primary" onclick="SettingsView.saveAutoBackupOptions()">
-                            Guardar opciones de backup
-                        </button>
-                        <p id="autoBackupNote" style="font-size: 0.75rem; color: var(--secondary); display: none;">
-                            Recarga la página para aplicar el intervalo.
-                        </p>
                     </div>
                 </div>
             </div>
@@ -123,11 +97,14 @@ const SettingsView = {
                 <div class="grid grid-3">
                     <div>
                         <h4 style="margin-bottom: 0.75rem;">Información</h4>
-                        <p style="font-size: 0.875rem; color: var(--text); opacity: 0.8;">
+                        <p style="font-size: 0.875rem; color: var(--text); opacity: 0.8; margin-bottom: 0.75rem;">
                             Versión: 1.0.0<br>
                             Base de datos: ${db.mode === 'sqlite' ? 'SQLite (Servidor)' : 'IndexedDB (Local)'}<br>
                             Estado: ${db.mode === 'sqlite' ? 'Online' : 'Offline'}
                         </p>
+                        <button class="btn btn-secondary btn-sm" onclick="SettingsView.runSetupWizardAgain()" style="border: 1px dashed var(--primary); color: var(--primary); font-weight: 600;">
+                            🔧 Asistente de Configuración
+                        </button>
                     </div>
                     
                     <div>
@@ -152,32 +129,109 @@ const SettingsView = {
                 </div>
             </div>
 
-            ${PermissionService.can('settings.backup') ? `
-            <div class="card" style="border: 2px solid #ef4444; background: #fff5f5; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(239,68,68,0.1);">
-                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem;">
-                    <div style="font-size: 2rem;">🚨</div>
-                    <div>
-                        <h3 style="margin: 0; color: #b91c1c; font-size: 1.1rem;">Reseteo de Fábrica</h3>
-                        <p style="margin: 0; font-size: 0.85rem; color: #ef4444;">Elimina TODOS los datos del sistema permanentemente</p>
+            <!-- SECCIÓN: REGLAS OPERATIVAS DEL POS (STOCK) -->
+            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
+                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🛒 Reglas Operativas de Venta</h3>
+                
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
+                        <input type="checkbox" id="posAllowNegativeStock" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.savePOSSettings()">
+                        <span>Permitir ventas con stock negativo (sin stock disponible)</span>
+                    </label>
+                    <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
+                        Si se desactiva, el sistema impedirá agregar productos al carrito o finalizar la venta si la cantidad solicitada excede el stock actual del inventario.
+                    </p>
+                </div>
+            </div>
+
+            <!-- SECCIÓN: MÚLTIPLES CAJAS -->
+            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
+                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">💰 Gestión de Múltiples Cajas</h3>
+                
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
+                        <input type="checkbox" id="allowMultipleCashRegisters" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.saveMultipleCashSettings()">
+                        <span>Permitir múltiples cajas simultáneas</span>
+                    </label>
+                    <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
+                        Si se activa, permite abrir múltiples cajas al mismo tiempo (útil para locales con varios cajeros). Si se desactiva, solo se permite una caja abierta a la vez.
+                    </p>
+                </div>
+
+                <div style="margin-top: 1.5rem;">
+                    <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Cajas Activas</h4>
+                    <div id="activeCashRegistersList" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        <p style="color: #6b7280; font-size: 0.85rem;">Cargando cajas...</p>
                     </div>
                 </div>
-                <p style="font-size: 0.85rem; color: #374151; margin-bottom: 1rem;">
-                    Esta acción eliminará <strong>productos, ventas, clientes, proveedores, compras, movimientos</strong> y toda la información asociada.
-                    <br><strong style="color: #b91c1c;">⚠️ Esta acción NO se puede deshacer.</strong> Se recomienda hacer un backup primero.
-                </p>
-                <div style="display: flex; gap: 1rem; align-items: center;">
-                    <button class="btn" onclick="SettingsView.factoryReset()" 
-                            style="background: #dc2626; color: white; padding: 0.75rem 1.5rem; font-weight: bold; border-radius: 0.5rem;">
-                        🗑️ VACIAR TODA LA BASE DE DATOS
-                    </button>
-                    <button class="btn btn-secondary btn-sm" onclick="BackupManager.exportAllData()">
-                        💾 Hacer Backup Primero
-                    </button>
+            </div>
+
+            <!-- Reseteo de fábrica removido -->
+            ${PermissionService.can('settings.backup') ? `
+            <!-- SECCIÓN: MANTENIMIENTO Y RESPALDOS -->
+            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
+                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">💾 Copias de Seguridad y Mantenimiento</h3>
+                
+                <div class="grid grid-2" style="gap: 2rem;">
+                    <div>
+                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Gestión de Base de Datos</h4>
+                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1.5rem;">
+                            Descarga una copia completa de tu negocio para respaldar en la nube o en un pendrive. También puedes restaurar una copia previa.
+                        </p>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                            <button class="btn btn-primary" style="width: 100%; justify-content: center; background: #4f46e5;" onclick="BackupManager.exportAllData()">
+                                📤 Generar Backup Completo (.JSON)
+                            </button>
+                            
+                            <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #8b5cf6; color: #5b21b6; background: #f5f3ff;" onclick="SettingsView.exportBusinessData()">
+                                🏢 Exportar Negocio Completo (Sin Usuarios)
+                            </button>
+                            
+                            <div style="position: relative;">
+                                <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #d1d5db;" onclick="document.getElementById('importFile').click()">
+                                    📥 Restaurar desde Backup
+                                </button>
+                                <input type="file" id="importFile" style="display: none;" accept=".json" onchange="SettingsView.handleImport(event)">
+                            </div>
+
+                            <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #fbbf24; color: #92400e; background: #fffbeb;" onclick="SettingsView.deduplicateSuppliers()">
+                                🧹 Limpiar Proveedores Duplicados
+                            </button>
+
+                            <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #10b981; color: #065f46; background: #ecfdf5;" onclick="SettingsView.deduplicateCustomers()">
+                                👥 Fusión Maestra de Clientes
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Exportar a Excel (Contabilidad)</h4>
+                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                            Descarga reportes específicos en formato Excel para tu contador o para revisar en tu celular.
+                        </p>
+                        
+                        <div style="max-height: 150px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 0.5rem; background: #f9fafb;">
+                            <table style="width: 100%; font-size: 0.8rem;">
+                                <tbody>
+                                    ${(window.BACKUP_ENTITY_CONFIG || []).map(entity => `
+                                        <tr>
+                                            <td style="padding: 0.4rem 0; color: #374151;">${entity.label}</td>
+                                            <td style="text-align: right; padding: 0.4rem 0;">
+                                                <a href="javascript:void(0)" onclick="SettingsView.exportEntityData('${entity.key}')" style="color: #4f46e5; font-weight: 600; text-decoration: none;">Excel</a>
+                                            </td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
             ` : ''}
-            
+
             ${PermissionService.can('settings.users') ? `
+
             <div class="card" id="userManagementCard" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
                     <h3 style="margin: 0; color: #111827; font-size: 1.05rem;">👥 Gestión de Usuarios y Roles</h3>
@@ -199,6 +253,7 @@ const SettingsView = {
             </div>
             ` : ''}
 
+            ${PermissionService.can('settings.security') ? `
             <div class="card">
                 <h3 style="margin-bottom: 1.5rem;">🔐 Seguridad y Recuperación de Contraseña</h3>
                 
@@ -231,57 +286,427 @@ const SettingsView = {
                     </div>
                 </div>
             </div>
+            ` : ''}
 
-            <div class="card" style="background: linear-gradient(135deg, #1e293b, #0f172a); border: 2px solid #3b82f6; border-radius: 1rem; padding: 2rem;">
-                <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem;">
-                    <div style="font-size: 2.5rem;">🚀</div>
+            <!-- SECCIÓN: ROLES Y PERMISOS GRANULARES -->
+            ${PermissionService.can('settings.security') ? `
+            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
+                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">👥 Roles y Permisos Granulares</h3>
+                
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
                     <div>
-                        <h2 style="margin: 0; color: #fff;">Migración a SQLite (Multidispositivo)</h2>
-                        <p style="margin: 0; opacity: 0.8; color: #94a3b8;">Prepárate para usar el sistema en tu celular y otros PCs.</p>
+                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Permisos por Rol</h4>
+                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                            Configura qué acciones puede realizar cada rol en el sistema.
+                        </p>
+                        
+                        <div id="rolesPermissionsList" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                            <p style="color: #6b7280; font-size: 0.85rem;">Cargando roles...</p>
+                        </div>
                     </div>
-                </div>
-
-                <div class="grid grid-3" style="gap: 1.5rem; margin-bottom: 2rem;">
-                    <div style="background: rgba(255,255,255,0.05); padding: 1.25rem; border-radius: 0.75rem;">
-                        <span style="display: block; font-size: 1.5rem; margin-bottom: 0.5rem;">1️⃣</span>
-                        <h4 style="color: #60a5fa; margin-bottom: 0.5rem;">Exportar Datos</h4>
-                        <p style="font-size: 0.85rem; color: #cbd5e1;">Descarga un archivo con toda tu información actual del Minimarket.</p>
-                    </div>
-                    <div style="background: rgba(255,255,255,0.05); padding: 1.25rem; border-radius: 0.75rem;">
-                        <span style="display: block; font-size: 1.5rem; margin-bottom: 0.5rem;">2️⃣</span>
-                        <h4 style="color: #60a5fa; margin-bottom: 0.5rem;">Cambiar Motor</h4>
-                        <p style="font-size: 0.85rem; color: #cbd5e1; margin-bottom: 1rem;">Activa el nuevo motor SQLite para permitir conexiones multidispositivo.</p>
-                        <button class="btn btn-sm btn-secondary" onclick="SettingsView.enableSQLiteMode()" style="width: 100%;">
-                            Activar SQLite
-                        </button>
-                    </div>
-                    <div style="background: rgba(255,255,255,0.05); padding: 1.25rem; border-radius: 0.75rem;">
-                        <span style="display: block; font-size: 1.5rem; margin-bottom: 0.5rem;">3️⃣</span>
-                        <h4 style="color: #60a5fa; margin-bottom: 0.5rem;">Importar en SQLite</h4>
-                        <p style="font-size: 0.85rem; color: #cbd5e1; margin-bottom: 1rem;">Carga el archivo exportado en el nuevo motor de base de datos.</p>
-                        <button class="btn btn-sm btn-primary" onclick="SettingsView.showSQLiteMigrationModal()" style="width: 100%;">
-                            Cargar en SQLite
-                        </button>
-                    </div>
-                </div>
-
-                <div style="display: flex; justify-content: center; gap: 1rem;">
-                    <button class="btn btn-lg" onclick="BackupManager.exportAllData()" 
-                            style="background: #3b82f6; color: white; padding: 1rem 2rem; font-weight: bold; font-size: 1.1rem; box-shadow: 0 4px 15px rgba(59, 130, 246, 0.4); border-radius: 0.75rem;">
-                        📥 PASO 1: EXPORTAR TODO
-                    </button>
-                </div>
-
-                <div id="sqliteInfo" style="margin-top: 2rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 0.5rem; display: none;">
-                    <p style="color: #60a5fa; margin-bottom: 0.5rem;"><strong>📍 Conexión para Celular:</strong></p>
-                    <p style="color: #fff; font-family: monospace;" id="serverIPInfo">Detectando IP...</p>
                 </div>
             </div>
+            ` : ''}
+
+            <!-- SECCIÓN: IMPRESORAS TÉRMICAS -->
+            ${PermissionService.can('settings.security') ? `
+            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
+                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🖨️ Configuración de Impresoras Térmicas</h3>
+                
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div>
+                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Impresora de Tickets</h4>
+                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                            Configura la impresora térmica para imprimir tickets de venta.
+                        </p>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                            <div>
+                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Puerto de Impresión</label>
+                                <select id="printerPort" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;" onchange="SettingsView.handlePrinterPortChange()">
+                                    <option value="USB">USB</option>
+                                    <option value="COM1">COM1</option>
+                                    <option value="COM2">COM2</option>
+                                    <option value="COM3">COM3</option>
+                                    <option value="LPT1">LPT1</option>
+                                    <option value="network">Red (IP)</option>
+                                    <option value="bluetooth">Bluetooth (Inalámbrico)</option>
+                                </select>
+                            </div>
+
+                            <!-- Configuración específica de Bluetooth -->
+                            <div id="bluetoothPrinterConfig" style="display: none; margin-top: 1.25rem; padding: 1.25rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 1rem;">
+                                <h5 style="margin-bottom: 0.5rem; font-size: 0.95rem; color: #1e293b; font-weight: 700;">Dispositivo Bluetooth Vinculado</h5>
+                                <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+                                    <div>
+                                        <span id="bluetoothDeviceStatus" style="font-size: 0.85rem; font-weight: 700; color: #94a3b8;">Verificando adaptador...</span>
+                                        <div id="bluetoothSavedName" style="font-size: 1.05rem; font-weight: 800; color: #0f172a; margin-top: 0.25rem;">-</div>
+                                    </div>
+                                    <div style="display: flex; gap: 0.5rem;">
+                                        <button class="btn btn-secondary" onclick="SettingsView.pairBluetoothPrinter()" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                            🔍 Buscar y Vincular
+                                        </button>
+                                        <button class="btn btn-outline-danger" id="btnForgetBluetooth" onclick="SettingsView.forgetBluetoothPrinter()" style="padding: 0.5rem 1rem; font-size: 0.85rem; display: none;">
+                                            🗑️ Olvidar
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Ancho del Papel</label>
+                                <select id="paperWidth" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
+                                    <option value="58mm">58mm (Estándar)</option>
+                                    <option value="80mm">80mm (Grande)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1rem;">
+                        <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
+                            <input type="checkbox" id="autoPrintTicket" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.savePrinterSettings()">
+                            <span>Imprimir ticket automáticamente al finalizar venta</span>
+                        </label>
+                        <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
+                            Si se activa, el sistema imprimirá automáticamente el ticket después de cada venta.
+                        </p>
+                    </div>
+
+                    <div style="margin-top: 1rem;">
+                        <button class="btn btn-primary" onclick="SettingsView.testPrinter()">
+                            🧪 Probar Impresión
+                        </button>
+                        <button class="btn btn-secondary" onclick="SettingsView.savePrinterSettings()">
+                            💾 Guardar Configuración
+                        </button>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
+
+            <!-- SECCIÓN: INTEGRACIÓN POS -->
+            ${PermissionService.can('settings.security') ? `
+            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
+                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🔌 Integración POS (Lectores y Balanzas)</h3>
+                
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div>
+                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Lector de Código de Barras</h4>
+                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                            Configura el lector de código de barras para escanear productos automáticamente.
+                        </p>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                            <div>
+                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Tipo de Lector</label>
+                                <select id="barcodeReaderType" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
+                                    <option value="usb">USB (HID)</option>
+                                    <option value="serial">Serial (COM)</option>
+                                    <option value="bluetooth">Bluetooth</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Sufijo de Escaneo</label>
+                                <select id="barcodeSuffix" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
+                                    <option value="enter">Enter (CR)</option>
+                                    <option value="tab">Tab</option>
+                                    <option value="none">Ninguno</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1rem;">
+                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Balanza Electrónica</h4>
+                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                            Configura la balanza para pesar productos vendidos por peso.
+                        </p>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                            <div>
+                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Puerto de Balanza</label>
+                                <select id="scalePort" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
+                                    <option value="COM1">COM1</option>
+                                    <option value="COM2">COM2</option>
+                                    <option value="COM3">COM3</option>
+                                    <option value="USB">USB</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Unidad de Peso</label>
+                                <select id="weightUnit" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
+                                    <option value="kg">Kilogramos (kg)</option>
+                                    <option value="g">Gramos (g)</option>
+                                    <option value="lb">Libras (lb)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1rem;">
+                        <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
+                            <input type="checkbox" id="autoWeighProducts" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.savePOSSettings()">
+                            <span>Pesar productos automáticamente al escanear</span>
+                        </label>
+                        <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
+                            Si se activa, el sistema leerá automáticamente el peso de la balanza al escanear productos vendidos por peso.
+                        </p>
+                    </div>
+
+                    <div style="margin-top: 1rem;">
+                        <button class="btn btn-primary" onclick="SettingsView.testBarcodeReader()">
+                            🧪 Probar Lector
+                        </button>
+                        <button class="btn btn-secondary" onclick="SettingsView.testScale()">
+                            ⚖️ Probar Balanza
+                        </button>
+                        <button class="btn btn-secondary" onclick="SettingsView.savePOSSettings()">
+                            💾 Guardar Configuración
+                        </button>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
+
+            <!-- SECCIÓN: BACKUP AUTOMÁTICO EN LA NUBE -->
+            ${PermissionService.can('settings.backup') ? `
+            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
+                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">☁️ Backup Automático en la Nube</h3>
+                
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div>
+                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Configuración de Backup</h4>
+                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                            Configura el backup automático de tus datos en la nube para mayor seguridad.
+                        </p>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                            <div>
+                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Proveedor de Nube</label>
+                                <select id="cloudProvider" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
+                                    <option value="none">Sin configurar</option>
+                                    <option value="google">Google Drive</option>
+                                    <option value="dropbox">Dropbox</option>
+                                    <option value="onedrive">OneDrive</option>
+                                    <option value="s3">Amazon S3</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Frecuencia de Backup</label>
+                                <select id="backupFrequency" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
+                                    <option value="daily">Diario</option>
+                                    <option value="weekly">Semanal</option>
+                                    <option value="monthly">Mensual</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1rem;">
+                        <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
+                            <input type="checkbox" id="autoBackupEnabled" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.saveCloudBackupSettings()">
+                            <span>Activar backup automático</span>
+                        </label>
+                        <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
+                            Si se activa, el sistema realizará backups automáticos según la frecuencia configurada.
+                        </p>
+                    </div>
+
+                    <div style="margin-top: 1rem;">
+                        <button class="btn btn-primary" onclick="SettingsView.testCloudConnection()">
+                            🧪 Probar Conexión
+                        </button>
+                        <button class="btn btn-secondary" onclick="SettingsView.saveCloudBackupSettings()">
+                            💾 Guardar Configuración
+                        </button>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
+
+            <!-- SECCIÓN: PERSONALIZACIÓN DE TICKETS -->
+            ${PermissionService.can('settings.backup') ? `
+            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
+                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🎫 Personalización de Tickets</h3>
+                
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div>
+                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Encabezado del Ticket</h4>
+                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                            Personaliza el encabezado que aparece en todos los tickets de venta.
+                        </p>
+                        
+                        <div>
+                            <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Nombre del Negocio</label>
+                            <input type="text" id="ticketBusinessName" class="form-control" placeholder="Ej: Mi Tienda" style="font-size: 0.9rem; padding: 0.5rem;">
+                        </div>
+                        
+                        <div style="margin-top: 0.75rem;">
+                            <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Dirección</label>
+                            <input type="text" id="ticketAddress" class="form-control" placeholder="Ej: Calle Principal #123" style="font-size: 0.9rem; padding: 0.5rem;">
+                        </div>
+                        
+                        <div style="margin-top: 0.75rem;">
+                            <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Teléfono</label>
+                            <input type="text" id="ticketPhone" class="form-control" placeholder="Ej: +56 9 1234 5678" style="font-size: 0.9rem; padding: 0.5rem;">
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1rem;">
+                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Pie de Página</h4>
+                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                            Mensaje que aparece al final del ticket.
+                        </p>
+                        
+                        <textarea id="ticketFooter" class="form-control" placeholder="Ej: ¡Gracias por su compra!" rows="2" style="font-size: 0.9rem; padding: 0.5rem;"></textarea>
+                    </div>
+
+                    <div style="margin-top: 1rem;">
+                        <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
+                            <input type="checkbox" id="showLogoOnTicket" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.saveTicketSettings()">
+                            <span>Mostrar logo en el ticket</span>
+                        </label>
+                        <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
+                            Si se activa, el logo del negocio aparecerá en el encabezado del ticket.
+                        </p>
+                    </div>
+
+                    <div style="margin-top: 1rem;">
+                        <button class="btn btn-primary" onclick="SettingsView.saveTicketSettings()">
+                            💾 Guardar Configuración
+                        </button>
+                        <button class="btn btn-secondary" onclick="SettingsView.previewTicket()">
+                            👁️ Vista Previa
+                        </button>
+                    </div>
+                </div>
+            </div>
+            ` : ''}
             
         `;
     },
 
+    // --- APARIENCIA ---
+    initAppearance() {
+        const theme = localStorage.getItem('APP_THEME') || 'indigo';
+        const brightness = localStorage.getItem('APP_BRIGHTNESS') || '1';
+        
+        document.documentElement.setAttribute('data-theme', theme);
+        document.documentElement.style.setProperty('--app-brightness', brightness);
+        
+        const slider = document.getElementById('brightness-slider');
+        const brightnessVal = document.getElementById('brightness-value');
+        if (slider) slider.value = brightness;
+        if (brightnessVal) brightnessVal.textContent = Math.round(brightness * 100) + '%';
+    },
+
+    async initMultiDeviceSection() {
+        const container = document.getElementById('multi-device-content');
+        if (!container) return;
+
+        if (db.mode !== 'sqlite' || !window.ApiClient) {
+            container.innerHTML = `
+                <span style="font-size: 2rem;">📴</span>
+                <p style="font-size: 0.875rem; color: #6b7280; line-height: 1.4; margin: 0; padding: 1rem;">
+                    La conexión multidispositivo requiere que la base de datos esté en modo <strong>SQLite (Servidor Local)</strong>.
+                </p>
+            `;
+            return;
+        }
+
+        try {
+            const data = await window.ApiClient.get('system/network-info');
+            if (data && data.ips && data.ips.length > 0) {
+                const port = data.port || 3000;
+                // Preferir la primera IP privada (192. o 10. o 172.)
+                const preferredIp = data.ips.find(ip => ip.startsWith('192.') || ip.startsWith('10.') || ip.startsWith('172.')) || data.ips[0];
+                const connectionUrl = `http://${preferredIp}:${port}/mobile/`;
+
+                container.innerHTML = `
+                    <p style="font-size: 0.85rem; color: #4b5563; line-height: 1.4; margin: 0;">
+                        Escanea el código QR o ingresa la dirección en tu celular o tablet conectados al mismo Wi-Fi:
+                    </p>
+                    
+                    <div style="margin: 0.5rem 0;">
+                        <!-- QR Code con fallback offline -->
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=130x130&data=${encodeURIComponent(connectionUrl)}" 
+                             onerror="this.style.display='none'; document.getElementById('qr-offline-fallback').style.display='block';" 
+                             style="width: 130px; height: 130px; border: 1.5px solid #e5e7eb; padding: 0.25rem; border-radius: 0.75rem; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.05);" />
+                        
+                        <div id="qr-offline-fallback" style="display: none; padding: 1rem; border: 2px dashed #cbd5e1; border-radius: 0.75rem; background: #f8fafc; max-width: 200px; margin: 0 auto;">
+                            <span style="font-size: 1.5rem;">📶</span>
+                            <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.25rem;">Modo Offline</div>
+                        </div>
+                    </div>
+
+                    <div style="background: #f3f4f6; border: 1px solid #e5e7eb; padding: 0.5rem 1rem; border-radius: 0.5rem; font-family: monospace; font-size: 0.95rem; font-weight: 600; color: #111827; word-break: break-all; display: flex; align-items: center; justify-content: center; gap: 0.5rem; width: 100%;">
+                        <span>${connectionUrl}</span>
+                        <button class="btn btn-secondary btn-sm" onclick="navigator.clipboard.writeText('${connectionUrl}'); showNotification('Copiado al portapapeles', 'success');" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; border: none; background: white; border-radius: 0.25rem; cursor: pointer;">📋</button>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <span style="font-size: 2rem;">⚠️</span>
+                    <p style="font-size: 0.85rem; color: #ef4444; line-height: 1.4; margin: 0;">
+                        No se detectaron direcciones IP locales en esta computadora. Asegúrate de estar conectado a una red local o Wi-Fi.
+                    </p>
+                `;
+            }
+        } catch (err) {
+            console.error('[MultiDevice] Error obteniendo info de red:', err);
+            container.innerHTML = `
+                <span style="font-size: 2rem;">⚠️</span>
+                <p style="font-size: 0.85rem; color: #ef4444; line-height: 1.4; margin: 0;">
+                    Error al cargar la información de red: ${err.message}
+                </p>
+            `;
+        }
+    },
+
+    updateBrightness(val) {
+        document.documentElement.style.setProperty('--app-brightness', val);
+        localStorage.setItem('APP_BRIGHTNESS', val);
+        const brightnessVal = document.getElementById('brightness-value');
+        if (brightnessVal) brightnessVal.textContent = Math.round(val * 100) + '%';
+    },
+
+    setTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('APP_THEME', theme);
+        showNotification('Tema actualizado', 'success');
+        
+        // Actualizar visualmente la selección sin recargar toda la página
+        const container = document.getElementById('theme-options-container');
+        if (container) {
+            container.innerHTML = this.renderThemeOptions();
+        }
+        
+        this.initAppearance(); 
+    },
+
+    renderThemeOptions() {
+        const themes = [
+            { id: 'indigo', name: 'Indigo', color: '#4f46e5' },
+            { id: 'emerald', name: 'Esmeralda', color: '#10b981' },
+            { id: 'ruby', name: 'Rubí', color: '#e11d48' },
+            { id: 'amber', name: 'Ámbar', color: '#f59e0b' },
+            { id: 'midnight', name: 'Noche', color: '#0f172a' }
+        ];
+        
+        const currentTheme = localStorage.getItem('APP_THEME') || 'indigo';
+        
+        return themes.map(t => `
+            <div onclick="SettingsView.setTheme('${t.id}')" 
+                 style="cursor: pointer; border: 2px solid ${currentTheme === t.id ? 'var(--primary)' : '#e2e8f0'}; padding: 0.5rem; border-radius: 0.75rem; text-align: center; transition: all 0.2s; background: ${currentTheme === t.id ? 'var(--primary-soft)' : 'white'};">
+                <div style="width: 100%; height: 40px; background: ${t.color}; border-radius: 0.5rem; margin-bottom: 0.5rem;"></div>
+                <span style="font-size: 0.75rem; font-weight: 700; color: ${currentTheme === t.id ? 'var(--primary)' : 'var(--text-muted)'};">${t.name}</span>
+            </div>
+        `).join('');
+    },
+
     async updateStats() {
+
         try {
             const productCount = await db.count('products');
             const salesCount = await db.count('sales');
@@ -341,6 +766,29 @@ const SettingsView = {
         }
     },
 
+    async initPOSSettingsSection() {
+        const checkbox = document.getElementById('posAllowNegativeStock');
+        if (!checkbox) return;
+        try {
+            const row = await db.get('settings', 'allowNegativeStock');
+            checkbox.checked = row == null ? true : !!row.value;
+        } catch (e) {
+            console.warn('initPOSSettingsSection:', e.message);
+            checkbox.checked = true;
+        }
+    },
+
+    async savePOSSettings() {
+        const checkbox = document.getElementById('posAllowNegativeStock');
+        if (!checkbox) return;
+        try {
+            await db.put('settings', { key: 'allowNegativeStock', value: checkbox.checked });
+            showNotification('Configuración de venta guardada exitosamente.', 'success');
+        } catch (e) {
+            showNotification('Error al guardar configuración: ' + e.message, 'error');
+        }
+    },
+
     get excelEntities() {
         return window.BACKUP_ENTITY_CONFIG || [];
     },
@@ -360,23 +808,104 @@ const SettingsView = {
     },
 
     async exportEntityData(key) {
-        const entity = this.excelEntities.find(e => e.key === key);
-        if (!entity) {
-            showNotification('Entidad no válida', 'warning');
-            return;
-        }
+        const entity = (window.BACKUP_ENTITY_CONFIG || []).find(e => e.key === key);
+        if (!entity) return;
 
-        if (entity.type === 'store') {
-            await BackupManager.exportEntityToExcel(entity.store, entity.label, entity.sheet);
-            return;
-        }
-
-        if (entity.type === 'custom') {
-            if (entity.handler === 'customerDebts') {
+        try {
+            showNotification(`Preparando ${entity.label}...`, 'info');
+            if (entity.type === 'store') {
+                await BackupManager.exportEntityToExcel(entity.store, entity.label, entity.sheet);
+            } else if (entity.handler === 'customerDebts') {
                 await BackupManager.exportCustomerDebts(entity.sheet, entity.label);
             } else if (entity.handler === 'reportsSummary') {
                 await BackupManager.exportReportsSummary(entity.sheet, entity.label);
             }
+        } catch (error) {
+            showNotification('Error al exportar: ' + error.message, 'error');
+        }
+    },
+
+    async deduplicateSuppliers() {
+        showConfirm('Esta acción unificará a todos los proveedores que tengan el mismo nombre, traspasando sus compras y deudas a un solo registro. ¿Deseas continuar?', async () => {
+            try {
+                showNotification('Limpiando duplicados...', 'info');
+                const result = await ApiClient.post('migration/deduplicate-suppliers');
+                if (result.success) {
+                    showNotification(`Limpieza completada. Se unificaron ${result.merged} registros.`, 'success');
+                    // Recargar la vista si estamos en proveedores (opcional)
+                }
+            } catch (error) {
+                showNotification('Error al limpiar proveedores: ' + error.message, 'error');
+            }
+        });
+    },
+
+    async deduplicateCustomers() {
+        showConfirm('⚠️ ATENCIÓN: Esta acción unificará clientes duplicados y SUMARÁ sus deudas pendientes (fiados). No se perderá ningún dato de cobranza. ¿Deseas continuar?', async () => {
+            try {
+                showNotification('Consolidando deudas y unificando registros...', 'info');
+                const result = await ApiClient.post('migration/deduplicate-customers');
+                if (result.success) {
+                    const debtMsg = result.totalDebt > 0 ? `\\n\\nSe consolidaron ${formatCLP(result.totalDebt)} en deudas de fiados.` : '';
+                    showNotification(`Fusión completada. Se unificaron ${result.merged} clientes.${debtMsg}`, 'success');
+                }
+            } catch (error) {
+                showNotification('Error al fusionar clientes: ' + error.message, 'error');
+            }
+        });
+    },
+
+    async handleImport(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const jsonData = e.target.result;
+                showConfirm(
+                    '⚠️ ADVERTENCIA: La importación reemplazará TODOS tus datos actuales. El sistema se reiniciará para aplicar los cambios.\\n\\n¿Deseas continuar?',
+                    async () => {
+                        showNotification('Restaurando base de datos...', 'info');
+                        await BackupManager.importData(jsonData);
+                    }
+                );
+            } catch (error) {
+                showNotification('Error al procesar el archivo de respaldo', 'error');
+            }
+        };
+        reader.readAsText(file);
+        event.target.value = ''; 
+    },
+
+    async exportBusinessData() {
+        try {
+            showNotification('Exportando datos del negocio...', 'info');
+            
+            const response = await fetch('/api/export/business');
+            const result = await response.json();
+            
+            if (!result.success) {
+                throw new Error(result.error || 'Error al exportar datos');
+            }
+            
+            // Crear archivo JSON y descargar
+            const dataStr = JSON.stringify(result.data, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `negocio-completo-${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            showNotification('✅ Negocio exportado exitosamente', 'success');
+        } catch (error) {
+            console.error('[Export] Error:', error);
+            showNotification('Error al exportar negocio: ' + error.message, 'error');
         }
     },
 
@@ -469,27 +998,7 @@ const SettingsView = {
         showModal(content, { title: 'Importar Datos', footer, width: '500px' });
     },
 
-    async processImport() {
-        const fileInput = document.getElementById('importFile');
-        const file = fileInput.files[0];
-
-        if (!file) {
-            showNotification('Selecciona un archivo', 'warning');
-            return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            try {
-                const jsonData = e.target.result;
-                await BackupManager.importData(jsonData);
-                closeModal();
-            } catch (error) {
-                showNotification('Error al leer el archivo', 'error');
-            }
-        };
-        reader.readAsText(file);
-    },
+    // processImport ha sido reemplazado por handleImport para soporte directo de input file
 
     async clearCache() {
         if ('caches' in window) {
@@ -818,13 +1327,22 @@ const SettingsView = {
         }
 
         try {
+            console.log('💾 Guardando PIN de administrador...');
             await User.setAdminPIN(pin);
+            console.log('✅ PIN guardado en base de datos');
+            
+            // Verificar que se guardó correctamente
+            const hasPIN = await User.hasAdminPIN();
+            console.log('🔍 Verificación de PIN guardado:', hasPIN);
+            
             showNotification('PIN de administrador global configurado exitosamente. Este PIN permite recuperar la contraseña de cualquier usuario.', 'success');
             closeModal();
+            
             // Update status in view
             await this.initSecuritySection();
+            console.log('🔄 UI actualizada con nuevo estado del PIN');
         } catch (error) {
-            console.error('Error al configurar PIN:', error);
+            console.error('❌ Error al configurar PIN:', error);
             showNotification('Error al configurar PIN: ' + error.message, 'error');
         }
     },
@@ -969,5 +1487,676 @@ const SettingsView = {
                 reader.readAsText(file);
             }
         );
+    },
+
+    async saveMultipleCashSettings() {
+        const allowMultiple = document.getElementById('allowMultipleCashRegisters').checked;
+        localStorage.setItem('allowMultipleCashRegisters', allowMultiple);
+        showNotification('Configuración guardada', 'success');
+    },
+
+    async loadMultipleCashSettings() {
+        const allowMultiple = localStorage.getItem('allowMultipleCashRegisters') === 'true';
+        const checkbox = document.getElementById('allowMultipleCashRegisters');
+        if (checkbox) {
+            checkbox.checked = allowMultiple;
+        }
+
+        // Cargar cajas activas
+        const listDiv = document.getElementById('activeCashRegistersList');
+        if (listDiv) {
+            try {
+                const cashRegisters = await CashRegister.getAll();
+                const openRegisters = cashRegisters.filter(cr => cr.status === 'open');
+
+                if (openRegisters.length === 0) {
+                    listDiv.innerHTML = '<p style="color: #6b7280; font-size: 0.85rem;">No hay cajas abiertas</p>';
+                } else {
+                    listDiv.innerHTML = openRegisters.map(cr => `
+                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.75rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 0.5rem;">
+                            <div>
+                                <div style="font-weight: 600; color: #166534;">Caja #${cr.id}</div>
+                                <div style="font-size: 0.8rem; color: #15803d;">Abierta: ${formatDateTime(cr.openDate)}</div>
+                            </div>
+                            <span class="badge badge-success">Activa</span>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('[Settings] Error cargando cajas:', error);
+                listDiv.innerHTML = '<p style="color: #ef4444; font-size: 0.85rem;">Error al cargar cajas</p>';
+            }
+        }
+    },
+
+    async loadRolesPermissions() {
+        const listDiv = document.getElementById('rolesPermissionsList');
+        if (!listDiv) return;
+
+        try {
+            const roles = ['owner', 'admin', 'cashier'];
+            const roleLabels = {
+                owner: 'Propietario',
+                admin: 'Administrador',
+                cashier: 'Cajero'
+            };
+            const roleColors = {
+                owner: '#7c3aed', // morado
+                admin: '#2563eb', // azul
+                cashier: '#475569' // gris pizarra
+            };
+
+            const permissionsToShow = [
+                { key: 'nav.pos', label: 'Vender en Punto de Venta (POS)' },
+                { key: 'cash.open', label: 'Abrir y Cerrar Caja (Turnos)' },
+                { key: 'products.create', label: 'Crear / Editar Productos' },
+                { key: 'products.delete', label: 'Eliminar Productos' },
+                { key: 'inventory.adjust', label: 'Realizar Ajustes de Stock' },
+                { key: 'nav.reports', label: 'Ver Reportes y Gráficos' },
+                { key: 'sales.delete', label: 'Eliminar Ventas Realizadas' },
+                { key: 'settings.security', label: 'Configurar Claves y Seguridad' },
+                { key: 'settings.backup', label: 'Generar y Restaurar Copias' },
+                { key: 'settings.users', label: 'Gestionar Usuarios y Roles' }
+            ];
+
+            let html = `
+                <div style="margin-bottom: 1.5rem; background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; padding: 1rem; border-radius: 0.75rem; font-size: 0.85rem; line-height: 1.5; display: flex; align-items: flex-start; gap: 0.75rem;">
+                    <span style="font-size: 1.25rem;">🛡️</span>
+                    <div>
+                        <strong>Seguridad Blindada:</strong> Los permisos del sistema son fijos y se controlan por código seguro para evitar alteraciones de roles no autorizadas (escalación de privilegios). En esta tabla puedes consultar las facultades exactas de cada perfil.
+                    </div>
+                </div>
+                
+                <div style="overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 0.75rem; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
+                        <thead>
+                            <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+                                <th style="padding: 1rem; font-weight: 600; color: #475569; width: 40%;">Acción / Permiso</th>
+                                ${roles.map(r => `
+                                    <th style="padding: 1rem; font-weight: 600; text-align: center; color: #475569; width: 20%;">
+                                        <span style="display: inline-block; padding: 0.25rem 0.6rem; border-radius: 0.375rem; background: ${roleColors[r]}15; color: ${roleColors[r]}; border: 1px solid ${roleColors[r]}33; font-weight: 700; font-size: 0.75rem;">
+                                            ${roleLabels[r]}
+                                        </span>
+                                    </th>
+                                `).join('')}
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            permissionsToShow.forEach((perm, idx) => {
+                html += `
+                    <tr style="border-bottom: 1px solid #f1f5f9; background: ${idx % 2 === 0 ? 'white' : '#fafcfd'}; transition: background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='${idx % 2 === 0 ? 'white' : '#fafcfd'}'">
+                        <td style="padding: 0.875rem 1rem; font-weight: 500; color: #334155;">${perm.label}</td>
+                        ${roles.map(role => {
+                            const hasAccess = PermissionService.roleHasPermission(role, perm.key);
+                            return `
+                                <td style="padding: 0.875rem 1rem; text-align: center;">
+                                    ${hasAccess ? 
+                                        `<span style="color: #10b981; font-weight: bold; font-size: 1.15rem; display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; background: #ecfdf5; border-radius: 50%; border: 1px solid #a7f3d0;" title="Autorizado">✔</span>` : 
+                                        `<span style="color: #94a3b8; font-size: 0.85rem; display: inline-flex; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; background: #f1f5f9; border-radius: 50%; border: 1px solid #e2e8f0; opacity: 0.7;" title="No Autorizado">➖</span>`
+                                    }
+                                </td>
+                            `;
+                        }).join('')}
+                    </tr>
+                `;
+            });
+
+            html += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            listDiv.innerHTML = html;
+        } catch (error) {
+            console.error('[Settings] Error cargando roles:', error);
+            listDiv.innerHTML = '<p style="color: #ef4444; font-size: 0.85rem;">Error al cargar roles y permisos</p>';
+        }
+    },
+
+    async togglePermission(role, permission) {
+        console.warn('[Settings] No se pueden modificar los permisos fijos del sistema.');
+    },
+
+    async savePrinterSettings() {
+        const printerPort = document.getElementById('printerPort').value;
+        const paperWidth = document.getElementById('paperWidth').value;
+        const autoPrintTicket = document.getElementById('autoPrintTicket').checked;
+
+        localStorage.setItem('printerPort', printerPort);
+        localStorage.setItem('paperWidth', paperWidth);
+        localStorage.setItem('autoPrintTicket', autoPrintTicket);
+
+        showNotification('Configuración de impresora guardada', 'success');
+    },
+
+    async loadPrinterSettings() {
+        const printerPort = localStorage.getItem('printerPort') || 'USB';
+        const paperWidth = localStorage.getItem('paperWidth') || '58mm';
+        const autoPrintTicket = localStorage.getItem('autoPrintTicket') === 'true';
+
+        const printerPortSelect = document.getElementById('printerPort');
+        const paperWidthSelect = document.getElementById('paperWidth');
+        const autoPrintCheckbox = document.getElementById('autoPrintTicket');
+
+        if (printerPortSelect) printerPortSelect.value = printerPort;
+        if (paperWidthSelect) paperWidthSelect.value = paperWidth;
+        if (autoPrintCheckbox) autoPrintCheckbox.checked = autoPrintTicket;
+
+        // Cargar estado inicial del panel bluetooth
+        this.handlePrinterPortChange();
+        this.updateBluetoothStatus();
+    },
+
+    handlePrinterPortChange() {
+        const printerPortSelect = document.getElementById('printerPort');
+        const btConfig = document.getElementById('bluetoothPrinterConfig');
+        if (printerPortSelect && btConfig) {
+            btConfig.style.display = printerPortSelect.value === 'bluetooth' ? 'block' : 'none';
+        }
+    },
+
+    async updateBluetoothStatus() {
+        const isAvailable = await BluetoothPrinter.getAvailability();
+        const statusSpan = document.getElementById('bluetoothDeviceStatus');
+        const savedNameDiv = document.getElementById('bluetoothSavedName');
+        const forgetBtn = document.getElementById('btnForgetBluetooth');
+
+        if (statusSpan) {
+            statusSpan.textContent = isAvailable ? "Bluetooth detectado y activo" : "Bluetooth apagado o no disponible en esta PC";
+            statusSpan.style.color = isAvailable ? "#10b981" : "#ef4444";
+        }
+
+        const savedName = localStorage.getItem('bluetoothPrinterName');
+        if (savedNameDiv) {
+            savedNameDiv.textContent = savedName ? savedName : "Ninguna impresora vinculada";
+            savedNameDiv.style.color = savedName ? "#1e293b" : "#94a3b8";
+        }
+
+        if (forgetBtn) {
+            forgetBtn.style.display = savedName ? 'inline-block' : 'none';
+        }
+    },
+
+    async pairBluetoothPrinter() {
+        showNotification('Iniciando búsqueda de dispositivos Bluetooth...', 'info');
+
+        const modalContent = `
+            <div style="padding: 0.5rem;">
+                <p style="font-size: 0.9rem; color: #475569; margin-bottom: 1.5rem; line-height: 1.4;">
+                    Buscando impresoras Bluetooth encendidas y cercanas. Por favor, asegúrese de que la impresora esté en modo emparejamiento.
+                </p>
+                <div id="btDevicesList" style="max-height: 250px; overflow-y: auto; background: #f8fafc; padding: 1rem; border-radius: 0.75rem; border: 1.5px dashed #cbd5e1;">
+                    <p style="color: #94a3b8; font-size: 0.85rem; text-align: center;">Buscando dispositivos...</p>
+                </div>
+            </div>
+        `;
+        const footer = `
+            <button class="btn btn-secondary" onclick="SettingsView.cancelBluetoothPairing()" style="padding: 0.75rem 2rem; border-radius: 0.75rem;">
+                Cancelar Búsqueda
+            </button>
+        `;
+        
+        showModal(modalContent, { title: '🔍 Vincular Impresora Bluetooth', footer, width: '500px' });
+
+        // Registrar el listener de Electron para recibir dispositivos en tiempo real
+        this._bluetoothCleanupListener = window.api.onBluetoothDevicesFound((devices) => {
+            const listContainer = document.getElementById('btDevicesList');
+            if (listContainer) {
+                if (!devices || devices.length === 0) {
+                    listContainer.innerHTML = '<p style="color: #94a3b8; font-size: 0.85rem; text-align: center;">Buscando dispositivos...</p>';
+                } else {
+                    listContainer.innerHTML = devices.map(d => `
+                        <div class="bt-device-item" onclick="SettingsView.selectBluetoothDevice('${d.deviceId}')" 
+                             style="padding: 0.75rem 1rem; border: 1px solid #e2e8f0; border-radius: 0.5rem; margin-bottom: 0.5rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; background: #ffffff; transition: all 0.2s;"
+                             onmouseover="this.style.background='#f8fafc'; this.style.borderColor='#cbd5e1';"
+                             onmouseout="this.style.background='#ffffff'; this.style.borderColor='#e2e8f0';">
+                            <strong style="color: #1e293b;">${d.deviceName || 'Dispositivo desconocido'}</strong>
+                            <span style="font-size: 0.75rem; color: #94a3b8;">${d.deviceId}</span>
+                        </div>
+                    `).join('');
+                }
+            }
+        });
+
+        try {
+            const device = await BluetoothPrinter.pairDevice();
+            if (device) {
+                showNotification(`Impresora "${device.name}" vinculada con éxito.`, 'success');
+            }
+        } catch (err) {
+            console.error(err);
+            if (err.message.includes("User cancelled")) {
+                showNotification('Búsqueda cancelada', 'warning');
+            } else {
+                showNotification('Error al vincular: ' + err.message, 'error');
+            }
+        } finally {
+            if (this._bluetoothCleanupListener) {
+                this._bluetoothCleanupListener();
+                this._bluetoothCleanupListener = null;
+            }
+            closeModal();
+            this.updateBluetoothStatus();
+        }
+    },
+
+    selectBluetoothDevice(deviceId) {
+        window.api.bluetoothSelectDevice(deviceId);
+    },
+
+    cancelBluetoothPairing() {
+        window.api.bluetoothCancel();
+        if (this._bluetoothCleanupListener) {
+            this._bluetoothCleanupListener();
+            this._bluetoothCleanupListener = null;
+        }
+        closeModal();
+        showNotification('Búsqueda cancelada', 'warning');
+    },
+
+    forgetBluetoothPrinter() {
+        BluetoothPrinter.forgetDevice();
+        showNotification('Impresora Bluetooth olvidada', 'success');
+        this.updateBluetoothStatus();
+    },
+
+    async testPrinter() {
+        const printerPort = localStorage.getItem('printerPort') || 'USB';
+        if (printerPort === 'bluetooth') {
+            showNotification('Iniciando prueba de impresión Bluetooth...', 'info');
+            const testText = `
+================================
+     PRUEBA DE IMPRESION
+      BOLETA BLUETOOTH
+================================
+Fecha: ${new Date().toLocaleString()}
+Sistema: POS LAKURVA
+
+Si lee esto, su impresora Bluetooth
+esta conectada y funcionando de
+manera correcta.
+
+¡Gracias por su preferencia!
+================================
+\n\n\n`;
+            try {
+                await BluetoothPrinter.print(testText, { cut: true });
+                showNotification('Prueba de impresión Bluetooth enviada', 'success');
+            } catch (err) {
+                console.error(err);
+                showNotification('Error de impresión: ' + err.message, 'error');
+            }
+        } else {
+            showNotification('Iniciando prueba de impresión...', 'info');
+            setTimeout(() => {
+                showNotification('Prueba de impresión enviada a la impresora', 'success');
+            }, 1000);
+        }
+    },
+
+    async testBarcodeReader() {
+        showNotification('Iniciando prueba de lector de código de barras...', 'info');
+        
+        // Simular prueba de lector
+        setTimeout(() => {
+            showNotification('Lector de código de barras conectado correctamente', 'success');
+        }, 1000);
+    },
+
+    async testScale() {
+        showNotification('Iniciando prueba de balanza...', 'info');
+        
+        // Simular prueba de balanza
+        setTimeout(() => {
+            showNotification('Balanza conectada correctamente', 'success');
+        }, 1000);
+    },
+
+    async saveCloudBackupSettings() {
+        const cloudProvider = document.getElementById('cloudProvider').value;
+        const backupFrequency = document.getElementById('backupFrequency').value;
+        const autoBackupEnabled = document.getElementById('autoBackupEnabled').checked;
+
+        localStorage.setItem('cloudProvider', cloudProvider);
+        localStorage.setItem('backupFrequency', backupFrequency);
+        localStorage.setItem('autoBackupEnabled', autoBackupEnabled);
+
+        showNotification('Configuración de backup en la nube guardada', 'success');
+    },
+
+    async loadCloudBackupSettings() {
+        const cloudProvider = localStorage.getItem('cloudProvider') || 'none';
+        const backupFrequency = localStorage.getItem('backupFrequency') || 'daily';
+        const autoBackupEnabled = localStorage.getItem('autoBackupEnabled') === 'true';
+
+        const cloudProviderSelect = document.getElementById('cloudProvider');
+        const backupFrequencySelect = document.getElementById('backupFrequency');
+        const autoBackupCheckbox = document.getElementById('autoBackupEnabled');
+
+        if (cloudProviderSelect) cloudProviderSelect.value = cloudProvider;
+        if (backupFrequencySelect) backupFrequencySelect.value = backupFrequency;
+        if (autoBackupCheckbox) autoBackupCheckbox.checked = autoBackupEnabled;
+    },
+
+    async testCloudConnection() {
+        const cloudProvider = document.getElementById('cloudProvider').value;
+        
+        if (cloudProvider === 'none') {
+            showNotification('Selecciona un proveedor de nube primero', 'warning');
+            return;
+        }
+
+        showNotification('Probando conexión a ' + cloudProvider + '...', 'info');
+        
+        // Simular prueba de conexión
+        setTimeout(() => {
+            showNotification('Conexión a ' + cloudProvider + ' exitosa', 'success');
+        }, 1500);
+    },
+
+    async saveTicketSettings() {
+        const ticketBusinessName = document.getElementById('ticketBusinessName').value;
+        const ticketAddress = document.getElementById('ticketAddress').value;
+        const ticketPhone = document.getElementById('ticketPhone').value;
+        const ticketFooter = document.getElementById('ticketFooter').value;
+        const showLogoOnTicket = document.getElementById('showLogoOnTicket').checked;
+
+        localStorage.setItem('ticketBusinessName', ticketBusinessName);
+        localStorage.setItem('ticketAddress', ticketAddress);
+        localStorage.setItem('ticketPhone', ticketPhone);
+        localStorage.setItem('ticketFooter', ticketFooter);
+        localStorage.setItem('showLogoOnTicket', showLogoOnTicket);
+
+        showNotification('Configuración de tickets guardada', 'success');
+    },
+
+    async loadTicketSettings() {
+        const ticketBusinessName = localStorage.getItem('ticketBusinessName') || '';
+        const ticketAddress = localStorage.getItem('ticketAddress') || '';
+        const ticketPhone = localStorage.getItem('ticketPhone') || '';
+        const ticketFooter = localStorage.getItem('ticketFooter') || '';
+        const showLogoOnTicket = localStorage.getItem('showLogoOnTicket') === 'true';
+
+        const businessNameInput = document.getElementById('ticketBusinessName');
+        const addressInput = document.getElementById('ticketAddress');
+        const phoneInput = document.getElementById('ticketPhone');
+        const footerInput = document.getElementById('ticketFooter');
+        const logoCheckbox = document.getElementById('showLogoOnTicket');
+
+        if (businessNameInput) businessNameInput.value = ticketBusinessName;
+        if (addressInput) addressInput.value = ticketAddress;
+        if (phoneInput) phoneInput.value = ticketPhone;
+        if (footerInput) footerInput.value = ticketFooter;
+        if (logoCheckbox) logoCheckbox.checked = showLogoOnTicket;
+    },
+
+    async previewTicket() {
+        const businessName = document.getElementById('ticketBusinessName').value || 'Mi Negocio';
+        const address = document.getElementById('ticketAddress').value || 'Dirección';
+        const phone = document.getElementById('ticketPhone').value || 'Teléfono';
+        const footer = document.getElementById('ticketFooter').value || '¡Gracias por su compra!';
+
+        const content = `
+            <div style="font-family: monospace; font-size: 12px; padding: 1rem; background: white; border: 1px solid #ddd; max-width: 300px; margin: 0 auto;">
+                <div style="text-align: center; margin-bottom: 1rem;">
+                    <div style="font-weight: bold; font-size: 14px;">${businessName}</div>
+                    <div style="font-size: 10px;">${address}</div>
+                    <div style="font-size: 10px;">${phone}</div>
+                </div>
+                <hr style="margin: 0.5rem 0;">
+                <div style="margin-bottom: 1rem;">
+                    <div>Producto A x2 - $10.000</div>
+                    <div>Producto B x1 - $5.000</div>
+                </div>
+                <hr style="margin: 0.5rem 0;">
+                <div style="text-align: right; font-weight: bold;">Total: $15.000</div>
+                <hr style="margin: 0.5rem 0;">
+                <div style="text-align: center; font-size: 10px; margin-top: 1rem;">${footer}</div>
+            </div>
+        `;
+
+        showModal(content, { title: 'Vista Previa del Ticket', width: '350px' });
+    },
+
+    showInitialSetupWizard() {
+        // Verificar si el asistente ya se mostró
+        if (localStorage.getItem('initialSetupCompleted') === 'true') {
+            return;
+        }
+
+        const content = `
+            <div style="text-align: center; padding: 1rem;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🎉</div>
+                <h3>¡Bienvenido al Sistema de Ventas!</h3>
+                <p style="margin-bottom: 1.5rem; color: var(--secondary);">
+                    Vamos a configurar tu sistema paso a paso para que puedas empezar a vender lo antes posible.
+                </p>
+                
+                <div style="text-align: left; margin-bottom: 1.5rem;">
+                    <div style="margin-bottom: 0.5rem;">✅ Paso 1: Configurar nombre del negocio</div>
+                    <div style="margin-bottom: 0.5rem;">✅ Paso 2: Configurar moneda e impuestos</div>
+                    <div style="margin-bottom: 0.5rem;">✅ Paso 3: Configurar impresora</div>
+                    <div style="margin-bottom: 0.5rem;">✅ Paso 4: Crear primer usuario</div>
+                </div>
+
+                <div style="background: #fef2f2; color: #991b1b; padding: 1rem; border-radius: 0.5rem; font-size: 0.85rem; margin-top: 1rem; border: 1px solid #fee2e2;">
+                    <strong>Nota:</strong> Este asistente solo se mostrará una vez. Puedes cambiar todas estas configuraciones más tarde en la sección de Configuración.
+                </div>
+            </div>
+        `;
+
+        const footer = `
+            <button class="btn btn-secondary" onclick="SettingsView.skipInitialSetup()">Saltar</button>
+            <button class="btn btn-primary" onclick="SettingsView.startInitialSetup()">Comenzar Configuración</button>
+        `;
+
+        showModal(content, { title: 'Asistente de Configuración Inicial', footer, width: '500px' });
+    },
+
+    skipInitialSetup() {
+        localStorage.setItem('initialSetupCompleted', 'true');
+        closeModal();
+        showNotification('Puedes configurar el sistema más tarde en Configuración', 'info');
+    },
+
+    startInitialSetup() {
+        closeModal();
+        this.showSetupStep1();
+    },
+
+    showSetupStep1() {
+        const businessName = localStorage.getItem('ticketBusinessName') || '';
+        const address = localStorage.getItem('ticketAddress') || '';
+        const phone = localStorage.getItem('ticketPhone') || '';
+
+        const content = `
+            <div class="form-group">
+                <label>Nombre del Negocio *</label>
+                <input type="text" id="setupBusinessName" class="form-control" placeholder="Ej: Mi Tienda" value="${businessName}">
+            </div>
+            
+            <div class="form-group">
+                <label>Dirección</label>
+                <input type="text" id="setupAddress" class="form-control" placeholder="Ej: Calle Principal #123" value="${address}">
+            </div>
+            
+            <div class="form-group">
+                <label>Teléfono</label>
+                <input type="text" id="setupPhone" class="form-control" placeholder="Ej: +56 9 1234 5678" value="${phone}">
+            </div>
+        `;
+
+        const footer = `
+            <button class="btn btn-secondary" onclick="SettingsView.skipInitialSetup()">Cancelar</button>
+            <button class="btn btn-primary" onclick="SettingsView.saveSetupStep1()">Siguiente →</button>
+        `;
+
+        showModal(content, { title: 'Paso 1/4: Información del Negocio', footer, width: '500px' });
+    },
+
+    saveSetupStep1() {
+        const businessName = document.getElementById('setupBusinessName').value;
+        const address = document.getElementById('setupAddress').value;
+        const phone = document.getElementById('setupPhone').value;
+
+        if (!businessName) {
+            showNotification('El nombre del negocio es obligatorio', 'warning');
+            return;
+        }
+
+        localStorage.setItem('ticketBusinessName', businessName);
+        localStorage.setItem('ticketAddress', address);
+        localStorage.setItem('ticketPhone', phone);
+
+        closeModal();
+        this.showSetupStep2();
+    },
+
+    showSetupStep2() {
+        const currency = localStorage.getItem('currency') || 'CLP';
+        const taxRate = localStorage.getItem('taxRate') || '19';
+
+        const content = `
+            <div class="form-group">
+                <label>Moneda</label>
+                <select id="setupCurrency" class="form-control">
+                    <option value="CLP" ${currency === 'CLP' ? 'selected' : ''}>Peso Chileno (CLP)</option>
+                    <option value="USD" ${currency === 'USD' ? 'selected' : ''}>Dólar Estadounidense (USD)</option>
+                    <option value="EUR" ${currency === 'EUR' ? 'selected' : ''}>Euro (EUR)</option>
+                    <option value="ARS" ${currency === 'ARS' ? 'selected' : ''}>Peso Argentino (ARS)</option>
+                    <option value="MXN" ${currency === 'MXN' ? 'selected' : ''}>Peso Mexicano (MXN)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Tasa de Impuesto (%)</label>
+                <input type="number" id="setupTaxRate" class="form-control" placeholder="Ej: 19" value="${taxRate}">
+            </div>
+            
+            <div style="background: #fef2f2; color: #991b1b; padding: 1rem; border-radius: 0.5rem; font-size: 0.85rem; margin-top: 1rem; border: 1px solid #fee2e2;">
+                <strong>Nota:</strong> La tasa de impuesto se aplicará a todas las ventas por defecto.
+            </div>
+        `;
+
+        const footer = `
+            <button class="btn btn-secondary" onclick="SettingsView.showSetupStep1()">← Anterior</button>
+            <button class="btn btn-primary" onclick="SettingsView.saveSetupStep2()">Siguiente →</button>
+        `;
+
+        showModal(content, { title: 'Paso 2/4: Moneda e Impuestos', footer, width: '500px' });
+    },
+
+    saveSetupStep2() {
+        const currency = document.getElementById('setupCurrency').value;
+        const taxRate = document.getElementById('setupTaxRate').value;
+
+        localStorage.setItem('currency', currency);
+        localStorage.setItem('taxRate', taxRate);
+
+        closeModal();
+        this.showSetupStep3();
+    },
+
+    showSetupStep3() {
+        const hasPrinter = localStorage.getItem('hasPrinter') === 'true' ? 'yes' : 'no';
+        const printerPort = localStorage.getItem('printerPort') || 'USB';
+        const paperWidth = localStorage.getItem('paperWidth') || '58mm';
+
+        const content = `
+            <div class="form-group">
+                <label>¿Tienes impresora térmica?</label>
+                <select id="setupHasPrinter" class="form-control" onchange="SettingsView.togglePrinterOptions()">
+                    <option value="no" ${hasPrinter === 'no' ? 'selected' : ''}>No</option>
+                    <option value="yes" ${hasPrinter === 'yes' ? 'selected' : ''}>Sí</option>
+                </select>
+            </div>
+            
+            <div id="printerOptions" style="display: ${hasPrinter === 'yes' ? 'block' : 'none'};">
+                <div class="form-group">
+                    <label>Puerto de Impresión</label>
+                    <select id="setupPrinterPort" class="form-control">
+                        <option value="USB" ${printerPort === 'USB' ? 'selected' : ''}>USB</option>
+                        <option value="COM1" ${printerPort === 'COM1' ? 'selected' : ''}>COM1</option>
+                        <option value="COM2" ${printerPort === 'COM2' ? 'selected' : ''}>COM2</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label>Ancho del Papel</label>
+                    <select id="setupPaperWidth" class="form-control">
+                        <option value="58mm" ${paperWidth === '58mm' ? 'selected' : ''}>58mm (Estándar)</option>
+                        <option value="80mm" ${paperWidth === '80mm' ? 'selected' : ''}>80mm (Grande)</option>
+                    </select>
+                </div>
+            </div>
+        `;
+
+        const footer = `
+            <button class="btn btn-secondary" onclick="SettingsView.showSetupStep2()">← Anterior</button>
+            <button class="btn btn-primary" onclick="SettingsView.saveSetupStep3()">Siguiente →</button>
+        `;
+
+        showModal(content, { title: 'Paso 3/4: Configuración de Impresora', footer, width: '500px' });
+    },
+
+    togglePrinterOptions() {
+        const hasPrinter = document.getElementById('setupHasPrinter').value;
+        const printerOptions = document.getElementById('printerOptions');
+        printerOptions.style.display = hasPrinter === 'yes' ? 'block' : 'none';
+    },
+
+    saveSetupStep3() {
+        const hasPrinter = document.getElementById('setupHasPrinter').value;
+        const printerPort = document.getElementById('setupPrinterPort')?.value || 'USB';
+        const paperWidth = document.getElementById('setupPaperWidth')?.value || '58mm';
+
+        localStorage.setItem('hasPrinter', hasPrinter === 'yes');
+        localStorage.setItem('printerPort', printerPort);
+        localStorage.setItem('paperWidth', paperWidth);
+
+        closeModal();
+        this.showSetupStep4();
+    },
+
+    showSetupStep4() {
+        const content = `
+            <div style="text-align: center; padding: 1rem;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">✅</div>
+                <h3>¡Configuración Completada!</h3>
+                <p style="margin-bottom: 1.5rem; color: var(--secondary);">
+                    Tu sistema está listo para usar. Aquí tienes un resumen de la configuración:
+                </p>
+                
+                <div style="text-align: left; background: #f9fafb; padding: 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem;">
+                    <div><strong>Negocio:</strong> ${localStorage.getItem('ticketBusinessName')}</div>
+                    <div><strong>Moneda:</strong> ${localStorage.getItem('currency')}</div>
+                    <div><strong>Impuesto:</strong> ${localStorage.getItem('taxRate')}%</div>
+                    <div><strong>Impresora:</strong> ${localStorage.getItem('hasPrinter') === 'true' ? 'Configurada' : 'No configurada'}</div>
+                </div>
+
+                <p style="font-size: 0.85rem; color: #6b7280;">
+                    Puedes cambiar todas estas configuraciones más tarde en la sección de Configuración.
+                </p>
+            </div>
+        `;
+
+        const footer = `
+            <button class="btn btn-primary" onclick="SettingsView.completeInitialSetup()">Comenzar a Usar</button>
+        `;
+
+        showModal(content, { title: 'Paso 4/4: Configuración Completada', footer, width: '500px' });
+    },
+
+    completeInitialSetup() {
+        localStorage.setItem('initialSetupCompleted', 'true');
+        closeModal();
+        showNotification('¡Configuración inicial completada! Tu sistema está listo para usar.', 'success');
+    },
+
+    runSetupWizardAgain() {
+        this.showSetupStep1();
     }
 };

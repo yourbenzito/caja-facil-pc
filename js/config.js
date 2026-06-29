@@ -1,12 +1,7 @@
 const API_CONFIG = {
-    get BASE_URL() {
-        // En la nube (cajafacil.cl) con HTTPS o cualquier dominio externo
-        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-            return `${window.location.protocol}//${window.location.host}`;
-        }
-        // En local, para el desarrollo en Electron o Navegador local
-        return 'http://localhost:3000';
-    },
+    // BLINDAJE 100% OFFLINE: Solo habla con el motor interno de esta computadora
+    // Configurable via localStorage para desarrollo con diferentes puertos
+    BASE_URL: localStorage.getItem('API_BASE_URL') || (window.location.protocol.startsWith('http') ? window.location.origin : 'http://localhost:3000'),
 
     get API_URL() {
         return `${this.BASE_URL}/api`;

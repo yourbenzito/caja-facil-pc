@@ -1,16 +1,16 @@
 /**
  * C6: Supplier Payment Service
- * Handles complex logic for registering payments to suppliers and calculating debts.
+ * Handles supplier payments and supplier debt calculations.
+ *
  * Rules:
- *   - No se modifican compras existentes.
- *   - Los pagos son inmutables.
- *  - El pago puede ir vinculado a una compra específica (purchaseId) o ser un pago general al proveedor (purchaseId = null).
- *   - Se actualiza el campo paidAmount/status de Purchase SOLO por compatibilidad con la UI existente.
+ * - Purchases create stock and an obligation.
+ * - Supplier payments are the cash/bank event.
+ * - In SQLite mode, payment + purchase balance + optional cash movement are atomic.
  */
 class SupplierPaymentService {
     static _summaryCache = null;
     static _lastSummaryTime = 0;
-    static CACHE_TTL = 3000; // 3 seconds cache
+    static CACHE_TTL = 3000;
 
     /**
      * Register a new payment to a supplier.
@@ -29,18 +29,45 @@ class SupplierPaymentService {
             date: new Date().toISOString()
         };
 
-        const result = await SupplierPayment.create(payment);
-        const paymentId = result;
+        let currentRegister = null;
+        if (data.deductFromCashRegister && (payment.method === 'cash' || payment.method === 'efectivo')) {
+            currentRegister = await CashRegister.getOpen();
+            if (!currentRegister || !currentRegister.id) {
+                throw new Error('La caja esta cerrada. Si quieres egresar dinero de caja, primero abre la caja o desmarca "Egresar dinero de la caja actual".');
+            }
+        }
 
-        // 1. Si se vinculó a una compra, actualizar esa compra por compatibilidad
+        if (db.mode === 'sqlite') {
+            const result = await ApiClient.post('complex/supplier-payment', {
+                payment: {
+                    ...payment,
+                    createdBy: typeof AuditLogService !== 'undefined' ? AuditLogService.getCurrentUserId() : null,
+                    cashRegisterId: currentRegister ? currentRegister.id : null
+                },
+                deductFromCashRegister: data.deductFromCashRegister === true,
+                cashRegisterId: currentRegister ? currentRegister.id : null
+            });
+            if (!result.success) throw new Error(result.error || 'Error al registrar pago a proveedor');
+            if (db.clearCache) {
+                db.clearCache('supplierPayments');
+                db.clearCache('purchases');
+                db.clearCache('cashMovements');
+                db.clearCache('cashRegisters');
+                db.clearCache('auditLogs');
+            }
+            this._summaryCache = null;
+            return result.id;
+        }
+
+        const paymentId = await SupplierPayment.create(payment);
+
         if (data.purchaseId) {
             try {
                 await Purchase.registerPayment(data.purchaseId, data.amount);
             } catch (error) {
-                console.warn('C6: Error actualizando paidAmount de compra (legacy), pero el pago se registró:', error);
+                console.warn('C6: Error actualizando paidAmount de compra legacy, pero el pago se registro:', error);
             }
         } else {
-            // Si es pago general, intentar distribuirlo en compras pendientes por compatibilidad legacy
             try {
                 const pending = await Purchase.getBySupplier(data.supplierId);
                 let remainingAmount = data.amount;
@@ -53,48 +80,34 @@ class SupplierPaymentService {
                         remainingAmount -= toPay;
                     }
                 }
-            } catch (_) { /* Fallback silencioso para legacy */ }
+            } catch (_) { /* legacy fallback */ }
         }
 
-        // 2. Si es efectivo, registrar movimiento de salida en caja
         if (data.deductFromCashRegister && (payment.method === 'cash' || payment.method === 'efectivo')) {
-            try {
-                const currentRegister = await CashRegister.getCurrent();
-                if (currentRegister) {
-                    const supplier = await Supplier.getById(data.supplierId);
-                    const reason = `Pago a Proveedor: ${supplier ? supplier.name : '#' + data.supplierId} ${data.purchaseId ? '(Compra #' + data.purchaseId + ')' : '(General)'}`;
-                    await CashRegister.addMovement({
-                        cashRegisterId: currentRegister.id,
-                        type: 'out',
-                        amount: data.amount,
-                        reason: reason,
-                        paymentId: paymentId // Vincular para anulación
-                    });
-                }
-            } catch (error) {
-                console.error('C6: Error registrando egreso en caja:', error);
-            }
+            const supplier = await Supplier.getById(data.supplierId);
+            const reason = `Pago a Proveedor: ${supplier ? supplier.name : '#' + data.supplierId} ${data.purchaseId ? '(Compra #' + data.purchaseId + ')' : '(General)'}`;
+            await CashMovement.create({
+                cashRegisterId: currentRegister.id,
+                type: 'out',
+                amount: data.amount,
+                reason,
+                paymentId
+            });
         }
 
-        this._summaryCache = null; // Invalida cache
+        this._summaryCache = null;
         return paymentId;
     }
 
     /**
      * Calculate total debt for a supplier.
-     * Deuda = total de compras pendientes - total pagos registrados.
-     * 
-     * Compatibilidad: para compras antiguas que ya tienen paidAmount mutado,
-     * se usa el MAYOR entre: pagos registrados en supplierPayments vs purchase.paidAmount.
-     * 
-     * @param {number} supplierId
-     * @returns {Promise<number>}
+     * Compatibility: for old purchases with mutated paidAmount, uses the higher value
+     * between registered payments and purchase.paidAmount.
      */
     static async getSupplierDebt(supplierId) {
         const purchases = await Purchase.getBySupplier(supplierId);
         const payments = await SupplierPayment.getBySupplier(supplierId);
-        
-        // Agrupar pagos por purchaseId
+
         const purchaseIds = new Set(purchases.map(p => p.id));
         const paymentsByPurchase = {};
         let generalPayments = 0;
@@ -113,25 +126,20 @@ class SupplierPaymentService {
             const total = parseFloat(purchase.total) || 0;
             const legacyPaid = parseFloat(purchase.paidAmount) || 0;
             const registeredPaid = paymentsByPurchase[purchase.id] || 0;
-            
             const effectivePaid = Math.max(legacyPaid, registeredPaid);
-            const balance = Math.max(0, total - effectivePaid);
-            totalDebt += balance;
+            totalDebt += Math.max(0, total - effectivePaid);
         }
 
-        totalDebt = Math.max(0, totalDebt - generalPayments);
-        return totalDebt;
+        return Math.max(0, totalDebt - generalPayments);
     }
 
     /**
      * Get debt per purchase for a supplier.
-     * @param {number} supplierId
-     * @returns {Promise<Array<{purchase, balance, payments}>>}
      */
     static async getDebtDetail(supplierId) {
         const purchases = await Purchase.getBySupplier(supplierId);
         const payments = await SupplierPayment.getBySupplier(supplierId);
-        
+
         const paymentsByPurchase = {};
         for (const p of payments) {
             if (p.purchaseId) {
@@ -161,8 +169,7 @@ class SupplierPaymentService {
     }
 
     /**
-     * Summary of all supplier debts (cuentas por pagar).
-     * @returns {Promise<Array<{supplier, totalPurchases, totalPaid, totalDebt}>>}
+     * Summary of all supplier debts.
      */
     static async getAccountsPayableSummary() {
         try {
@@ -171,7 +178,6 @@ class SupplierPaymentService {
                 return this._summaryCache;
             }
 
-            // C6: Optimización CRÍTICA - Si estamos en SQLite, pedir el resumen calculado al servidor
             if (db.mode === 'sqlite') {
                 const data = await Purchase.getStatsSummary();
                 if (data && data.creditors) {
@@ -181,14 +187,10 @@ class SupplierPaymentService {
                 }
             }
 
-            // Fallback (solo si el servidor falla o estamos en IndexedDB local)
             const suppliers = await Supplier.getAllIncludingDeleted();
             const allPurchases = await Purchase.getAll();
             const allPayments = await SupplierPayment.getAll();
-            
-            const result = [];
 
-            // Agrupar compras y pagos por proveedor para procesamiento O(N)
             const purchasesBySupplier = {};
             for (const p of allPurchases) {
                 if (!purchasesBySupplier[p.supplierId]) purchasesBySupplier[p.supplierId] = [];
@@ -201,13 +203,12 @@ class SupplierPaymentService {
                 paymentsBySupplier[p.supplierId].push(p);
             }
 
+            const result = [];
             for (const supplier of suppliers) {
                 const purchases = purchasesBySupplier[supplier.id] || [];
                 if (purchases.length === 0) continue;
 
                 const payments = paymentsBySupplier[supplier.id] || [];
-                
-                // Calcular deuda localmente sin nuevas peticiones API
                 const purchaseIds = new Set(purchases.map(p => p.id));
                 const paymentsByPurchase = {};
                 let generalPayments = 0;
@@ -228,12 +229,9 @@ class SupplierPaymentService {
                 for (const p of purchases) {
                     const total = parseFloat(p.total) || 0;
                     totalPurchases += total;
-                    
                     const legacyPaid = parseFloat(p.paidAmount) || 0;
                     const registeredPaid = paymentsByPurchase[p.id] || 0;
-                    const effectivePaid = Math.max(legacyPaid, registeredPaid);
-                    const balance = Math.max(0, total - effectivePaid);
-                    
+                    const balance = Math.max(0, total - Math.max(legacyPaid, registeredPaid));
                     totalDebt += balance;
                     if (balance > 0.01) pendingCount++;
                 }

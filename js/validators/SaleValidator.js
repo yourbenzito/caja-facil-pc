@@ -55,7 +55,15 @@ class SaleValidator {
             return sum + itemTotal;
         }, 0);
         const discount = parseFloat(saleData.discount) || 0;
-        const toNearestTen = (v) => (Number.isNaN(parseFloat(v)) ? 0 : Math.round(parseFloat(v) / 10) * 10);
+        const toNearestTen = (v) => {
+            const val = parseFloat(v);
+            if (Number.isNaN(val)) return 0;
+            const n = Math.floor(val);
+            const lastDigit = n % 10;
+            if (lastDigit >= 1 && lastDigit <= 5) return Math.floor(n / 10) * 10;
+            if (lastDigit >= 6 && lastDigit <= 9) return Math.ceil(n / 10) * 10;
+            return n;
+        };
         const expectedTotal = toNearestTen(Math.max(0, sumOfItems - discount));
         const providedTotal = parseFloat(saleData.total) || 0;
         const tolerance = 0.01;

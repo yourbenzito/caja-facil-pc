@@ -1,0 +1,6 @@
+{
+  "appId": "com.pos.lakurva",
+  "appName": "POS Lakurva",
+  "webDir": "www",
+  "bundledWebRuntime": false
+}

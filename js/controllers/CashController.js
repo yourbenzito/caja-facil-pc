@@ -117,7 +117,6 @@ class CashController {
         // Fetch all movements for this register
         const allSales = await Sale.getByCashRegister(cashRegisterId);
         const allPayments = await Payment.getByCashRegister(cashRegisterId);
-        const allExpenses = await Expense.getByCashRegister(cashRegisterId);
         const allCashMovements = await CashMovement.getByCashRegister(cashRegisterId);
         
         // Group by date (DD/MM/YYYY)
@@ -174,26 +173,6 @@ class CashController {
             movementsByDate[dateKey].debtPayments.total += payment.amount;
         });
         
-        // Process Expenses
-        allExpenses.forEach(expense => {
-            const dateKey = new Date(expense.date).toLocaleDateString('es-CL');
-            
-            if (!movementsByDate[dateKey]) {
-                movementsByDate[dateKey] = {
-                    date: dateKey,
-                    sales: { count: 0, total: 0 },
-                    debtNew: { count: 0, total: 0 },
-                    debtPayments: { count: 0, total: 0 },
-                    expenses: { count: 0, total: 0 },
-                    cashMovementsIn: { count: 0, total: 0 },
-                    cashMovementsOut: { count: 0, total: 0 }
-                };
-            }
-            
-            movementsByDate[dateKey].expenses.count++;
-            movementsByDate[dateKey].expenses.total += expense.amount;
-        });
-        
         // Process Cash Movements
         allCashMovements.forEach(movement => {
             const dateKey = new Date(movement.date).toLocaleDateString('es-CL');
@@ -248,11 +227,11 @@ class CashController {
             if (sale && sale.customerId) customerIds.add(sale.customerId);
         });
 
+        const allCustomers = await Customer.getAll();
         const customerMap = {};
-        await Promise.all([...customerIds].map(async (id) => {
-            const c = await Customer.getById(id);
-            if (c) customerMap[id] = c.name;
-        }));
+        allCustomers.forEach(c => {
+            customerMap[c.id] = c.name;
+        });
 
         const toDateKey = (d) => new Date(d).toLocaleDateString('es-CL');
         const daysMap = {};
@@ -319,7 +298,7 @@ class CashController {
         allCashMovements.forEach(m => {
             const dateKey = toDateKey(m.date);
             const day = ensureDay(dateKey);
-            const row = { amount: m.amount, reason: m.reason || '-', date: m.date };
+            const row = { amount: m.amount, reason: m.description || m.reason || '-', date: m.date };
             if (m.type === 'in') day.cashMovementsIn.push(row);
             else day.cashMovementsOut.push(row);
         });

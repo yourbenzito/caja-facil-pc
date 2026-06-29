@@ -9,7 +9,7 @@ const showNotification = (message, type = 'info') => {
 
     const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
-    notification.style.animation = 'slideDown 0.4s ease-out forwards';
+    notification.style.animation = 'slideUp 0.4s ease-out forwards';
 
     const icons = {
         success: '✓',
@@ -28,9 +28,82 @@ const showNotification = (message, type = 'info') => {
     const duration = type === 'error' ? 5000 : 3000;
 
     setTimeout(() => {
-        notification.style.animation = 'slideDown 0.35s ease-in reverse';
+        notification.style.animation = 'slideUp 0.35s ease-in reverse';
         setTimeout(() => notification.remove(), 300);
     }, duration);
+};
+
+/**
+ * Muestra una notificación persistente de actualización.
+ * Diseñada para que el usuario no la ignore pero no moleste su flujo.
+ */
+const showUpdateNotification = (onConfirm) => {
+    // Evitar duplicados
+    if (document.getElementById('update-notification')) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'update-notification';
+    banner.style.cssText = `
+        position: fixed;
+        bottom: 2rem;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #1e1b4b;
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 1.5rem;
+        z-index: 9999;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        max-width: 90vw;
+    `;
+
+    banner.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span style="font-size: 1.5rem;">🚀</span>
+            <div>
+                <strong style="display: block; font-size: 0.95rem;">Nueva versión disponible</strong>
+                <span style="font-size: 0.85rem; opacity: 0.8;">Actualización lista para mejorar tu sistema</span>
+            </div>
+        </div>
+        <button id="btn-update-now" style="
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        ">Actualizar ahora</button>
+    `;
+
+    document.body.appendChild(banner);
+
+    const btn = banner.querySelector('#btn-update-now');
+    btn.onclick = () => {
+        btn.innerText = 'Cargando...';
+        btn.style.opacity = '0.7';
+        if (onConfirm) onConfirm();
+    };
+
+    // Añadir estilo de animación si no existe
+    if (!document.getElementById('update-anim-styles')) {
+        const style = document.createElement('style');
+        style.id = 'update-anim-styles';
+        style.innerHTML = `
+            @keyframes slideUp {
+                from { transform: translate(-50%, 100%); opacity: 0; }
+                to { transform: translate(-50%, 0); opacity: 1; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
 };
 
 const showModal = (content, options = {}) => {
@@ -38,7 +111,10 @@ const showModal = (content, options = {}) => {
 
     const modal = document.createElement('div');
     modal.className = 'modal';
-    modal.style.width = options.width || '600px';
+    // M1: Responsividad para celulares — Evita desborde horizontal (max-width dinámico)
+    const maxWidth = options.width || '600px';
+    modal.style.maxWidth = `min(${maxWidth}, 95vw)`;
+    modal.style.width = '100%';
 
     modal.innerHTML = `
         <div class="modal-header">
@@ -58,40 +134,108 @@ const showModal = (content, options = {}) => {
 };
 
 const closeModal = () => {
-    const overlay = document.getElementById('modal-overlay');
-    overlay.classList.remove('active');
-
     const modals = document.querySelectorAll('.modal');
-    modals.forEach(modal => {
-        // Remover listener de Enter si existe
-        if (modal._enterKeyHandler) {
-            document.removeEventListener('keydown', modal._enterKeyHandler, true);
+    if (modals.length === 0) {
+        const overlay = document.getElementById('modal-overlay');
+        if (overlay) overlay.classList.remove('active');
+        return;
+    }
+
+    // Only remove the topmost modal
+    const lastModal = modals[modals.length - 1];
+    if (lastModal._enterKeyHandler) {
+        document.removeEventListener('keydown', lastModal._enterKeyHandler, true);
+    }
+    lastModal.remove();
+
+    // Only hide overlay if no more modals exist
+    if (document.querySelectorAll('.modal').length === 0) {
+        const overlay = document.getElementById('modal-overlay');
+        if (overlay) overlay.classList.remove('active');
+    }
+
+    // Auto-refocus appropriate search when closing modals
+    setTimeout(() => {
+        // If a modal still exists, it should probably regain focus (handled by the modal's own init usually)
+        if (document.querySelectorAll('.modal').length > 0) {
+            // If it's the purchase wizard, ensure current step is focused
+            if (typeof PurchasesView !== 'undefined' && document.getElementById('purchaseForm')) {
+                PurchasesView.updateWizardUI();
+            }
+            return;
         }
-        modal.remove();
+
+        // No modals left: refocus the main view's search
+        if (typeof app !== 'undefined') {
+            if (app.currentView === 'pos' && typeof POSView !== 'undefined') {
+                POSView.focusSearch();
+            } else if (app.currentView === 'purchases' && typeof PurchasesView !== 'undefined') {
+                // If there's a search input on the main purchases list
+                document.getElementById('searchPurchases')?.focus();
+            }
+        }
+    }, 80);
+};
+
+const showConfirm = (message, titleOrCallback = 'Confirmación', confirmText = 'Confirmar', cancelText = 'Cancelar') => {
+    return new Promise((resolve) => {
+        let title = titleOrCallback;
+        let callback = null;
+
+        if (typeof titleOrCallback === 'function') {
+            title = 'Confirmación';
+            callback = titleOrCallback;
+        }
+
+        const content = `
+            <p style="font-size: 1.15rem; margin-bottom: 1.5rem; text-align: center; color: #1e293b; line-height: 1.6; font-weight: 700; background: rgba(0,0,0,0.03); padding: 1.5rem; border-radius: 1rem; border: 1px dashed #cbd5e1;">
+                ${message}
+            </p>
+        `;
+
+        const footer = `
+            <button id="confirmCancelBtn" class="btn" style="flex: 1; background: #64748b; color: white; border: none; padding: 0.75rem; border-radius: 0.75rem; font-weight: 600; cursor: pointer;"> ${cancelText} </button>
+            <button id="confirmActionBtn" class="btn" style="flex: 1; background: #4f46e5; color: white; border: none; padding: 0.75rem; border-radius: 0.75rem; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);"> ${confirmText} </button>
+        `;
+
+        const modal = showModal(content, {
+            title: title,
+            footer: `<div style="display: flex; gap: 1rem; width: 100%; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 1rem;">${footer}</div>`,
+            width: '450px'
+        });
+
+        const confirmBtn = modal.querySelector('#confirmActionBtn');
+        const cancelBtn = modal.querySelector('#confirmCancelBtn');
+
+        console.log('[Confirm] Modal mostrado, esperando acción...');
+
+        if (confirmBtn) {
+            confirmBtn.onclick = () => {
+                console.log('[Confirm] Clic en confirmar');
+                confirmBtn.disabled = true;
+                confirmBtn.innerText = 'Procesando...';
+                if (callback) callback();
+                resolve(true);
+                closeModal();
+            };
+        }
+
+        if (cancelBtn) {
+            cancelBtn.onclick = () => {
+                console.log('[Confirm] Clic en cancelar');
+                resolve(false);
+                closeModal();
+            };
+        }
     });
 };
 
-const showConfirm = (message, callback) => {
-    const content = `
-        <p style="font-size: 1rem; margin-bottom: 1.5rem; text-align: center;">${message}</p>
-    `;
-
-    const footer = `
-        <button class="btn btn-secondary" style="flex: 1" onclick="closeModal()">Cancelar</button>
-        <button class="btn btn-danger" style="flex: 1" onclick="confirmAction()">Confirmar</button>
-    `;
-
-    showModal(content, {
-        title: 'Confirmación',
-        footer: `<div style="display: flex; gap: 1rem; width: 100%; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 1rem;">${footer}</div>`,
-        width: '400px'
-    });
-
-    window.confirmAction = () => {
-        if (typeof callback === 'function') {
-            callback();
+// Global Escape key handler to close modals
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        const modals = document.querySelectorAll('.modal');
+        if (modals.length > 0) {
+            closeModal();
         }
-        closeModal();
-        delete window.confirmAction;
-    };
-};
+    }
+});

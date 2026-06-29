@@ -4,24 +4,40 @@ const CashView = {
      * @param {Array} registers - From CashRegister.getAll()
      */
     async enrichHistoryWithSummaries(registers) {
-        for (const r of registers) {
-            if (r.status === 'open') {
-                const s = await CashRegister.getSummary(r.id);
-                if (s) {
-                    r.paymentSummary = s.paymentSummary;
-                    r.expectedAmount = s.expectedCash;
-                }
+        // Solo enriquecer los registros que están abiertos (normalmente solo uno)
+        const openRegisters = registers.filter(r => r.status === 'open');
+        if (openRegisters.length === 0) return;
+
+        await Promise.all(openRegisters.map(async (r) => {
+            const s = await CashRegister.getSummary(r.id);
+            if (s) {
+                r.paymentSummary = s.paymentSummary;
+                r.expectedAmount = s.expectedCash;
             }
-        }
+        }));
     },
 
     async render() {
-        const openCash = await CashRegister.getOpen();
-        const history = await CashRegister.getAll();
+        // Carga paralela de caja abierta e historial reciente (limitado a 20 para velocidad)
+        const [openCash, history] = await Promise.all([
+            CashRegister.getOpen(),
+            CashRegister.getLatest(20)
+        ]);
+        
+        let lastClosing = null;
+        if (!openCash && history.length > 0) {
+            // Buscar el último cierre en los registros cargados
+            const last = history.find(r => r.status === 'closed');
+            if (last) {
+                lastClosing = await CashRegister.getSummary(last.id);
+            }
+        }
+
+        // Enriquecer solo lo necesario de forma paralela
         await this.enrichHistoryWithSummaries(history);
 
         if (!openCash) {
-            return this.renderOpenCashForm(history);
+            return this.renderOpenCashForm(history, lastClosing);
         } else {
             return this.renderCashSummary(openCash, history);
         }
@@ -30,185 +46,125 @@ const CashView = {
     historyDateFilter: '',
     _cashHistoryDataset: [],
 
-    renderOpenCashForm(history) {
+    renderOpenCashForm(history, lastClosing = null) {
+        const lastTotal = lastClosing ? lastClosing.finalAmount : 0;
+        const lastDate = lastClosing ? formatDateTime(lastClosing.closeDate) : 'N/A';
+        const lastDiff = lastClosing ? (lastClosing.difference || 0) : 0;
+        const lastDiffColor = lastDiff === 0 ? '#10b981' : (lastDiff > 0 ? '#3b82f6' : '#ef4444');
+        const lastDiffIcon = lastDiff === 0 ? '✅' : (lastDiff > 0 ? '📈' : '📉');
+        const lastDiffLabel = lastDiff === 0 ? 'Cuadró perfecto' : (lastDiff > 0 ? 'Sobrante' : 'Faltante');
+
         return `
-            <div class="view-header">
+            <div class="view-header animate-fade-in">
                 <h1 style="color: #111827;">Control de Caja</h1>
                 <p style="color: #4b5563;">Apertura y cierre de caja</p>
             </div>
             
-            <div class="grid grid-2 cash-open-grid">
-                <div class="card cash-open-card">
-                    <h2 style="margin-bottom: 1.5rem;">Abrir Caja</h2>
+            <div class="grid grid-2 cash-open-grid animate-fade-in" style="gap: 2rem;">
+                <!-- PANEL DE APERTURA (MIDNIGHT GLASS) -->
+                <div class="card glass-card-midnight" style="background: #0f172a; border: none; padding: 2.5rem; position: relative; overflow: hidden; border-radius: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+                    <!-- Decoración de fondo (Glow) -->
+                    <div style="position: absolute; top: -50px; right: -50px; width: 200px; height: 200px; background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%); pointer-events: none;"></div>
                     
-                    <div class="cash-mode-switch" style="margin-bottom: 1rem;">
-                        <label style="display: flex; align-items: center; cursor: pointer; margin-bottom: 0.5rem;">
-                            <input type="radio" name="openMode" value="denominations" checked onchange="CashView.switchOpenMode()">
-                            <span style="margin-left: 0.5rem;">Contar por denominaciones</span>
-                        </label>
-                        <label style="display: flex; align-items: center; cursor: pointer;">
-                            <input type="radio" name="openMode" value="quick" onchange="CashView.switchOpenMode()">
-                            <span style="margin-left: 0.5rem;">Ingreso rápido (monto total)</span>
-                        </label>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2.5rem; position: relative; z-index: 2;">
+                        <div>
+                            <h2 style="margin: 0; font-weight: 950; font-size: 2.2rem; color: #fff; letter-spacing: -1.5px;">Apertura</h2>
+                            <p style="margin: 5px 0 0; color: #94a3b8; font-weight: 600; font-size: 0.95rem;">Inicia un nuevo turno de ventas</p>
+                        </div>
+                        <div style="width: 60px; height: 60px; background: rgba(255,255,255,0.05); border-radius: 1.25rem; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; border: 1px solid rgba(255,255,255,0.1);">💰</div>
                     </div>
                     
-                    <form id="openCashForm" onsubmit="CashView.openCash(event)">
-                        <div id="denominationsForm">
-                            <h4 style="margin-bottom: 1rem;">Billetes</h4>
-                            <div class="grid grid-2 denomination-grid" style="gap: 0.75rem; margin-bottom: 1rem;">
-                                <div>
-                                    <label style="font-size: 0.9rem;">$20.000</label>
-                                    <input type="number" id="bill_20000" class="form-control denomination-input" value="0" min="0" oninput="CashView.calculateTotal()">
-                                </div>
-                                <div>
-                                    <label style="font-size: 0.9rem;">$10.000</label>
-                                    <input type="number" id="bill_10000" class="form-control denomination-input" value="0" min="0" oninput="CashView.calculateTotal()">
-                                </div>
-                                <div>
-                                    <label style="font-size: 0.9rem;">$5.000</label>
-                                    <input type="number" id="bill_5000" class="form-control denomination-input" value="0" min="0" oninput="CashView.calculateTotal()">
-                                </div>
-                                <div>
-                                    <label style="font-size: 0.9rem;">$2.000</label>
-                                    <input type="number" id="bill_2000" class="form-control denomination-input" value="0" min="0" oninput="CashView.calculateTotal()">
-                                </div>
-                                <div>
-                                    <label style="font-size: 0.9rem;">$1.000</label>
-                                    <input type="number" id="bill_1000" class="form-control denomination-input" value="0" min="0" oninput="CashView.calculateTotal()">
-                                </div>
-                            </div>
-                            
-                            <h4 style="margin-bottom: 1rem;">Monedas</h4>
-                            <div class="grid grid-2 denomination-grid" style="gap: 0.75rem; margin-bottom: 1rem;">
-                                <div>
-                                    <label style="font-size: 0.9rem;">$500</label>
-                                    <input type="number" id="coin_500" class="form-control denomination-input" value="0" min="0" oninput="CashView.calculateTotal()">
-                                </div>
-                                <div>
-                                    <label style="font-size: 0.9rem;">$100</label>
-                                    <input type="number" id="coin_100" class="form-control denomination-input" value="0" min="0" oninput="CashView.calculateTotal()">
-                                </div>
-                                <div>
-                                    <label style="font-size: 0.9rem;">$50</label>
-                                    <input type="number" id="coin_50" class="form-control denomination-input" value="0" min="0" oninput="CashView.calculateTotal()">
-                                </div>
-                                <div>
-                                    <label style="font-size: 0.9rem;">$10</label>
-                                    <input type="number" id="coin_10" class="form-control denomination-input" value="0" min="0" oninput="CashView.calculateTotal()">
-                                </div>
-                            </div>
-                            
-                            <div class="cash-total-display">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <strong>Total Calculado:</strong>
-                                    <strong id="calculatedTotal" style="font-size: 1.25rem; color: var(--primary);">$0</strong>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div id="quickForm" style="display: none;">
-                            <div class="form-group">
-                                <label>Monto Total de Apertura (CLP) *</label>
+                    <form id="openCashForm" onsubmit="CashView.openCash(event)" style="position: relative; z-index: 2;">
+                        <div class="form-group" style="margin-bottom: 2.5rem;">
+                            <label style="display:block; margin-bottom: 1rem; font-weight: 800; color: #cbd5e1; text-transform: uppercase; letter-spacing: 2px; font-size: 0.8rem;">Monto inicial en efectivo</label>
+                            <div style="position: relative;">
+                                <span style="position: absolute; left: 1.5rem; top: 50%; transform: translateY(-50%); font-size: 2rem; font-weight: 900; color: #10b981;">$</span>
                                 <input type="number" 
                                        id="quickAmount" 
                                        class="form-control" 
                                        placeholder="0" 
                                        min="0" 
-                                       required>
+                                       required
+                                       onfocus="this.select()"
+                                       style="padding-left: 3.5rem; font-size: 3.5rem; height: 6.5rem; width: 100%; border-radius: 1.5rem; background: rgba(255,255,255,0.03); border: 2.5px solid rgba(255,255,255,0.1); color: white; font-weight: 950; transition: all 0.3s; box-shadow: inset 0 4px 10px rgba(0,0,0,0.2); outline: none;">
                             </div>
+                            <p style="margin-top: 1rem; color: #64748b; font-size: 0.85rem; font-weight: 600; text-align: center;">Ingresa el total de dinero físico disponible para dar vuelto.</p>
                         </div>
                         
-                        <button type="submit" class="btn btn-success btn-lg" style="width: 100%;">
-                            Abrir Caja
+                        <button type="submit" class="btn btn-lg" style="width: 100%; height: 5rem; font-size: 1.5rem; font-weight: 950; border-radius: 1.5rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; box-shadow: 0 15px 30px rgba(16, 185, 129, 0.3); transition: all 0.3s; cursor: pointer;" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 20px 40px rgba(16, 185, 129, 0.4)'" onmouseout="this.style.transform='translateY(0)'">
+                            ABRIR CAJA <span style="margin-left: 10px; opacity: 0.8;">→</span>
                         </button>
                     </form>
                 </div>
                 
-                <div class="card cash-info-card">
-                    <h3 style="margin-bottom: 1rem;">Información</h3>
-                    <div class="cash-info-panel">
-                        <p style="margin-bottom: 0.5rem;">✓ Registra el monto inicial de efectivo</p>
-                        <p style="margin-bottom: 0.5rem;">✓ Puedes contar por denominaciones o ingresar monto total</p>
-                        <p style="margin-bottom: 0.5rem;">✓ Todas las ventas se asociarán a esta caja</p>
-                        <p>✓ Podrás cerrar la caja al final del día</p>
+                <!-- PANEL DE INFORMACIÓN (READ-ONLY SUMMARY) -->
+                <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                    ${lastClosing ? `
+                        <div class="card glass-card-info" style="background: rgba(255,255,255,0.02); border: 2.5px solid #e2e8f0; padding: 2.5rem; border-radius: 2rem; position: relative;">
+                            <div style="position: absolute; top: 1.5rem; right: 1.5rem; padding: 0.5rem 1rem; background: #f1f5f9; border-radius: 2rem; font-size: 0.75rem; font-weight: 900; color: #64748b; text-transform: uppercase; letter-spacing: 1px;">Historial</div>
+                            
+                            <h3 style="margin-bottom: 2rem; display: flex; align-items: center; gap: 0.75rem; color: #1e293b; font-weight: 950; font-size: 1.4rem;">
+                                📊 Último Cierre Registrado
+                            </h3>
+                            
+                            <div style="display: grid; grid-template-columns: 1fr; gap: 2rem;">
+                                <div style="padding: 1.5rem; background: #f8fafc; border-radius: 1.5rem; border: 1px solid #e2e8f0;">
+                                    <span style="font-size: 0.75rem; font-weight: 950; color: #94a3b8; text-transform: uppercase; letter-spacing: 1.5px; display: block; margin-bottom: 0.5rem;">Saldo Final en Caja</span>
+                                    <div style="font-size: 2.2rem; font-weight: 950; color: #0f172a; letter-spacing: -1px;">${formatCLP(lastTotal)}</div>
+                                    <div style="margin-top: 5px; display: flex; align-items: center; gap: 6px;">
+                                        <span style="width: 8px; height: 8px; background: #10b981; border-radius: 50%;"></span>
+                                        <small style="color: #64748b; font-weight: 700;">Cerrado el ${lastDate}</small>
+                                    </div>
+                                </div>
+                                
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                                    <div style="padding: 1.25rem; background: ${lastDiff >= 0 ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)'}; border-radius: 1.25rem; border: 1.5px solid ${lastDiff >= 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)'};">
+                                        <span style="font-size: 0.7rem; font-weight: 900; color: ${lastDiff >= 0 ? '#059669' : '#b91c1c'}; text-transform: uppercase; display: block; margin-bottom: 4px;">Diferencia</span>
+                                        <div style="font-size: 1.2rem; font-weight: 900; color: ${lastDiffColor};">
+                                            ${lastDiffIcon} ${lastDiff === 0 ? 'Sin descuadre' : formatCLP(lastDiff)}
+                                        </div>
+                                    </div>
+                                    <div style="padding: 1.25rem; background: #f8fafc; border-radius: 1.25rem; border: 1px solid #e2e8f0; display: flex; flex-direction: column; justify-content: center;">
+                                        <span style="font-size: 0.7rem; font-weight: 900; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 4px;">Estado</span>
+                                        <div style="font-weight: 800; color: ${lastDiffColor}; font-size: 1rem;">${lastDiffLabel}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <p style="margin-top: 2rem; padding: 1.25rem; background: #fffbeb; border-radius: 1.25rem; border: 1.5px solid #fef3c7; color: #92400e; font-size: 0.85rem; font-weight: 700; line-height: 1.4;">
+                                💡 <strong>Nota Informativa:</strong> Este saldo es solo una referencia del cierre anterior. No se arrastra automáticamente para evitar errores contables de turnos pasados.
+                            </p>
+                        </div>
+                    ` : ''}
+
+                    <div class="card" style="background: #1e293b; color: white; border-radius: 2rem; padding: 2.5rem; flex: 1; border: none; display: flex; flex-direction: column; justify-content: center;">
+                        <h3 style="margin-bottom: 2rem; font-weight: 900; color: #60a5fa; letter-spacing: 2px; text-transform: uppercase; font-size: 0.9rem;">Recordatorios de Apertura</h3>
+                        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                            <div style="display: flex; gap: 1.25rem; align-items: center;">
+                                <div style="width: 48px; height: 48px; background: rgba(255,255,255,0.05); border-radius: 1rem; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; border: 1px solid rgba(255,255,255,0.1);">🔍</div>
+                                <p style="font-size: 0.95rem; opacity: 0.85; font-weight: 600; margin: 0;">Verifica que el monto físico coincida con lo que ingresas.</p>
+                            </div>
+                            <div style="display: flex; gap: 1.25rem; align-items: center;">
+                                <div style="width: 48px; height: 48px; background: rgba(255,255,255,0.05); border-radius: 1rem; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; border: 1px solid rgba(255,255,255,0.1);">🔐</div>
+                                <p style="font-size: 0.95rem; opacity: 0.85; font-weight: 600; margin: 0;">Tu sesión de venta quedará registrada bajo tu usuario.</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
             
             ${history.length > 0 ? `
-                <div class="card cash-history-panel">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                        <h3 style="margin: 0;">Historial de Cajas</h3>
-                        <div style="display: flex; gap: 0.5rem; align-items: center;">
-                            <small style="color: var(--secondary);">Mostrando ${history.length} registro${history.length !== 1 ? 's' : ''}</small>
-                            <button class="btn btn-info btn-sm" onclick="CashView.showAllCashRegistersHistory()">
-                                📋 Ver Todos los Registros
-                            </button>
-                        </div>
+                <div class="card cash-history-panel" style="margin-top: 3rem; border-radius: 2rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                        <h3 style="margin: 0; font-weight: 900; font-size: 1.5rem; color: #1e293b;">Historial de Movimientos</h3>
+                        <button class="btn btn-outline" onclick="CashView.showAllCashRegistersHistory()" style="background: #f1f5f9; color: #475569; font-weight: 800; border: none; padding: 0.75rem 1.25rem; border-radius: 1rem;">
+                            📋 Ver Reporte Completo
+                        </button>
                     </div>
                     ${this.renderCashHistory(history)}
                 </div>
             ` : ''}
         `;
-    },
-
-    switchOpenMode() {
-        const mode = document.querySelector('input[name="openMode"]:checked').value;
-        const denominationsForm = document.getElementById('denominationsForm');
-        const quickForm = document.getElementById('quickForm');
-
-        if (mode === 'denominations') {
-            denominationsForm.style.display = 'block';
-            quickForm.style.display = 'none';
-            document.getElementById('quickAmount').required = false;
-        } else {
-            denominationsForm.style.display = 'none';
-            quickForm.style.display = 'block';
-            document.getElementById('quickAmount').required = true;
-            // Clear denomination inputs
-            document.querySelectorAll('.denomination-input').forEach(input => input.value = 0);
-            this.calculateTotal();
-        }
-    },
-
-    calculateTotal() {
-        const denominations = {
-            bill_20000: 20000,
-            bill_10000: 10000,
-            bill_5000: 5000,
-            bill_2000: 2000,
-            bill_1000: 1000,
-            coin_500: 500,
-            coin_100: 100,
-            coin_50: 50,
-            coin_10: 10
-        };
-
-        let total = 0;
-        for (const [id, value] of Object.entries(denominations)) {
-            const input = document.getElementById(id);
-            if (input) {
-                total += (parseInt(input.value) || 0) * value;
-            }
-        }
-
-        const totalElement = document.getElementById('calculatedTotal');
-        if (totalElement) {
-            totalElement.textContent = formatCLP(total);
-        }
-
-        // Update hidden input for form submission
-        const initialAmountInput = document.getElementById('initialAmount');
-        if (!initialAmountInput) {
-            // Create hidden input if it doesn't exist
-            const form = document.getElementById('openCashForm');
-            const hiddenInput = document.createElement('input');
-            hiddenInput.type = 'hidden';
-            hiddenInput.id = 'initialAmount';
-            hiddenInput.name = 'initialAmount';
-            form.appendChild(hiddenInput);
-        }
-        document.getElementById('initialAmount').value = total;
     },
 
     async renderCashSummary(cashRegister, history) {
@@ -235,218 +191,328 @@ const CashView = {
         const durationDisplay = diffDays > 0 ? `Abierta hace ${diffDays} día(s)` : 'Abierta hoy';
 
         return `
-            <div class="view-header animate-fade-in">
-                <div style="display: flex; justify-content: space-between; align-items: start; gap: 2rem;">
-                    <div style="flex: 1;">
-                        <div style="display: flex; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
-                            <h1 style="margin:0; color: #111827;">Control de Caja</h1>
-                            <span class="badge badge-success" style="font-size: 0.9rem; padding: 0.4rem 0.8rem;">Caja Abierta #${cashRegister.id}</span>
-                        </div>
-                        <p style="margin:0; color: #4b5563;">
-                            Desde ${formatDateTime(cashRegister.openDate)} • <span style="color: #059669; font-weight: 600;">${durationDisplay}</span>
-                        </p>
-                    </div>
-                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; justify-content: flex-end;">
-                        <button class="btn btn-secondary" onclick="CashView.showAllCashRegistersHistory()">
-                            📚 Historial de Todas las Cajas
-                        </button>
-                        <button class="btn btn-secondary" onclick="CashView.showCashHistory(${cashRegister.id})">
-                            📋 Historial de Esta Sesión
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <div class="cash-minimal-actions animate-fade-in" style="margin-bottom: 2rem; display: flex; gap: 1rem; flex-wrap: wrap;">
-                <button class="btn btn-lg" onclick="CashView.showAddCashForm()" style="background: linear-gradient(135deg, #10b981, #059669); color: #fff; flex: 1; min-width: 180px; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);" 
-                        title="Registrar entrada de dinero extra a la caja (ej: sencillo, cambio)">
-                    ➕ Agregar Dinero
-                </button>
-                <button class="btn btn-lg" onclick="CashView.showWithdrawCashForm()" style="background: linear-gradient(135deg, #f59e0b, #d97706); color: #fff; flex: 1; min-width: 180px; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);" 
-                        title="Registrar salida de dinero (ej: pago a proveedores, fletes, gastos rápidos)">
-                    ➖ Retirar Dinero
-                </button>
-                <button class="btn btn-lg" onclick="CashView.showCloseCashForm()" style="background: linear-gradient(135deg, #ef4444, #dc2626); color: #fff; flex: 1; min-width: 180px; box-shadow: 0 4px 12px rgba(239, 68, 68, 0.2);" 
-                        title="Finalizar el turno y contar el dinero total de la caja">
-                    🔒 Cerrar Caja
-                </button>
-            </div>
-
-            <div class="grid grid-2 animate-fade-in" style="gap: 1.5rem; margin-bottom: 2rem;">
-                <!-- RESUMEN DEL DÍA -->
-                <div class="card" style="padding: 1.5rem; border-top: 4px solid #4f46e5; background: #ffffff; border: 1.5px solid #d1d5db; border-top: 4px solid #4f46e5; border-radius: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
-                    <h3 style="margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; color: #111827; font-size: 1.05rem;">
-                        <span>📅</span> Resumen del Día (${todayKey})
-                    </h3>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-                        <div style="background: #eff6ff; border: 1.5px solid #bfdbfe; padding: 1.25rem; border-radius: 0.75rem; text-align: center; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='scale(1.02)';this.style.boxShadow='0 4px 12px rgba(59,130,246,0.15)'" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='none'" onclick="CashView.showVentasHoy()">
-                            <span style="font-size: 0.75rem; color: #1d4ed8; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 0.4rem;">Ventas Hoy</span>
-                            <div style="font-size: 1.65rem; font-weight: 800; color: #1d4ed8;">${formatCLP(totalTodaySales)}</div>
-                            <small style="color: #3b82f6; font-weight: 600;">${todayDetail.sales.length} ventas ejecutadas</small>
-                        </div>
-                        <div style="background: #fef2f2; border: 1.5px solid #fecaca; padding: 1.25rem; border-radius: 0.75rem; text-align: center; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='scale(1.02)';this.style.boxShadow='0 4px 12px rgba(239,68,68,0.15)'" onmouseout="this.style.transform='scale(1)';this.style.boxShadow='none'" onclick="CashView.showDeudasHoy()">
-                            <span style="font-size: 0.75rem; color: #dc2626; text-transform: uppercase; font-weight: 700; display: block; margin-bottom: 0.4rem;">Deudas del Día</span>
-                            <div style="font-size: 1.65rem; font-weight: 800; color: #dc2626;">${formatCLP(totalTodayDeudas)}</div>
-                            <small style="color: #ef4444; font-weight: 600;">${todayDetail.creditSales.length} fiados hoy</small>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- EFECTIVO ESPERADO DETALLADO -->
-                <div class="card" style="padding: 1.5rem; background: #ffffff; border: 1.5px solid #d1d5db; border-top: 4px solid #10b981; border-radius: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
-                    <h3 style="margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; color: #111827; font-size: 1.05rem;">
-                        <span>💸</span> Resumen de Efectivo
-                    </h3>
-                    <div style="display: flex; flex-direction: column; gap: 0.75rem; justify-content: center; height: 100%;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid #e5e7eb;">
-                            <span style="color: #4b5563; font-weight: 600;">💰 Monto Inicial:</span>
-                            <span style="font-weight: 800; font-size: 1.1rem; color: #111827;">${formatCLP(summary.initialAmount)}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding-bottom: 0.5rem; border-bottom: 1px solid #e5e7eb; cursor: pointer;" onclick="CashView.showPaymentMethods()" title="Ver desglose de métodos de pago">
-                            <span style="color: #4b5563; font-weight: 600;">🔄 Ingresos Netos de Efectivo:</span>
-                            <span style="font-weight: 800; font-size: 1.1rem; color: #059669;">+${formatCLP(summary.cashForDisplay)}</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 0.75rem;">
-                            <span style="color: #111827; font-weight: 800; font-size: 1.05rem;">Efectivo Esperado Real:</span>
-                            <span style="font-weight: 900; font-size: 1.75rem; color: #059669;">${formatCLP(summary.expectedCash)}</span>
-                        </div>
-                        <button class="btn btn-sm" style="margin-top: 0.5rem; align-self: center; background: #ecfdf5; color: #059669; border: 1.5px solid #6ee7b7; font-weight: 600;" onmouseover="this.style.background='#d1fae5'" onmouseout="this.style.background='#ecfdf5'" onclick="CashView.showPaymentMethods()">
-                            📊 Ver Todos los Métodos de Pago
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <h3 style="margin: 2rem 0 1.25rem 0; opacity: 0.8; display: flex; align-items: center; gap: 0.5rem;">
-                <span>💳</span> Resumen por Medio de Pago (No Efectivo)
-            </h3>
-            
-            <div class="grid grid-3 animate-fade-in" style="gap: 1rem; margin-bottom: 2rem;">
-                <div class="module-card" style="border-left: 3px solid #60a5fa; padding: 1rem; flex-direction: row; align-items: center;">
-                    <div class="module-icon" style="background: rgba(59, 130, 246, 0.1); color: #60a5fa; width: 32px; height: 32px; font-size: 1rem;">💳</div>
-                    <div class="module-info" style="gap: 0;">
-                        <span class="label" style="font-size: 0.7rem;">Tarjeta</span>
-                        <span class="val" style="color: #60a5fa; font-size: 1.2rem;">${formatCLP(summary.paymentSummary?.card || 0)}</span>
-                    </div>
-                </div>
-                <div class="module-card" style="border-left: 3px solid #a78bfa; padding: 1rem; flex-direction: row; align-items: center;">
-                    <div class="module-icon" style="background: rgba(167, 139, 250, 0.1); color: #a78bfa; width: 32px; height: 32px; font-size: 1rem;">📱</div>
-                    <div class="module-info" style="gap: 0;">
-                        <span class="label" style="font-size: 0.7rem;">QR / Digital</span>
-                        <span class="val" style="color: #a78bfa; font-size: 1.2rem;">${formatCLP(summary.paymentSummary?.qr || 0)}</span>
-                    </div>
-                </div>
-                <div class="module-card" style="border-left: 3px solid #94a3b8; padding: 1rem; flex-direction: row; align-items: center;">
-                    <div class="module-icon" style="background: rgba(148, 163, 184, 0.1); color: #94a3b8; width: 32px; height: 32px; font-size: 1rem;">➕</div>
-                    <div class="module-info" style="gap: 0;">
-                        <span class="label" style="font-size: 0.7rem;">Otro / Transf.</span>
-                        <span class="val" style="color: #94a3b8; font-size: 1.2rem;">${formatCLP(summary.paymentSummary?.other || 0)}</span>
-                    </div>
-                </div>
-            </div>
-
-            <h3 style="margin-bottom: 1.25rem; opacity: 0.8; display: flex; align-items: center; gap: 0.5rem;">
-                <span>📈</span> Totales Acumulados de la Sesión
-            </h3>
-            
-            <div class="grid grid-4 animate-fade-in" style="gap: 1rem;">
-                <!-- VENTAS SESIÓN -->
-                <div class="module-card" onclick="CashView.showHistorialVentasSesion()">
-                    <div class="module-icon" style="background: rgba(59, 130, 246, 0.1); color: #60a5fa;">🛍️</div>
-                    <div class="module-info">
-                        <span class="label">Total Ventas</span>
-                        <span class="val">${formatCLP(summary.totalSalesAmount)}</span>
-                    </div>
-                    <div class="module-footer">${summary.totalSales} tickets emitidos</div>
-                </div>
-
-                <!-- DEUDAS COBRADAS -->
-                <div class="module-card" onclick="CashView.showClientesPagaron()">
-                    <div class="module-icon" style="background: rgba(16, 185, 129, 0.1); color: #34d399;">💰</div>
-                    <div class="module-info">
-                        <span class="label">Deudas Cobradas</span>
-                        <span class="val">${formatCLP(summary.totalDebtPayments)}</span>
-                    </div>
-                    <div class="module-footer">${summary.debtPayments.length} abonos recibidos</div>
-                </div>
-
-                <!-- FIADOS SESIÓN -->
-                <div class="module-card" onclick="CashView.showAnotadosSesion()">
-                    <div class="module-icon" style="background: rgba(239, 68, 68, 0.1); color: #f87171;">📝</div>
-                    <div class="module-info">
-                        <span class="label">Total Fiados</span>
-                        <span class="val">${formatCLP(totalSessionAnotados)}</span>
-                    </div>
-                    <div class="module-footer">Ventas anotadas/deuda</div>
-                </div>
-
-                <!-- MOVIMIENTOS MANUALE -->
-                <div class="module-card" onclick="CashView.showMovimientosManuales()">
-                    <div class="module-icon" style="background: rgba(245, 158, 11, 0.1); color: #fbbf24;">🔁</div>
-                    <div class="module-info">
-                        <span class="label">Ingresos y Retiros</span>
-                        <div style="display: flex; gap: 0.5rem; font-size: 0.8rem; font-weight: 600;">
-                            <span style="color: #34d399;">+${formatCLP(summary.totalCashIn)}</span>
-                            <span style="color: #f87171;">-${formatCLP(summary.totalRetiros)}</span>
-                        </div>
-                    </div>
-                    <div class="module-footer">Gestión manual de efectivo</div>
-                </div>
-            </div>
-
-            </div>
-
             <style>
-                .module-card {
-                    background: #ffffff;
-                    border: 1.5px solid #e5e7eb;
-                    border-radius: 1rem;
-                    padding: 1.25rem;
-                    cursor: pointer;
-                    transition: all 0.25s ease;
-                    display: flex;
-                    flex-direction: column;
-                    gap: 0.75rem;
-                    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+                /* ── Caja: animaciones ── */
+                @keyframes cxFadeUp {
+                    from { opacity: 0; transform: translateY(18px); }
+                    to   { opacity: 1; transform: translateY(0); }
                 }
-                .module-card:hover {
-                    background: #f9fafb;
-                    border-color: #9ca3af;
-                    transform: translateY(-4px);
-                    box-shadow: 0 10px 24px rgba(0,0,0,0.1);
+                @keyframes cxBarIn {
+                    from { width: 0; }
                 }
-                .module-icon {
-                    width: 40px;
-                    height: 40px;
-                    border-radius: 0.75rem;
+                @keyframes cxPulse {
+                    0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.35); }
+                    50%       { box-shadow: 0 0 0 8px rgba(16,185,129,0); }
+                }
+
+                /* ── Header de estado ── */
+                .cx-header {
+                    background: #fff;
+                    border-radius: 1.25rem;
+                    padding: 1.5rem 2rem;
+                    box-shadow: 0 4px 24px rgba(0,0,0,0.07);
                     display: flex;
                     align-items: center;
-                    justify-content: center;
-                    font-size: 1.25rem;
+                    justify-content: space-between;
+                    flex-wrap: wrap;
+                    gap: 1rem;
+                    margin-bottom: 1.5rem;
+                    border-left: 5px solid #10b981;
+                    animation: cxFadeUp 0.35s ease both;
                 }
-                .module-info .label {
-                    display: block;
-                    font-size: 0.78rem;
-                    color: #6b7280;
-                    text-transform: uppercase;
-                    letter-spacing: 0.5px;
-                    font-weight: 700;
-                    margin-bottom: 0.2rem;
+                .cx-status-dot {
+                    width: 11px; height: 11px; border-radius: 50%;
+                    background: #10b981; flex-shrink: 0;
+                    animation: cxPulse 2s infinite;
                 }
-                .module-info .val {
-                    display: block;
-                    font-size: 1.4rem;
-                    font-weight: 800;
-                    color: #111827;
+
+                /* ── Botones de acción ── */
+                .cx-action-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                    gap: 1rem;
+                    margin-bottom: 1.5rem;
+                    animation: cxFadeUp 0.38s ease both;
                 }
-                .module-footer {
-                    font-size: 0.75rem;
-                    color: #9ca3af;
-                    border-top: 1px solid #f3f4f6;
-                    padding-top: 0.5rem;
-                    margin-top: 0.25rem;
+                .cx-action-btn {
+                    display: flex; flex-direction: column; align-items: center; justify-content: center;
+                    gap: 0.5rem; padding: 1.25rem 1rem; border-radius: 1rem;
+                    border: none; cursor: pointer; font-weight: 700; font-size: 0.9rem;
+                    transition: all 0.22s ease; text-align: center;
+                    min-height: 90px;
                 }
+                .cx-action-btn:hover { transform: translateY(-4px); }
+                .cx-action-btn .cx-btn-icon { font-size: 1.7rem; }
+
+                /* ── KPI cards ── */
+                .cx-kpi {
+                    background: #fff;
+                    border-radius: 1.15rem;
+                    padding: 1.35rem 1.5rem;
+                    box-shadow: 0 3px 20px rgba(0,0,0,0.07);
+                    border-left: 4px solid transparent;
+                    position: relative; overflow: hidden;
+                    transition: transform 0.2s, box-shadow 0.2s;
+                    animation: cxFadeUp 0.4s ease both;
+                }
+                .cx-kpi:hover { transform: translateY(-3px); box-shadow: 0 10px 32px rgba(0,0,0,0.12); }
+                .cx-kpi-bg { position:absolute; right:-10px; bottom:-10px; font-size:4.5rem; opacity:0.06; pointer-events:none; user-select:none; }
+                .cx-kpi-lbl { font-size:0.72rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; margin-bottom:0.5rem; }
+                .cx-kpi-val { font-size:1.7rem; font-weight:900; letter-spacing:-1px; line-height:1; }
+                .cx-kpi-sub { font-size:0.75rem; margin-top:0.4rem; color:#64748b; }
+
+                /* ── Sección ── */
+                .cx-section {
+                    background: #fff;
+                    border-radius: 1.15rem;
+                    padding: 1.5rem;
+                    box-shadow: 0 3px 20px rgba(0,0,0,0.06);
+                    animation: cxFadeUp 0.42s ease both;
+                }
+                .cx-section-title {
+                    font-size: 0.88rem; font-weight: 800; color: #0f172a;
+                    display: flex; align-items: center; gap: 0.5rem;
+                    margin-bottom: 1.1rem; text-transform: uppercase; letter-spacing: 0.5px;
+                }
+
+                /* ── Fila de dato ── */
+                .cx-row {
+                    display: flex; justify-content: space-between; align-items: center;
+                    padding: 0.625rem 0; border-bottom: 1px solid #f1f5f9;
+                }
+                .cx-row:last-child { border-bottom: none; }
+                .cx-row-lbl { font-size:0.85rem; font-weight:600; color:#475569; }
+                .cx-row-val { font-size:0.95rem; font-weight:800; color:#0f172a; }
+
+                /* ── Tarjeta de totales sesión ── */
+                .cx-total-card {
+                    background: #fff; border-radius: 1rem;
+                    border: 1.5px solid #e2e8f0; padding: 1.1rem 1.25rem;
+                    cursor: pointer; transition: all 0.22s ease;
+                    display: flex; gap: 0.875rem; align-items: flex-start;
+                    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+                }
+                .cx-total-card:hover {
+                    transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+                    border-color: #cbd5e1;
+                }
+                .cx-total-icon {
+                    width: 42px; height: 42px; border-radius: 0.75rem;
+                    display: flex; align-items: center; justify-content: center;
+                    font-size: 1.25rem; flex-shrink: 0;
+                }
+                .cx-total-lbl { font-size:0.72rem; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:#64748b; }
+                .cx-total-val { font-size:1.3rem; font-weight:900; color:#0f172a; margin-top:0.15rem; }
+                .cx-total-foot { font-size:0.72rem; color:#94a3b8; margin-top:0.25rem; }
+
+                /* ── Barra de pago ── */
+                .cx-pay-bar-wrap { height:6px; background:#e2e8f0; border-radius:99px; overflow:hidden; margin-top:0.5rem; }
+                .cx-pay-bar { height:100%; border-radius:99px; animation: cxBarIn 0.8s ease; }
             </style>
+
+            <!-- ===== HEADER ESTADO CAJA ===== -->
+            <div class="cx-header">
+                <div style="display:flex; align-items:center; gap:1rem;">
+                    <div class="cx-status-dot"></div>
+                    <div>
+                        <div style="display:flex; align-items:center; gap:0.75rem;">
+                            <h1 style="margin:0; color:#0f172a; font-size:1.5rem; font-weight:900;">Control de Caja</h1>
+                            <span style="background:#dcfce7; color:#166534; border:1.5px solid #86efac; font-size:0.78rem; font-weight:800; padding:0.25rem 0.875rem; border-radius:99px;">
+                                Caja #${cashRegister.id} • Abierta
+                            </span>
+                        </div>
+                        <p style="margin:0.3rem 0 0; color:#64748b; font-size:0.83rem;">
+                            Desde ${formatDateTime(cashRegister.openDate)} &nbsp;·&nbsp;
+                            <span style="color:#10b981; font-weight:700;">${durationDisplay}</span>
+                        </p>
+                    </div>
+                </div>
+                <div style="display:flex; gap:0.625rem; flex-wrap:wrap;">
+                    <button onclick="CashView.showAllCashRegistersHistory()"
+                            style="background:#f1f5f9; color:#475569; border:1.5px solid #e2e8f0; padding:0.5rem 1rem; border-radius:0.625rem; font-size:0.8rem; font-weight:700; cursor:pointer; transition:all 0.18s;"
+                            onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">
+                        📚 Historial Cajas
+                    </button>
+                    <button onclick="CashView.showCashHistory(${cashRegister.id})"
+                            style="background:#f1f5f9; color:#475569; border:1.5px solid #e2e8f0; padding:0.5rem 1rem; border-radius:0.625rem; font-size:0.8rem; font-weight:700; cursor:pointer; transition:all 0.18s;"
+                            onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">
+                        📋 Esta Sesión
+                    </button>
+                </div>
+            </div>
+
+            <!-- ===== BOTONES DE ACCIÓN (3 botones, sin Gastos) ===== -->
+            <div class="cx-action-grid">
+
+                <button class="cx-action-btn" onclick="CashView.showAddCashForm()"
+                        style="background:linear-gradient(135deg,#10b981,#059669); color:#fff; box-shadow:0 4px 16px rgba(16,185,129,0.3);"
+                        onmouseover="this.style.boxShadow='0 8px 24px rgba(16,185,129,0.45)'"
+                        onmouseout="this.style.boxShadow='0 4px 16px rgba(16,185,129,0.3)'">
+                    <span class="cx-btn-icon">➕</span>
+                    <span>Agregar Dinero</span>
+                    <small style="opacity:0.8; font-weight:500; font-size:0.72rem;">Entrada de efectivo</small>
+                </button>
+
+                <button class="cx-action-btn" onclick="CashView.showWithdrawCashForm()"
+                        style="background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; box-shadow:0 4px 16px rgba(245,158,11,0.3);"
+                        onmouseover="this.style.boxShadow='0 8px 24px rgba(245,158,11,0.45)'"
+                        onmouseout="this.style.boxShadow='0 4px 16px rgba(245,158,11,0.3)'">
+                    <span class="cx-btn-icon">➖</span>
+                    <span>Retirar Dinero</span>
+                    <small style="opacity:0.8; font-weight:500; font-size:0.72rem;">Salida de efectivo</small>
+                </button>
+
+                <button class="cx-action-btn" onclick="CashView.showCloseCashForm()"
+                        style="background:linear-gradient(135deg,#ef4444,#dc2626); color:#fff; box-shadow:0 4px 16px rgba(239,68,68,0.3);"
+                        onmouseover="this.style.boxShadow='0 8px 24px rgba(239,68,68,0.45)'"
+                        onmouseout="this.style.boxShadow='0 4px 16px rgba(239,68,68,0.3)'">
+                    <span class="cx-btn-icon">🔒</span>
+                    <span>Cerrar Caja</span>
+                    <small style="opacity:0.8; font-weight:500; font-size:0.72rem;">Finalizar turno</small>
+                </button>
+
+            </div>
+
+            <!-- ===== KPIs: VENTAS Y EFECTIVO ===== -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:1rem; margin-bottom:1.5rem;">
+
+                <!-- Ventas del día -->
+                <div class="cx-kpi" style="border-left-color:#4f46e5; cursor:pointer; animation-delay:0s;" onclick="CashView.showVentasHoy()">
+                    <div class="cx-kpi-bg">🛍️</div>
+                    <div class="cx-kpi-lbl" style="color:#4f46e5;">Ventas Hoy</div>
+                    <div class="cx-kpi-val">${formatCLP(totalTodaySales)}</div>
+                    <div class="cx-kpi-sub">${todayDetail.sales.length} ventas · click para ver</div>
+                </div>
+
+                <!-- Deudas del día -->
+                <div class="cx-kpi" style="border-left-color:#ef4444; cursor:pointer; animation-delay:0.06s;" onclick="CashView.showDeudasHoy()">
+                    <div class="cx-kpi-bg">📝</div>
+                    <div class="cx-kpi-lbl" style="color:#ef4444;">Fiados Hoy</div>
+                    <div class="cx-kpi-val" style="color:#dc2626;">${formatCLP(totalTodayDeudas)}</div>
+                    <div class="cx-kpi-sub">${todayDetail.creditSales.length} ventas anotadas</div>
+                </div>
+
+                <!-- Efectivo esperado -->
+                <div class="cx-kpi" style="border-left-color:#10b981; animation-delay:0.10s;">
+                    <div class="cx-kpi-bg">💵</div>
+                    <div class="cx-kpi-lbl" style="color:#10b981;">Efectivo Esperado</div>
+                    <div class="cx-kpi-val" style="color:#059669;">${formatCLP(summary.expectedCash)}</div>
+                    <div class="cx-kpi-sub">Incluye inicial + ingresos</div>
+                </div>
+
+                <!-- Total ventas sesión -->
+                <div class="cx-kpi" style="border-left-color:#f59e0b; cursor:pointer; animation-delay:0.14s;" onclick="CashView.showHistorialVentasSesion()">
+                    <div class="cx-kpi-bg">📈</div>
+                    <div class="cx-kpi-lbl" style="color:#f59e0b;">Total Sesión</div>
+                    <div class="cx-kpi-val">${formatCLP(summary.totalSalesAmount)}</div>
+                    <div class="cx-kpi-sub">${summary.totalSales} tickets · click para ver</div>
+                </div>
+
+            </div>
+
+            <!-- ===== FILA: EFECTIVO DETALLADO + MÉTODOS PAGO ===== -->
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; margin-bottom:1.25rem;">
+
+                <!-- Desglose de efectivo -->
+                <div class="cx-section" style="animation-delay:0.18s; border-left:4px solid #10b981;">
+                    <div class="cx-section-title">💰 Resumen de Efectivo</div>
+                    <div class="cx-row">
+                        <span class="cx-row-lbl">Monto Inicial</span>
+                        <span class="cx-row-val">${formatCLP(summary.initialAmount)}</span>
+                    </div>
+                    <div class="cx-row" style="cursor:pointer;" onclick="CashView.showPaymentMethods()" title="Ver desglose">
+                        <span class="cx-row-lbl">Ingresos Netos (Efectivo)</span>
+                        <span class="cx-row-val" style="color:#059669;">+${formatCLP(summary.cashForDisplay)}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.875rem; padding-top:0.875rem; border-top:2px solid #e2e8f0;">
+                        <span style="font-size:0.9rem; font-weight:800; color:#0f172a;">Efectivo Esperado Real</span>
+                        <span style="font-size:1.8rem; font-weight:900; color:#059669; letter-spacing:-1px;">${formatCLP(summary.expectedCash)}</span>
+                    </div>
+                    <button onclick="CashView.showPaymentMethods()"
+                            style="margin-top:0.875rem; width:100%; padding:0.6rem; background:#ecfdf5; color:#059669; border:1.5px solid #6ee7b7; border-radius:0.625rem; font-weight:700; font-size:0.82rem; cursor:pointer; transition:background 0.18s;"
+                            onmouseover="this.style.background='#d1fae5'" onmouseout="this.style.background='#ecfdf5'">
+                        📊 Ver Todos los Métodos de Pago
+                    </button>
+                </div>
+
+                <!-- Métodos de pago no-efectivo -->
+                <div class="cx-section" style="animation-delay:0.21s; border-left:4px solid #3b82f6;">
+                    <div class="cx-section-title">💳 Métodos de Pago (No Efectivo)</div>
+
+                    ${(() => {
+                        const cardAmt  = summary.paymentSummary?.card  || 0;
+                        const qrAmt   = summary.paymentSummary?.qr    || 0;
+                        const othAmt  = summary.paymentSummary?.other  || 0;
+                        const nonCashTotal = cardAmt + qrAmt + othAmt;
+                        const pctCard = nonCashTotal > 0 ? (cardAmt / nonCashTotal * 100) : 0;
+                        const pctQr   = nonCashTotal > 0 ? (qrAmt   / nonCashTotal * 100) : 0;
+                        const pctOth  = nonCashTotal > 0 ? (othAmt  / nonCashTotal * 100) : 0;
+                        return [
+                            { icon:'💳', lbl:'Tarjeta',      amt:cardAmt, pct:pctCard, color:'#3b82f6' },
+                            { icon:'📱', lbl:'QR / Digital', amt:qrAmt,   pct:pctQr,   color:'#8b5cf6' },
+                            { icon:'🏦', lbl:'Otro/Transf.', amt:othAmt,  pct:pctOth,  color:'#64748b' }
+                        ].map(m => `
+                            <div style="margin-bottom:0.875rem;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem;">
+                                    <span style="font-size:0.83rem; font-weight:700; color:#374151;">${m.icon} ${m.lbl}</span>
+                                    <span style="font-size:0.9rem; font-weight:800; color:${m.color};">${formatCLP(m.amt)}</span>
+                                </div>
+                                <div class="cx-pay-bar-wrap">
+                                    <div class="cx-pay-bar" style="width:${m.pct.toFixed(1)}%; background:${m.color};"></div>
+                                </div>
+                            </div>
+                        `).join('');
+                    })()}
+
+                </div>
+            </div>
+
+            <!-- ===== TOTALES DE SESIÓN ===== -->
+            <div style="font-size:0.88rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:1px; margin-bottom:0.875rem; display:flex; align-items:center; gap:0.5rem; animation: cxFadeUp 0.3s ease both; animation-delay:0.25s;">
+                📈 Totales Acumulados de la Sesión
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:1rem;">
+
+                <div class="cx-total-card" onclick="CashView.showHistorialVentasSesion()">
+                    <div class="cx-total-icon" style="background:#eff6ff;">🛍️</div>
+                    <div style="flex:1;">
+                        <div class="cx-total-lbl">Total Ventas</div>
+                        <div class="cx-total-val">${formatCLP(summary.totalSalesAmount)}</div>
+                        <div class="cx-total-foot">${summary.totalSales} tickets emitidos</div>
+                    </div>
+                </div>
+
+                <div class="cx-total-card" onclick="CashView.showClientesPagaron()">
+                    <div class="cx-total-icon" style="background:#ecfdf5;">💰</div>
+                    <div style="flex:1;">
+                        <div class="cx-total-lbl">Deudas Cobradas</div>
+                        <div class="cx-total-val" style="color:#059669;">${formatCLP(summary.totalDebtPayments)}</div>
+                        <div class="cx-total-foot">${summary.debtPayments.length} abonos recibidos</div>
+                    </div>
+                </div>
+
+                <div class="cx-total-card" onclick="CashView.showAnotadosSesion()">
+                    <div class="cx-total-icon" style="background:#fef2f2;">📝</div>
+                    <div style="flex:1;">
+                        <div class="cx-total-lbl">Total Fiados</div>
+                        <div class="cx-total-val" style="color:#dc2626;">${formatCLP(totalSessionAnotados)}</div>
+                        <div class="cx-total-foot">Ventas anotadas / deuda</div>
+                    </div>
+                </div>
+
+                <div class="cx-total-card" onclick="CashView.showMovimientosManuales()">
+                    <div class="cx-total-icon" style="background:#fffbeb;">🔁</div>
+                    <div style="flex:1;">
+                        <div class="cx-total-lbl">Ingresos y Retiros</div>
+                        <div style="display:flex; gap:0.75rem; margin-top:0.2rem;">
+                            <span style="font-size:1rem; font-weight:800; color:#059669;">+${formatCLP(summary.totalCashIn)}</span>
+                            <span style="font-size:1rem; font-weight:800; color:#dc2626;">-${formatCLP(summary.totalRetiros)}</span>
+                        </div>
+                        <div class="cx-total-foot">Gestión manual de efectivo</div>
+                    </div>
+                </div>
+
+            </div>
         `;
     },
 
@@ -519,33 +585,58 @@ const CashView = {
         const allSales = this._dailyDetail.flatMap(d => d.sales).sort((a, b) => new Date(b.date) - new Date(a.date));
 
         const html = `
-            <div style="margin-bottom: 1rem; padding: 1rem; background: rgba(0,0,0,0.2); border-radius: 0.5rem; display: flex; justify-content: space-between;">
-                <span>Total Acumulado: <strong>${formatCLP(this._activeSummary.totalSalesAmount)}</strong></span>
-                <span>Cantidad: <strong>${allSales.length} ventas</strong></span>
-            </div>
-            <div class="table-container" style="max-height: 500px; overflow-y: auto;">
-                <table>
-                    <thead>
-                        <tr><th>Fecha/Hora</th><th>Nº Venta</th><th>Total</th><th>Pago</th></tr>
-                    </thead>
-                    <tbody>
-                        ${allSales.map(s => `
+            <div style="background: #0f172a; padding: 1.5rem; border-radius: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; background: rgba(30, 41, 59, 0.4); padding: 1.5rem; border-radius: 1.25rem; border: 1px solid rgba(255,255,255,0.05);">
+                    <div>
+                        <h3 style="margin: 0; color: white; size: 1.25rem; font-weight: 800;">🛍️ Todas las Ventas de la Sesión</h3>
+                        <p style="margin: 0.25rem 0 0 0; color: #94a3b8; font-size: 0.85rem;">Listado completo de tickets emitidos</p>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="color: #10b981; font-size: 1.5rem; font-weight: 900;">${formatCLP(this._activeSummary.totalSalesAmount)}</div>
+                        <div style="color: #64748b; font-size: 0.75rem; font-weight: 700; text-transform: uppercase;">Total Acumulado</div>
+                    </div>
+                </div>
+                
+                <div style="max-height: 60vh; overflow-y: auto; padding-right: 0.5rem; scrollbar-width: thin;">
+                    <table class="table" style="width: 100%; border-collapse: separate; border-spacing: 0;">
+                        <thead style="position: sticky; top: 0; background: #1e293b; z-index: 10;">
                             <tr>
-                                <td>${formatDateTime(s.date)}</td>
-                                <td>#${s.saleNumber}</td>
-                                <td><strong>${formatCLP(s.total)}</strong></td>
-                                <td>${this.getPaymentMethodName(s.paymentMethod)}</td>
+                                <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800;">Fecha / Hora</th>
+                                <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800;">Nº Ticket</th>
+                                <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800;">Método</th>
+                                <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; text-align: right;">Total</th>
+                                <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; text-align: center;">Acción</th>
                             </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            ${allSales.map(s => `
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                    <td style="padding: 1rem; color: #f1f5f9;">
+                                        <div style="font-weight: 700;">${formatDateTime(s.date).split(' ')[1]}</div>
+                                        <div style="font-size: 0.75rem; color: #64748b;">${formatDateTime(s.date).split(' ')[0]}</div>
+                                    </td>
+                                    <td style="padding: 1rem; color: #f1f5f9; font-weight: 800;">#${s.saleNumber}</td>
+                                    <td style="padding: 1rem;">
+                                        <span style="background: rgba(255,255,255,0.05); color: #94a3b8; padding: 0.3rem 0.6rem; border-radius: 0.5rem; font-size: 0.75rem; font-weight: 700;">${this.getPaymentMethodName(s.paymentMethod)}</span>
+                                    </td>
+                                    <td style="padding: 1rem; text-align: right; color: #10b981; font-weight: 900; font-size: 1.1rem;">${formatCLP(s.total)}</td>
+                                    <td style="padding: 1rem; text-align: center;">
+                                        <button class="btn" style="background: rgba(99, 102, 241, 0.1); color: #818cf8; padding: 0.4rem 0.8rem; border-radius: 0.6rem; font-size: 0.75rem; font-weight: 800;" onclick="CashView.showSaleDetail(${s.id})">🔍 Detalle</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         `;
-        showModal(html, { title: 'Historial de Ventas - Esta Sesión', width: '750px' });
+        showModal(html, { title: '', footer: `<button class="btn" style="background: #1e293b; color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); padding: 0.75rem 2rem; border-radius: 0.75rem;" onclick="closeModal()">Cerrar</button>`, width: '850px' });
     },
 
     showClientesPagaron() {
-        const allPayments = this._dailyDetail.flatMap(d => d.debtPayments).sort((a, b) => new Date(b.date) - new Date(a.date));
+        const allPayments = this._dailyDetail.flatMap(d => d.debtPayments)
+            .filter(p => (p.paymentMethod || 'cash') !== 'discount')
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
         if (allPayments.length === 0) {
             showNotification('No hay abonos de deuda en esta sesión', 'info');
             return;
@@ -637,7 +728,7 @@ const CashView = {
                                     <td style="color: ${isIn ? '#34d399' : '#f87171'}; font-weight: 700;">
                                         ${isIn ? '+' : '-'}${formatCLP(m.amount)}
                                     </td>
-                                    <td style="font-size: 0.9rem; opacity: 0.8;">${m.reason}</td>
+                                    <td style="font-size: 0.9rem; opacity: 0.8;">${m.description || m.reason || '-'}</td>
                                 </tr>
                             `;
         }).join('')}
@@ -795,7 +886,7 @@ const CashView = {
                             <table style="font-size: 0.9rem;">
                                 <thead><tr><th>Monto</th><th>Motivo</th><th>Fecha y hora</th></tr></thead>
                                 <tbody>
-                                    ${day.cashMovementsOut.map(m => `<tr><td><strong style="color: var(--warning);">-${formatCLP(m.amount)}</strong></td><td>${m.reason}</td><td>${formatDateTime(m.date)}</td></tr>`).join('')}
+                                    ${day.cashMovementsOut.map(m => `<tr><td><strong style="color: var(--warning);">-${formatCLP(m.amount)}</strong></td><td>${m.description || m.reason || '-'}</td><td>${formatDateTime(m.date)}</td></tr>`).join('')}
                                 </tbody>
                             </table>
                         </div>
@@ -808,7 +899,7 @@ const CashView = {
                             <table style="font-size: 0.9rem;">
                                 <thead><tr><th>Monto</th><th>Motivo</th><th>Fecha y hora</th></tr></thead>
                                 <tbody>
-                                    ${day.cashMovementsIn.map(m => `<tr><td><strong style="color: var(--success);">+${formatCLP(m.amount)}</strong></td><td>${m.reason}</td><td>${formatDateTime(m.date)}</td></tr>`).join('')}
+                                    ${day.cashMovementsIn.map(m => `<tr><td><strong style="color: var(--success);">+${formatCLP(m.amount)}</strong></td><td>${m.description || m.reason || '-'}</td><td>${formatDateTime(m.date)}</td></tr>`).join('')}
                                 </tbody>
                             </table>
                         </div>
@@ -865,56 +956,44 @@ const CashView = {
     },
 
     renderCashHistory(history) {
+        if (history.length === 0) return '<div class="empty-state">No hay registros de caja previos</div>';
+
         return `
-            <div class="table-container">
-                <table>
-                    <thead>
+            <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 1.5rem; overflow: hidden; margin-top: 1rem;">
+                <table class="table-modern" style="width: 100%; border-collapse: separate; border-spacing: 0;">
+                    <thead style="background: rgba(15, 23, 42, 0.6);">
                         <tr>
-                            <th>Apertura</th>
-                            <th>Cierre</th>
-                            <th>Duración</th>
-                            <th>Inicial</th>
-                            <th>Ventas</th>
-                            <th>Final</th>
-                            <th>Esperado</th>
-                            <th>Diferencia</th>
-                            <th>Estado</th>
-                            <th>Acciones</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px;">📅 Fecha / Apertura</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px;">🔒 Cierre</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px;">💰 Inicial</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; text-align: center;">Ventas</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; text-align: center;">Estado</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; text-align: right;">Acción</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${history.map(c => {
-            let duration = '-';
-            if (c.closeDate) {
-                const diffMs = new Date(c.closeDate) - new Date(c.openDate);
-                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                const diffHrs = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                duration = `${diffDays > 0 ? diffDays + 'd ' : ''}${diffHrs}h`;
-            }
-
-            return `
-                            <tr>
-                                <td>${formatDateTime(c.openDate)}</td>
-                                <td>${c.closeDate ? formatDateTime(c.closeDate) : '-'}</td>
-                                <td>${duration}</td>
-                                <td>${formatCLP(c.initialAmount)}</td>
-                                <td>${c.paymentSummary ? formatCLP(Object.values(c.paymentSummary).reduce((a, b) => a + b, 0)) : '-'}</td>
-                                <td>${c.finalAmount ? formatCLP(c.finalAmount) : '-'}</td>
-                                <td>${c.expectedAmount ? formatCLP(c.expectedAmount) : '-'}</td>
-                                <td>
-                                    ${c.difference !== 0 ? `
-                                        <span class="badge ${c.difference > 0 ? 'badge-success' : 'badge-danger'}">
-                                            ${formatCLP(c.difference)}
-                                        </span>
-                                    ` : '-'}
+                        ${history.slice(0, 10).map(c => {
+                            const totalVentas = c.paymentSummary ? Object.values(c.paymentSummary).reduce((a, b) => a + b, 0) : 0;
+                            return `
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.03); transition: background 0.2s;">
+                                <td style="padding: 1rem; color: #f1f5f9;">
+                                    <div style="font-weight: 700;">${formatDateTime(c.openDate).split(' ')[0]}</div>
+                                    <div style="font-size: 0.75rem; color: #64748b;">Turno #${c.id}</div>
                                 </td>
-                                <td>
-                                    <span class="badge ${c.status === 'open' ? 'badge-success' : 'badge-info'}">
-                                        ${c.status === 'open' ? 'Abierta' : 'Cerrada'}
+                                <td style="padding: 1rem; color: #94a3b8; font-size: 0.85rem;">
+                                    ${c.closeDate ? formatDateTime(c.closeDate).split(' ')[1] : '<span style="color: #10b981;">Abierta</span>'}
+                                </td>
+                                <td style="padding: 1rem; color: #f1f5f9; font-weight: 600;">${formatCLP(c.initialAmount)}</td>
+                                <td style="padding: 1rem; text-align: center;">
+                                    <div style="color: #10b981; font-weight: 800;">${totalVentas > 0 ? '+' : ''}${formatCLP(totalVentas)}</div>
+                                </td>
+                                <td style="padding: 1rem; text-align: center;">
+                                    <span class="badge ${c.status === 'open' ? 'badge-success' : 'badge-info'}" style="padding: 0.25rem 0.75rem; border-radius: 2rem; font-size: 0.7rem;">
+                                        ${c.status === 'open' ? 'Activa' : 'Cerrada'}
                                     </span>
                                 </td>
-                                <td>
-                                    <button class="btn btn-sm btn-info" onclick="CashView.showCashHistory(${c.id})" title="Ver historial completo">
+                                <td style="padding: 1rem; text-align: right;">
+                                    <button class="btn btn-sm" onclick="CashView.showCashHistory('${c.id}')" style="background: rgba(99, 102, 241, 0.1); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.2); font-weight: 800; border-radius: 0.5rem; padding: 0.4rem 0.8rem;">
                                         📋 Historial
                                     </button>
                                 </td>
@@ -936,7 +1015,6 @@ const CashView = {
         // Obtener todos los datos relacionados con la caja
         const sales = await Sale.getByCashRegister(cashRegisterId);
         const payments = await Payment.getByCashRegister(cashRegisterId);
-        const expenses = await Expense.getByCashRegister(cashRegisterId);
         const cashMovements = await CashMovement.getByCashRegister(cashRegisterId);
 
         // Crear lista de eventos cronológica
@@ -946,10 +1024,10 @@ const CashView = {
         events.push({
             type: 'open',
             date: cashRegister.openDate,
-            amount: cashRegister.initialAmount,
+            amount: 0,
             description: 'Apertura de caja',
             icon: '🔓',
-            color: 'var(--success)'
+            color: '#10b981'
         });
 
         // 2. Ventas
@@ -958,10 +1036,11 @@ const CashView = {
                 type: 'sale',
                 date: sale.date,
                 amount: sale.total,
+                saleNumber: sale.saleNumber,
                 description: `Venta #${sale.saleNumber}`,
                 details: `${sale.items.length} items - ${this.getPaymentMethodName(sale.paymentMethod)}`,
                 icon: '💰',
-                color: 'var(--primary)',
+                color: '#6366f1',
                 saleId: sale.id
             });
         });
@@ -985,186 +1064,234 @@ const CashView = {
                 description: `Pago de deuda - ${customerName}`,
                 details: `${this.getPaymentMethodName(payment.paymentMethod)}${payment.notes ? ' - ' + payment.notes : ''}`,
                 icon: '💵',
-                color: 'var(--success)',
+                color: '#10b981',
                 paymentId: payment.id
             });
         }
 
-        // 4. Gastos
-        expenses.forEach(expense => {
-            events.push({
-                type: 'expense',
-                date: expense.date,
-                amount: -expense.amount, // Negativo porque es salida
-                description: expense.description || 'Gasto',
-                details: `Categoría: ${expense.category || 'General'}`,
-                icon: '📤',
-                color: 'var(--danger)',
-                expenseId: expense.id
-            });
-        });
-
-        // 5. Movimientos de caja manuales
+        // 5. Movimientos manuales
         cashMovements.forEach(movement => {
-            // Solo mostrar movimientos manuales (sin saleId, paymentId, expenseId)
             if (!movement.saleId && !movement.paymentId && !movement.expenseId) {
                 events.push({
                     type: movement.type === 'in' ? 'cash_in' : 'cash_out',
                     date: movement.date,
                     amount: movement.type === 'in' ? movement.amount : -movement.amount,
-                    description: movement.reason || (movement.type === 'in' ? 'Entrada de dinero' : 'Salida de dinero'),
+                    description: movement.description || movement.reason || (movement.type === 'in' ? 'Entrada de dinero' : 'Salida de dinero'),
                     details: movement.type === 'in' ? 'Agregado a caja' : 'Retirado de caja',
                     icon: movement.type === 'in' ? '➕' : '➖',
-                    color: movement.type === 'in' ? 'var(--success)' : 'var(--warning)',
+                    color: movement.type === 'in' ? '#10b981' : '#f59e0b',
                     movementId: movement.id
                 });
             }
         });
 
-        // 6. Cierre de caja (si está cerrada)
+        // 6. Cierre
         if (cashRegister.closeDate) {
             events.push({
                 type: 'close',
                 date: cashRegister.closeDate,
-                amount: cashRegister.finalAmount,
+                amount: 0,
                 description: 'Cierre de caja',
-                details: `Esperado: ${formatCLP(cashRegister.expectedAmount)} | Diferencia: ${formatCLP(cashRegister.difference)}`,
+                details: `Esperado: ${formatCLP(cashRegister.expectedAmount)} | Diferencia: ${formatCLP(cashRegister.difference || 0)}`,
                 icon: '🔒',
-                color: 'var(--info)'
+                color: '#94a3b8'
             });
         }
 
-        // Ordenar eventos por fecha (más antiguos primero)
-        events.sort((a, b) => new Date(a.date) - new Date(b.date));
+        // Ordenar: Apertura -> Otros eventos por hora -> Cierre (si existe)
+        events.sort((a, b) => {
+            if (a.type === 'open') return -1;
+            if (b.type === 'open') return 1;
+            if (a.type === 'close') return 1;
+            if (b.type === 'close') return -1;
+            return new Date(a.date) - new Date(b.date);
+        });
 
-        // Calcular balance acumulado
         let runningBalance = cashRegister.initialAmount;
         events.forEach(event => {
             event.balanceBefore = runningBalance;
-            runningBalance += event.amount;
+            if (event.type !== 'open' && event.type !== 'close') {
+                runningBalance += event.amount;
+            }
             event.balanceAfter = runningBalance;
         });
 
-        // Generar HTML del historial (fondo oscuro y texto claro para buena legibilidad)
-        const content = `
-            <div style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(0,0,0,0.35); border-left: 4px solid var(--primary); border-radius: 0.5rem;">
-                <h3 style="margin: 0 0 0.5rem 0; color: #e2e8f0;">Caja #${cashRegister.id}</h3>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.9rem; color: #cbd5e1;">
-                    <div>
-                        <strong style="color: #f1f5f9;">Apertura:</strong> ${formatDateTime(cashRegister.openDate)}
-                    </div>
-                    <div>
-                        <strong style="color: #f1f5f9;">Estado:</strong> 
-                        <span class="badge ${cashRegister.status === 'open' ? 'badge-success' : 'badge-info'}">
-                            ${cashRegister.status === 'open' ? 'Abierta' : 'Cerrada'}
-                        </span>
-                    </div>
-                    ${cashRegister.closeDate ? `
-                        <div>
-                            <strong style="color: #f1f5f9;">Cierre:</strong> ${formatDateTime(cashRegister.closeDate)}
-                        </div>
-                    ` : ''}
-                    <div>
-                        <strong style="color: #f1f5f9;">Total Eventos:</strong> ${events.length}
-                    </div>
-                </div>
-            </div>
+        const eventsHTML = events.map((event, idx) => {
+            const styles = this.getEventStyles(event.type);
+            const isLast = idx === events.length - 1;
             
-            <div style="max-height: 600px; overflow-y: auto;">
-                <div style="position: relative; padding-left: 2rem;">
-                    <div style="position: absolute; left: 0.75rem; top: 0; bottom: 0; width: 2px; background: rgba(255,255,255,0.2);"></div>
-                    
-                    ${events.map((event, index) => {
-            const isPositive = event.amount >= 0;
-            const amountColor = isPositive ? '#22c55e' : '#ef4444';
-            const amountSign = isPositive ? '+' : '';
+            let amountHTML = '';
+            if (event.amount !== 0 || event.type === 'sale') {
+                const isNegative = event.amount < 0 || event.type === 'expense' || event.type === 'cash_out';
+                const color = isNegative ? '#f87171' : '#34d399';
+                const prefix = isNegative ? '' : '+';
+                amountHTML = `<div style="font-weight: 800; color: ${color}; font-size: 1.2rem; font-family: 'JetBrains Mono', monospace;">${prefix}${formatCLP(event.amount)}</div>`;
+            }
+
+            let detailButton = '';
+            if (event.type === 'sale' && event.saleId) {
+                detailButton = `<button class="btn" onclick="CashView.showSaleDetail(${event.saleId})" style="margin-top: 0.75rem; padding: 0.5rem 1rem; font-size: 0.75rem; border-radius: 0.75rem; background: rgba(99, 102, 241, 0.1); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.2); font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;"><span>🔍</span> Ver Detalle Venta</button>`;
+            }
 
             return `
-                            <div style="position: relative; margin-bottom: 1.5rem; padding-left: 1rem;">
-                                <div style="position: absolute; left: -1.5rem; top: 0.5rem; width: 1rem; height: 1rem; border-radius: 50%; background: ${event.color}; border: 2px solid rgba(0,0,0,0.4); box-shadow: 0 0 0 2px ${event.color};"></div>
-                                
-                                <div style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.1); border-radius: 0.5rem; padding: 1rem;">
-                                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.5rem;">
-                                        <div style="flex: 1;">
-                                            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
-                                                <span style="font-size: 1.2rem;">${event.icon}</span>
-                                                <strong style="font-size: 1rem; color: #f1f5f9;">${event.description}</strong>
-                                            </div>
-                                            <div style="font-size: 0.85rem; color: #94a3b8; margin-left: 1.75rem;">
-                                                ${formatDateTime(event.date)}
-                                            </div>
-                                            ${event.details ? `
-                                                <div style="font-size: 0.85rem; color: #94a3b8; margin-left: 1.75rem; margin-top: 0.25rem;">
-                                                    ${event.details}
-                                                </div>
-                                            ` : ''}
-                                        </div>
-                                        <div style="text-align: right;">
-                                            <div style="font-size: 1.1rem; font-weight: 700; color: ${amountColor};">
-                                                ${amountSign}${formatCLP(Math.abs(event.amount))}
-                                            </div>
-                                            <div style="font-size: 0.85rem; color: #94a3b8; margin-top: 0.25rem;">
-                                                Balance: ${formatCLP(event.balanceAfter)}
-                                            </div>
-                                        </div>
-                                    </div>
+                <div style="display: flex; gap: 1.5rem; position: relative; padding-bottom: ${isLast ? '0' : '2rem'};">
+                    ${!isLast ? `<div style="position: absolute; left: 24px; top: 48px; bottom: 0; width: 2px; background: rgba(255,255,255,0.05);"></div>` : ''}
+                    
+                    <div style="width: 50px; height: 50px; border-radius: 50%; background: ${styles.bgColor}; color: ${styles.color}; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0; box-shadow: 0 0 15px ${styles.bgColor}; z-index: 1;">
+                        ${styles.icon}
+                    </div>
+
+                    <div style="flex: 1; background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 1.25rem; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
+                                    <span style="font-weight: 800; color: #f8fafc; font-size: 1.1rem;">${event.description}</span>
+                                    ${event.saleNumber ? `<span style="background: rgba(99, 102, 241, 0.1); color: #818cf8; padding: 0.2rem 0.5rem; border-radius: 0.4rem; font-size: 0.7rem; font-weight: 800;">#${event.saleNumber}</span>` : ''}
                                 </div>
+                                <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.5rem;">${event.details || ''}</div>
+                                <div style="display: flex; align-items: center; gap: 1rem;">
+                                    <span style="font-size: 0.75rem; color: #64748b; font-weight: 600; background: rgba(0,0,0,0.2); padding: 0.25rem 0.6rem; border-radius: 1rem;">⏰ ${formatDateTime(event.date).split(' ')[1]}</span>
+                                    <span style="font-size: 0.75rem; color: #64748b; font-weight: 600;">Balance: <strong style="color: #94a3b8;">${formatCLP(event.balanceAfter)}</strong></span>
+                                </div>
+                                ${detailButton}
                             </div>
-                        `;
-        }).join('')}
-                </div>
-            </div>
-            
-            <div style="margin-top: 1.5rem; padding: 1rem; background: rgba(0,0,0,0.35); border-radius: 0.5rem;">
-                <h4 style="margin-bottom: 0.75rem; color: #f1f5f9;">📊 Resumen</h4>
-                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; color: #cbd5e1;">
-                    <div>
-                        <strong style="color: #f1f5f9;">Monto Inicial:</strong> ${formatCLP(cashRegister.initialAmount)}
-                    </div>
-                    <div>
-                        <strong style="color: #f1f5f9;">Total Ventas:</strong> ${formatCLP(sales.reduce((sum, s) => sum + s.total, 0))}
-                    </div>
-                    <div>
-                        <strong style="color: #f1f5f9;">Total Pagos:</strong> ${formatCLP(payments.reduce((sum, p) => sum + p.amount, 0))}
-                    </div>
-                    <div>
-                        <strong style="color: #f1f5f9;">Total Gastos:</strong> ${formatCLP(expenses.reduce((sum, e) => sum + e.amount, 0))}
-                    </div>
-                    ${cashRegister.status === 'closed' ? `
-                        <div>
-                            <strong style="color: #f1f5f9;">Monto Final:</strong> ${formatCLP(cashRegister.finalAmount)}
+                            <div style="text-align: right;">
+                                ${amountHTML}
+                                <div style="font-size: 0.65rem; color: #64748b; margin-top: 0.4rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 800; background: rgba(255,255,255,0.03); padding: 0.2rem 0.5rem; border-radius: 0.4rem; display: inline-block;">${styles.label}</div>
+                            </div>
                         </div>
-                        <div>
-                            <strong style="color: #f1f5f9;">Efectivo Esperado:</strong> ${formatCLP(cashRegister.expectedAmount)}
-                        </div>
-                        <div>
-                            <strong style="color: #f1f5f9;">Diferencia:</strong> 
-                            <span style="color: ${cashRegister.difference >= 0 ? '#22c55e' : '#ef4444'};">
-                                ${formatCLP(cashRegister.difference)}
+                    </div>
+                </div>`;
+        }).join('');
+
+        const content = `
+            <div style="padding: 1rem; background: #0f172a; border-radius: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3rem; padding: 2.5rem; background: linear-gradient(135deg, #1e293b, #0f172a); border-radius: 1.5rem; border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                    <div>
+                        <div style="color: #6366f1; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; font-size: 0.8rem; margin-bottom: 0.5rem;">Resumen de Transacciones</div>
+                        <h2 style="margin: 0; font-size: 2.2rem; font-weight: 900; color: white;">Sesión de Caja #${cashRegister.id}</h2>
+                        <div style="display: flex; align-items: center; gap: 1.5rem; margin-top: 1rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: #94a3b8; font-size: 0.95rem;">
+                                <span style="font-size: 1.2rem;">📅</span> <span>${formatDateTime(cashRegister.openDate).split(' ')[0]}</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: #94a3b8; font-size: 0.95rem;">
+                                <span style="font-size: 1.2rem;">👤</span> <span>${cashRegister.username || 'Admin'}</span>
+                            </div>
+                            <span class="badge ${cashRegister.status === 'open' ? 'badge-success' : 'badge-secondary'}" style="padding: 0.5rem 1rem; border-radius: 2rem; font-weight: 800;">
+                                ${cashRegister.status === 'open' ? '🟢 CAJA ABIERTA' : '🔴 CAJA CERRADA'}
                             </span>
                         </div>
-                    ` : `
-                        <div>
-                            <strong style="color: #f1f5f9;">Balance Actual:</strong> 
-                            <span style="color: #38bdf8; font-weight: 700;">
-                                ${formatCLP(events[events.length - 1]?.balanceAfter || cashRegister.initialAmount)}
-                            </span>
-                        </div>
-                    `}
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 0.8rem; color: #64748b; font-weight: 800; text-transform: uppercase; margin-bottom: 0.5rem;">Balance Final Estimado</div>
+                        <div style="font-size: 2.8rem; font-weight: 950; color: #6366f1; text-shadow: 0 0 20px rgba(99, 102, 241, 0.3); line-height: 1;">${formatCLP(runningBalance)}</div>
+                    </div>
                 </div>
-            </div>
-        `;
 
-        const footer = `
-            <button class="btn btn-primary" onclick="closeModal()">Cerrar</button>
-        `;
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-bottom: 3rem;">
+                    <div style="background: rgba(30, 41, 59, 0.4); padding: 1.5rem; border-radius: 1.25rem; border: 1px solid rgba(255,255,255,0.05); text-align: center;">
+                        <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 800; text-transform: uppercase; margin-bottom: 0.75rem;">💰 Fondo Inicial</div>
+                        <div style="font-size: 1.35rem; font-weight: 900; color: #f1f5f9;">${formatCLP(cashRegister.initialAmount)}</div>
+                    </div>
+                    <div style="background: rgba(16, 185, 129, 0.05); padding: 1.5rem; border-radius: 1.25rem; border: 1px solid rgba(16, 185, 129, 0.1); text-align: center;">
+                        <div style="font-size: 0.75rem; color: #10b981; font-weight: 800; text-transform: uppercase; margin-bottom: 0.75rem;">📈 Total Ventas</div>
+                        <div style="font-size: 1.35rem; font-weight: 900; color: #10b981;">+${formatCLP(sales.reduce((s, e) => s + e.total, 0))}</div>
+                    </div>
+                    <div style="background: rgba(239, 68, 68, 0.05); padding: 1.5rem; border-radius: 1.25rem; border: 1px solid rgba(239, 68, 68, 0.1); text-align: center;">
+                        <div style="font-size: 0.75rem; color: #f87171; font-weight: 800; text-transform: uppercase; margin-bottom: 0.75rem;">📉 Salidas de Efectivo</div>
+                        <div style="font-size: 1.35rem; font-weight: 900; color: #f87171;">-${formatCLP(events.filter(e => e.type === 'cash_out').reduce((s, e) => s + Math.abs(e.amount), 0))}</div>
+                    </div>
+                    <div style="background: rgba(99, 102, 241, 0.05); padding: 1.5rem; border-radius: 1.25rem; border: 1px solid rgba(99, 102, 241, 0.1); text-align: center;">
+                        <div style="font-size: 0.75rem; color: #818cf8; font-weight: 800; text-transform: uppercase; margin-bottom: 0.75rem;">🔄 Operaciones</div>
+                        <div style="font-size: 1.35rem; font-weight: 900; color: #818cf8;">${events.length} Transacc.</div>
+                    </div>
+                </div>
 
-        showModal(content, {
-            title: `Historial Completo de Caja #${cashRegister.id}`,
-            footer,
-            width: '900px'
-        });
+                <div style="padding: 0 1rem;">
+                    <h3 style="color: #64748b; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; font-weight: 800; margin-bottom: 2rem; display: flex; align-items: center; gap: 0.75rem;">
+                        <span style="height: 1px; flex: 1; background: rgba(255,255,255,0.05);"></span>
+                        Línea de Tiempo de Operaciones
+                        <span style="height: 1px; flex: 1; background: rgba(255,255,255,0.05);"></span>
+                    </h3>
+                    <div style="max-height: 60vh; overflow-y: auto; padding: 0 1rem 2rem 0; scrollbar-width: thin; scrollbar-color: rgba(99, 102, 241, 0.3) transparent;">
+                        ${eventsHTML}
+                    </div>
+                </div>
+            </div>`;
+
+        showModal(content, { title: '', footer: `<button class="btn" style="background: #1e293b; color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); padding: 0.75rem 2rem; border-radius: 0.75rem; font-weight: 700;" onclick="closeModal()">Cerrar Historial</button>`, width: '900px' });
     },
+
+    getEventStyles(type) {
+        const styles = {
+            open: { icon: '🔓', color: '#10b981', bgColor: 'rgba(16, 185, 129, 0.1)', label: 'Apertura' },
+            sale: { icon: '💰', color: '#6366f1', bgColor: 'rgba(99, 102, 241, 0.1)', label: 'Venta' },
+            payment: { icon: '💳', color: '#10b981', bgColor: 'rgba(16, 185, 129, 0.1)', label: 'Pago Deuda' },
+            expense: { icon: '💸', color: '#f43f5e', bgColor: 'rgba(244, 63, 94, 0.1)', label: 'Gasto' },
+            cash_in: { icon: '📥', color: '#10b981', bgColor: 'rgba(16, 185, 129, 0.1)', label: 'Ingreso Manual' },
+            cash_out: { icon: '📤', color: '#f59e0b', bgColor: 'rgba(245, 158, 11, 0.1)', label: 'Retiro Manual' },
+            close: { icon: '🔒', color: '#64748b', bgColor: 'rgba(100, 116, 139, 0.1)', label: 'Cierre' }
+        };
+        return styles[type] || { icon: '📝', color: '#94a3b8', bgColor: 'rgba(148, 163, 184, 0.1)', label: 'Evento' };
+    },
+
+    async showSaleDetail(saleId) {
+        try {
+            const sale = await Sale.getById(saleId);
+            if (!sale) throw new Error('Venta no encontrada');
+            let items = sale.items;
+            if (typeof items === 'string') items = JSON.parse(items);
+            const content = `
+                <div style="padding: 0.5rem; color: #f1f5f9;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem;">
+                        <div>
+                            <h2 style="margin: 0; font-weight: 900; font-size: 1.5rem;">Detalle de Venta #${sale.saleNumber || sale.id}</h2>
+                            <p style="color: #94a3b8; margin: 0.25rem 0 0 0;">${formatDateTime(sale.date)}</p>
+                        </div>
+                        <div style="text-align: right;">
+                            <span class="badge ${sale.status === 'completed' ? 'badge-success' : 'badge-warning'}" style="padding: 0.5rem 1rem; border-radius: 2rem; font-size: 0.8rem;">${sale.status === 'completed' ? 'PAGADA' : 'PENDIENTE'}</span>
+                            <div style="margin-top: 0.5rem; color: #94a3b8; font-size: 0.85rem;">Método: <strong>${this.getPaymentMethodName(sale.paymentMethod)}</strong></div>
+                        </div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.02); border-radius: 1rem; border: 1px solid rgba(255,255,255,0.05); overflow: hidden; margin-bottom: 2rem;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: rgba(255,255,255,0.03); text-align: left;">
+                                    <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase;">Producto</th>
+                                    <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; text-align: center;">Cant.</th>
+                                    <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; text-align: right;">Precio</th>
+                                    <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; text-align: right;">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map(item => `
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                        <td style="padding: 1rem;"><div style="font-weight: 700;">${item.name}</div><small style="opacity: 0.5;">SKU: ${item.sku || 'N/A'}</small></td>
+                                        <td style="padding: 1rem; text-align: center;">${item.quantity} ${item.type === 'weight' ? 'kg' : 'un'}</td>
+                                        <td style="padding: 1rem; text-align: right;">${formatCLP(item.price)}</td>
+                                        <td style="padding: 1rem; text-align: right; font-weight: 800;">${formatCLP(item.total)}</td>
+                                    </tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end;">
+                        <div style="background: rgba(99, 102, 241, 0.1); padding: 1.5rem; border-radius: 1rem; border: 1px solid rgba(99, 102, 241, 0.2); min-width: 250px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; color: #94a3b8;"><span>Subtotal:</span><span>${formatCLP(sale.total)}</span></div>
+                            <div style="display: flex; justify-content: space-between; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.1);"><strong style="font-size: 1.25rem;">Total Venta:</strong><strong style="color: #6366f1; font-size: 1.5rem;">${formatCLP(sale.total)}</strong></div>
+                        </div>
+                    </div>
+                </div>`;
+            showModal(content, {
+                title: 'Detalle de Venta',
+                width: '750px',
+                footer: `<button class="btn btn-primary" onclick="closeModal()">Cerrar Detalle</button>`
+            });
+        } catch (error) {
+            console.error('Error al cargar detalle de venta:', error);
+            showNotification('Error al cargar el detalle: ' + error.message, 'error');
+        }
+    },
+
 
     getPaymentMethodName(method) {
         const names = {
@@ -1172,7 +1299,9 @@ const CashView = {
             card: 'Tarjeta',
             qr: 'QR',
             other: 'Otro',
-            pending: 'Anotado'
+            pending: 'Anotado',
+            debt: 'Anotado',
+            creditBalance: 'Saldo Favor'
         };
         return names[method] || method;
     },
@@ -1378,79 +1507,63 @@ const CashView = {
             const openDate = new Date(register.openDate);
             const closeDate = register.closeDate ? new Date(register.closeDate) : null;
             let duration = '-';
-            if (closeDate) {
+            if (closeDate && !isNaN(openDate.getTime()) && !isNaN(closeDate.getTime())) {
                 const diffMs = closeDate - openDate;
-                const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-                const diffHrs = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-                duration = diffDays > 0
-                    ? `${diffDays}d ${diffHrs}h ${diffMins}m`
-                    : `${diffHrs}h ${diffMins}m`;
+                const hrs = Math.floor(diffMs / (1000 * 60 * 60));
+                const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                duration = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
             }
 
-            const totalPayments = register.paymentSummary
-                ? Object.values(register.paymentSummary).reduce((sum, val) => sum + (parseFloat(val) || 0), 0)
-                : 0;
+            const totalVentas = register.paymentSummary ? Object.values(register.paymentSummary).reduce((a, b) => a + b, 0) : 0;
+            const diff = register.difference || 0;
+            const diffColor = diff === 0 ? '#10b981' : (diff > 0 ? '#f59e0b' : '#ef4444');
 
             return `
-                <div class="cash-history-entry">
-                    <div class="cash-history-entry-header ${register.status === 'open' ? 'cash-history-entry-open' : 'cash-history-entry-closed'}">
-                        <div>
-                            <h4>Caja #${register.id}</h4>
-                            <p><strong>Apertura:</strong> ${formatDateTime(register.openDate)}</p>
-                            ${closeDate ? `<p><strong>Cierre:</strong> ${formatDateTime(closeDate)}</p>` : ''}
+                <div class="cash-history-entry" style="background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 1.25rem; padding: 1.5rem; margin-bottom: 1rem; display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr 1.2fr; align-items: center; gap: 1.5rem; transition: transform 0.2s, background 0.2s;">
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(99, 102, 241, 0.1); color: #818cf8; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; font-weight: 900;">
+                            #${register.id}
                         </div>
-                        <div class="cash-history-entry-status">
-                            <span class="badge ${register.status === 'open' ? 'badge-success' : 'badge-info'}">
-                                ${register.status === 'open' ? '🔓 Abierta' : '🔒 Cerrada'}
-                            </span>
-                            ${duration !== '-' ? `<small class="cash-history-entry-duration">Duración: ${duration}</small>` : ''}
+                        <div>
+                            <div style="color: #f1f5f9; font-weight: 700; font-size: 1rem;">
+                                ${formatDateTime(register.openDate).split(' ')[0] || 'Sin fecha'}
+                            </div>
+                            <div style="color: #64748b; font-size: 0.8rem; margin-top: 0.15rem;">
+                                ${formatDateTime(register.openDate).split(' ')[1] || ''} - 
+                                ${register.closeDate ? (formatDateTime(register.closeDate).split(' ')[1] || 'Sin hora') : 'En curso'}
+                            </div>
                         </div>
                     </div>
-                    <div class="cash-history-entry-body">
-                        <div class="cash-history-entry-grid">
-                            <div>
-                                <span>Monto Inicial</span>
-                                <strong>${formatCLP(register.initialAmount)}</strong>
-                            </div>
-                            <div>
-                                <span>Total Recibido</span>
-                                <strong>${formatCLP(totalPayments)}</strong>
-                            </div>
-                            ${register.status === 'closed' ? `
-                                <div>
-                                    <span>Monto Final</span>
-                                    <strong>${formatCLP(register.finalAmount || 0)}</strong>
-                                </div>
-                                <div>
-                                    <span>Diferencia</span>
-                                    <strong class="${register.difference >= 0 ? 'text-success' : 'text-danger'}">
-                                        ${formatCLP(register.difference || 0)}
-                                    </strong>
-                                </div>
-                            ` : ''}
+
+                    <div>
+                        <div style="font-size: 0.7rem; color: #64748b; text-transform: uppercase; font-weight: 800; margin-bottom: 0.4rem;">Ventas Session</div>
+                        <div style="font-weight: 800; color: #10b981; font-size: 1.1rem;">${formatCLP(totalVentas)}</div>
+                    </div>
+
+                    <div>
+                        <div style="font-size: 0.7rem; color: #64748b; text-transform: uppercase; font-weight: 800; margin-bottom: 0.4rem;">Final / Esperado</div>
+                        <div style="color: #e2e8f0; font-weight: 600; font-size: 0.95rem;">
+                            ${register.finalAmount ? formatCLP(register.finalAmount) : 'En curso'} 
+                            <span style="color: #475569; font-size: 0.8rem;">/ ${formatCLP(register.expectedAmount || 0)}</span>
                         </div>
-                        ${register.paymentSummary ? `
-                            <div class="cash-history-entry-payments">
-                                <span>Resumen por método de pago:</span>
-                                <div class="cash-history-entry-payments-grid">
-                                    ${register.paymentSummary.cash > 0 ? `<span>💵 Efectivo: <strong>${formatCLP(register.paymentSummary.cash)}</strong></span>` : ''}
-                                    ${register.paymentSummary.card > 0 ? `<span>💳 Tarjeta: <strong>${formatCLP(register.paymentSummary.card)}</strong></span>` : ''}
-                                    ${register.paymentSummary.qr > 0 ? `<span>📱 QR: <strong>${formatCLP(register.paymentSummary.qr)}</strong></span>` : ''}
-                                    ${register.paymentSummary.other > 0 ? `<span>➕ Otro: <strong>${formatCLP(register.paymentSummary.other)}</strong></span>` : ''}
-                                </div>
-                            </div>
-                        ` : ''}
-                        <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
-                            <button class="btn btn-primary" style="flex: 2;" onclick="CashView.showCashHistory(${register.id}); closeModal();">
-                                📋 Ver Historial Completo
+                    </div>
+
+                    <div>
+                        <div style="font-size: 0.7rem; color: #64748b; text-transform: uppercase; font-weight: 800; margin-bottom: 0.4rem;">Cuadratura</div>
+                        <div style="color: ${diffColor}; font-weight: 800; display: flex; align-items: center; gap: 0.4rem; font-size: 1rem;">
+                            ${register.status === 'open' ? '<span style="color: #6366f1;">En proceso</span>' : (diff === 0 ? '✅ Cuadró' : `${diff > 0 ? '📈 +' : '📉 '}${formatCLP(diff)}`)}
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                        <button class="btn" style="background: rgba(99, 102, 241, 0.1); color: #818cf8; padding: 0.6rem 1rem; border-radius: 0.75rem; font-size: 0.85rem; font-weight: 700; border: 1px solid rgba(99, 102, 241, 0.1);" onclick="CashView.showCashHistory(${register.id})">
+                            📋 Ver Detalle
+                        </button>
+                        ${register.status === 'closed' ? `
+                            <button class="btn" style="background: transparent; color: #64748b; padding: 0.6rem 0.8rem; border-radius: 0.75rem;" onclick="CashView.editClosedCash(${register.id})" title="Editar Cierre">
+                                ⚙️
                             </button>
-                            ${register.status === 'closed' ? `
-                                <button class="btn btn-warning" style="flex: 1;" onclick="CashView.editClosedCash(${register.id})">
-                                    ✏️ Editar
-                                </button>
-                            ` : ''}
-                        </div>
+                        ` : ''}
                     </div>
                 </div>
             `;
@@ -1459,39 +1572,15 @@ const CashView = {
 
     async openCash(event) {
         event.preventDefault();
+        const amount = parseFloat(document.getElementById('quickAmount')?.value) || 0;
 
-        const mode = document.querySelector('input[name="openMode"]:checked').value;
-        let amount = 0;
-        let denominations = null;
-
-        if (mode === 'denominations') {
-            // Calculate from denominations
-            this.calculateTotal();
-            amount = parseFloat(document.getElementById('initialAmount').value) || 0;
-
-            // Get denominations object
-            denominations = {
-                bill_20000: parseInt(document.getElementById('bill_20000').value) || 0,
-                bill_10000: parseInt(document.getElementById('bill_10000').value) || 0,
-                bill_5000: parseInt(document.getElementById('bill_5000').value) || 0,
-                bill_2000: parseInt(document.getElementById('bill_2000').value) || 0,
-                bill_1000: parseInt(document.getElementById('bill_1000').value) || 0,
-                coin_500: parseInt(document.getElementById('coin_500').value) || 0,
-                coin_100: parseInt(document.getElementById('coin_100').value) || 0,
-                coin_50: parseInt(document.getElementById('coin_50').value) || 0,
-                coin_10: parseInt(document.getElementById('coin_10').value) || 0
-            };
-        } else {
-            amount = parseFloat(document.getElementById('quickAmount').value) || 0;
-        }
-
-        if (amount <= 0) {
-            showNotification('El monto inicial debe ser mayor a 0', 'error');
-            return;
+        if (amount < 0) {
+            return showNotification('El monto inicial no puede ser negativo', 'error');
         }
 
         try {
-            await CashController.openCash(amount, denominations);
+            await CashController.openCash(amount, null);
+            showNotification('Caja abierta exitosamente', 'success');
             app.navigate('cash');
         } catch (error) {
             showNotification(error.message, 'error');
@@ -1503,162 +1592,218 @@ const CashView = {
         const summary = await CashRegister.getSummary(openCash.id);
         const dailyBreakdown = await CashController.getDailySales(openCash.id);
 
-        const paymentMethods = ['cash', 'card_qr', 'other'];
+        // Desglose de 4 métodos de pago solicitados
+        const paymentMethods = ['cash', 'card', 'qr', 'other'];
         const methodLabels = {
-            cash: 'Efectivo esperado',
-            card_qr: 'Tarjetas y QR esperados',
-            other: 'Transferencia / Otro esperado'
+            cash: 'Efectivo contado físico',
+            card: 'Depositos Tarjetas (Banco)',
+            qr: 'Pagos QR (Banco)',
+            other: 'Transferencias / Otros'
         };
 
         const expectedPayments = {
             cash: summary.expectedCash || 0,
-            card_qr: (summary.paymentSummary?.card || 0) + (summary.paymentSummary?.qr || 0),
+            card: summary.paymentSummary?.card || 0,
+            qr: summary.paymentSummary?.qr || 0,
             other: summary.paymentSummary?.other || 0
         };
 
         const expectedTotal = Object.values(expectedPayments).reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
-        const expectedCashOnly = expectedPayments.cash || 0;
-        const totalSalesSinceOpen = dailyBreakdown.reduce((sum, day) => sum + (day.sales.total || 0), 0);
-        const totalSalesAmount = summary.totalSalesAmount ?? totalSalesSinceOpen;
+        const totalSalesAmount = summary.totalSalesAmount ?? dailyBreakdown.reduce((sum, day) => sum + (day.sales.total || 0), 0);
 
         const methodRows = paymentMethods.map((method, index) => {
-            const isLast = index === paymentMethods.length - 1;
-            const nextMethod = isLast ? null : paymentMethods[index + 1];
+            const nextMethod = index < paymentMethods.length - 1 ? paymentMethods[index + 1] : null;
+            const focusTarget = nextMethod ? `closeMethod-${nextMethod}` : 'btn-close-cash-final';
             
             return `
-                <div class="close-cash-method-row">
-                    <span class="close-cash-method-label">${methodLabels[method]}</span>
-                    <span class="close-cash-method-expected" id="closeExpected-${method}">${formatCLP(expectedPayments[method])}</span>
-                    <input type="number"
-                           id="closeMethod-${method}"
-                           class="form-control close-cash-method-input"
-                           min="0"
-                           step="1"
-                           placeholder="0"
-                           value=""
-                           onkeydown="if(event.key === 'Enter') { 
-                               event.preventDefault(); 
-                               event.stopPropagation();
-                               const next = document.getElementById('closeMethod-${nextMethod}'); 
-                               if(next) next.focus(); 
-                               else document.querySelector('.btn-close-cash-final').focus();
-                           }"
-                           title="Ingrese el monto real contado para ${methodLabels[method]}">
-                    <span class="close-cash-method-diff" id="closeDifference-${method}"></span>
+                <div class="close-cash-method-card" id="card-${method}">
+                    <div class="method-info">
+                        <span class="method-label">${methodLabels[method]}</span>
+                        <div class="method-expected-box">
+                            <span class="label-mini">ESPERADO EN SISTEMA</span>
+                            <span class="value-expected" id="closeExpected-${method}">${formatCLP(expectedPayments[method])}</span>
+                        </div>
+                    </div>
+                    <div class="method-input-area">
+                        <input type="number"
+                               id="closeMethod-${method}"
+                               class="form-control close-cash-method-input"
+                               min="0"
+                               step="1"
+                               placeholder="0"
+                               required
+                               onkeydown="if(event.key === 'Enter') { 
+                                   event.preventDefault(); 
+                                   const target = document.getElementById('${focusTarget}'); 
+                                   if(target) target.focus(); 
+                               }"
+                               style="font-size: 1.5rem; height: 3.5rem; text-align: center; border: 2px solid #cbd5e1; border-radius: 0.75rem; font-weight: 800;">
+                        <div class="method-diff-status" id="closeDifference-${method}">Ingresa monto</div>
+                    </div>
                 </div>
             `;
         }).join('');
-
-        const totalRow = `
-            <div class="close-cash-method-row close-cash-total-row">
-                <span class="close-cash-method-label"><strong>Total</strong></span>
-                <span class="close-cash-method-expected" id="closeExpectedTotal"><strong>${formatCLP(expectedTotal)}</strong></span>
-                <span class="close-cash-method-input-placeholder"></span>
-                <span class="close-cash-method-diff" id="closeDifferenceTotal"></span>
-            </div>
-        `;
 
         const dailyList = dailyBreakdown.length > 0
             ? dailyBreakdown.map(day => `
                 <div class="close-cash-day-row">
                     <span>${day.date}</span>
-                    <strong>${formatCLP(day.sales.total)}</strong>
+                    <strong style="color: #6366f1;">${formatCLP(day.sales.total)}</strong>
                 </div>
             `).join('')
-            : '<div class="empty-state" style="padding:1rem; text-align:center;">No hay ventas registradas aún.</div>';
+            : '<div class="empty-state" style="padding:1rem;">No hay ventas registradas aún.</div>';
 
         const content = `
-            <div class="close-cash-grid">
-                <div class="close-cash-daily">
-                    <h4>Ventas desde la apertura (${dailyBreakdown.length} día${dailyBreakdown.length !== 1 ? 's' : ''})</h4>
+            <style>
+                .close-cash-modal-container { display: flex; gap: 2rem; background: #f8fafc; border-radius: 1.5rem; overflow: hidden; }
+                .close-cash-sidebar { flex: 1.2; background: #1e293b; color: white; padding: 2rem; border-radius: 1.5rem; display: flex; flex-direction: column; }
+                .close-cash-body { flex: 2; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
+                
+                .close-cash-day-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; margin: 1.5rem 0; padding-right: 0.5rem; }
+                .close-cash-day-row { display: flex; justify-content: space-between; padding: 0.75rem 1rem; background: rgba(255,255,255,0.05); border-radius: 0.75rem; font-size: 0.95rem; }
+                .close-cash-day-total { padding: 1.25rem; background: #334155; border-radius: 1rem; display: flex; justify-content: space-between; align-items: center; border-left: 5px solid #6366f1; }
+                
+                .close-cash-method-card { background: white; border: 1.5px solid #e2e8f0; border-radius: 1rem; padding: 1.25rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: center; transition: all 0.2s; }
+                .close-cash-method-card:focus-within { border-color: #6366f1; box-shadow: 0 4px 20px rgba(99, 102, 241, 0.1); transform: scale(1.01); }
+                .method-label { display: block; font-weight: 800; color: #1e293b; margin-bottom: 0.5rem; }
+                .method-expected-box { background: #f1f5f9; padding: 0.5rem 1rem; border-radius: 0.5rem; }
+                .label-mini { display: block; font-size: 0.65rem; color: #64748b; font-weight: 900; letter-spacing: 0.5px; }
+                .value-expected { font-size: 1.15rem; font-weight: 800; color: #334155; }
+                
+                .method-diff-status { font-size: 0.85rem; font-weight: 700; text-align: center; margin-top: 0.5rem; padding: 4px; border-radius: 6px; }
+                .diff-cuadra { color: #059669; background: #ecfdf5; }
+                .diff-falta { color: #dc2626; background: #fef2f2; }
+                .diff-sobra { color: #2563eb; background: #eff6ff; }
+                
+                .close-cash-final-summary { background: #ffffff; border: 3px solid #1e293b; border-radius: 1.25rem; padding: 1.5rem; margin-top: 1rem; }
+                .total-main-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 2px dashed #e2e8f0; }
+                .total-main-label { font-size: 1rem; font-weight: 900; color: #1e293b; }
+                .total-main-val { font-size: 2rem; font-weight: 950; color: #1e293b; }
+                
+                .final-status-banner { padding: 1rem; border-radius: 0.75rem; text-align: center; font-weight: 900; font-size: 1.1rem; }
+                .status-ok { background: #dcfce7; color: #166534; border: 2px solid #22c55e; }
+                .status-warning { background: #fee2e2; color: #991b1b; border: 2px solid #ef4444; }
+                .status-info { background: #dbeafe; color: #1e40af; border: 2px solid #3b82f6; }
+            </style>
+
+            <div class="close-cash-modal-container">
+                <div class="close-cash-sidebar">
+                    <h3 style="color: #94a3b8; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1.5rem;">Cierre de Turno</h3>
+                    <h2 style="font-size: 1.75rem; font-weight: 900; margin-bottom: 2rem;">Resumen de Ventas Netas</h2>
                     <div class="close-cash-day-list">
                         ${dailyList}
                     </div>
                     <div class="close-cash-day-total">
-                        <span>Total acumulado</span>
-                        <strong>${formatCLP(totalSalesAmount)}</strong>
+                        <div>
+                            <span style="display:block; font-size: 0.8rem; opacity: 0.8; font-weight: 700;">TOTAL ACUMULADO</span>
+                            <strong>Ticket Total</strong>
+                        </div>
+                        <span style="font-size: 1.8rem; font-weight: 950;">${formatCLP(totalSalesAmount)}</span>
                     </div>
                 </div>
-                <div class="close-cash-reconcile">
-                    <h4>Cuadratura de medios de pago</h4>
-                    <p class="close-cash-reconcile-hint">Compare el valor esperado de cada método con el monto real ingresado. Ingrese el dinero contado en cada campo.</p>
-                    ${methodRows}
-                    ${totalRow}
-                    <div class="close-cash-difference-summary" id="closeCashDifferenceSummary"></div>
+
+                <div class="close-cash-body">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <h2 style="margin:0; font-weight: 900; color: #1e293b;">Cuadratura de Caja</h2>
+                        <span style="font-size: 0.85rem; color: #64748b; font-weight: 700;">PASO FINAL</span>
+                    </div>
+                    <p style="color: #64748b; margin-bottom: 1rem; font-weight: 600;">Compara los montos reales recibidos con lo reportado por el sistema.</p>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        ${methodRows}
+                    </div>
+
+                    <div class="close-cash-final-summary">
+                        <div class="total-main-info">
+                            <div>
+                                <span class="total-main-label">EFECTIVO CONTADO REAL</span>
+                                <p style="margin:0; font-size: 0.8rem; color: #64748b; font-weight: 700;">Suma de todos los montos ingresados arriba</p>
+                            </div>
+                            <span class="total-main-val" id="closeCountedTotal">$0</span>
+                        </div>
+                        <div id="closeStatusBanner" class="final-status-banner status-info">Ingresa todos los montos para calcular</div>
+                    </div>
                 </div>
             </div>
-            <form id="closeCashForm" onsubmit="event.preventDefault(); CashView.closeCash(${openCash.id}); return false;">
-                <input type="hidden" id="finalAmount" name="finalAmount" value="${expectedCashOnly}">
+
+            <form id="closeCashForm" onsubmit="event.preventDefault(); return false;">
+                <input type="hidden" id="finalAmount" name="finalAmount" value="0">
             </form>
         `;
 
         const footer = `
-            <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-            <button type="button" class="btn btn-danger btn-close-cash-final" onclick="CashView.closeCash(${openCash.id})">Cerrar Caja</button>
+            <button type="button" class="btn btn-secondary btn-lg" onclick="closeModal()" style="border-radius: 1rem;">Omitir por ahora</button>
+            <button type="button" id="btn-close-cash-final" class="btn btn-danger btn-lg" onclick="CashView.confirmCloseCash(${openCash.id})" style="border-radius: 1rem; padding-left: 3rem; padding-right: 3rem; font-weight: 900; box-shadow: 0 10px 25px rgba(239, 68, 68, 0.3);">
+                FINALIZAR Y CERRAR CAJA 🔒
+            </button>
         `;
 
-        showModal(content, { title: 'Cerrar Caja', footer, width: '900px' });
+        showModal(content, { title: 'Cierre Definitivo de Caja', footer, width: '1000px' });
 
+        // Lógica de actualización de diferencias
         setTimeout(() => {
             const updateDifferences = () => {
-                const listEl = document.getElementById('closeCashDifferenceSummary');
-                const totalDiffEl = document.getElementById('closeDifferenceTotal');
+                const bannerEl = document.getElementById('closeStatusBanner');
+                const totalCountedEl = document.getElementById('closeCountedTotal');
                 const finalInput = document.getElementById('finalAmount');
+                const btnSubmit = document.getElementById('btn-close-cash-final');
+
+                let allFilled = true;
                 const countedTotals = paymentMethods.reduce((acc, method) => {
                     const input = document.getElementById(`closeMethod-${method}`);
+                    if (input.value === "") allFilled = false;
                     const value = parseFloat(input?.value) || 0;
                     acc[method] = value;
                     return acc;
                 }, {});
 
                 const countedTotal = paymentMethods.reduce((sum, method) => sum + countedTotals[method], 0);
-                // Diferencia total = suma de (contado - esperado) por método: positivo = sobrante, negativo = faltante
                 const totalDifference = paymentMethods.reduce((sum, method) => {
                     return sum + (countedTotals[method] - (expectedPayments[method] || 0));
                 }, 0);
-                if (finalInput) {
-                    finalInput.value = countedTotals['cash'] ?? 0;
-                }
+
+                if (finalInput) finalInput.value = countedTotals['cash']; // El efectivo físico es lo que va al DB
+                if (totalCountedEl) totalCountedEl.textContent = formatCLP(countedTotal);
 
                 paymentMethods.forEach(method => {
                     const diffEl = document.getElementById(`closeDifference-${method}`);
+                    const val = document.getElementById(`closeMethod-${method}`).value;
+                    if (val === "") {
+                        diffEl.textContent = "Pendiente...";
+                        diffEl.className = "method-diff-status";
+                        return;
+                    }
+
                     const diff = countedTotals[method] - (expectedPayments[method] || 0);
-                    if (diffEl) {
-                        if (diff === 0) {
-                            diffEl.textContent = 'Cuadra';
-                            diffEl.classList.remove('text-success', 'text-danger');
-                        } else {
-                            const label = diff > 0 ? 'Sobrante' : 'Faltante';
-                            diffEl.textContent = `${label} ${formatCLP(Math.abs(diff))}`;
-                            diffEl.classList.toggle('text-success', diff > 0);
-                            diffEl.classList.toggle('text-danger', diff < 0);
-                        }
+                    if (diff === 0) {
+                        diffEl.textContent = "✅ CUADRA EXACTO";
+                        diffEl.className = "method-diff-status diff-cuadra";
+                    } else if (diff > 0) {
+                        diffEl.textContent = `📈 SOBRANTE: ${formatCLP(diff)}`;
+                        diffEl.className = "method-diff-status diff-sobra";
+                    } else {
+                        diffEl.textContent = `📉 FALTANTE: ${formatCLP(Math.abs(diff))}`;
+                        diffEl.className = "method-diff-status diff-falta";
                     }
                 });
 
-                if (totalDiffEl) {
+                if (!allFilled) {
+                    bannerEl.textContent = "⚠️ COMPLETA TODOS LOS CAMPOS PARA CERRAR";
+                    bannerEl.className = "final-status-banner status-warning";
+                    btnSubmit.disabled = true;
+                    btnSubmit.style.opacity = "0.5";
+                } else {
+                    btnSubmit.disabled = false;
+                    btnSubmit.style.opacity = "1";
                     if (totalDifference === 0) {
-                        totalDiffEl.textContent = 'Cuadra perfecto';
-                        totalDiffEl.classList.remove('text-success', 'text-danger');
+                        bannerEl.textContent = "🏁 TODO CUADRA PERFECTO. ¡BUEN TRABAJO!";
+                        bannerEl.className = "final-status-banner status-ok";
+                    } else if (totalDifference > 0) {
+                        bannerEl.textContent = `💰 TIENES UN SOBRANTE TOTAL DE ${formatCLP(totalDifference)}`;
+                        bannerEl.className = "final-status-banner status-info";
                     } else {
-                        const label = totalDifference > 0 ? 'Sobrante total' : 'Faltante total';
-                        totalDiffEl.textContent = `${label}: ${formatCLP(Math.abs(totalDifference))}`;
-                        totalDiffEl.classList.toggle('text-success', totalDifference > 0);
-                        totalDiffEl.classList.toggle('text-danger', totalDifference < 0);
-                    }
-                }
-
-                if (listEl) {
-                    if (totalDifference === 0) {
-                        listEl.innerHTML = `<div class="close-cash-difference-success">Cuadra perfecto • Total contado: ${formatCLP(countedTotal)}</div>`;
-                    } else {
-                        const label = totalDifference > 0 ? 'Sobrante' : 'Faltante';
-                        listEl.innerHTML = `
-                            <div class="close-cash-difference-alert">
-                                <strong>${label} total en dinero real: ${formatCLP(Math.abs(totalDifference))}</strong>
-                                <span>Total contado: ${formatCLP(countedTotal)}</span>
-                            </div>
-                        `;
+                        bannerEl.textContent = `🚨 TIENES UN FALTANTE TOTAL DE ${formatCLP(Math.abs(totalDifference))}`;
+                        bannerEl.className = "final-status-banner status-warning";
                     }
                 }
             };
@@ -1668,19 +1813,62 @@ const CashView = {
                 input?.addEventListener('input', updateDifferences);
             });
 
+            // Foco inicial
+            document.getElementById('closeMethod-cash').focus();
             updateDifferences();
-        }, 0);
+        }, 100);
     },
 
-    async closeCash(id) {
-        const finalAmount = parseFloat(document.getElementById('finalAmount').value);
+    async confirmCloseCash(id) {
+        const btn = document.getElementById('btn-close-cash-final');
+        if (btn) {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            btn.innerText = 'CERRANDO...';
+        }
 
-        try {
-            await CashController.closeCash(id, finalAmount);
-            closeModal();
-            app.navigate('cash');
-        } catch (error) {
-            showNotification(error.message, 'error');
+        const finalAmount = parseFloat(document.getElementById('finalAmount').value);
+        
+        // Validación de confirmación explícita solicitada
+        const result = await showConfirm(
+            'Una vez cerrada, no podrás registrar más ventas en este turno sin abrir una nueva caja.',
+            '¿Confirmas el cierre de caja?',
+            'Sí, Cerrar Caja Definitivamente',
+            'No, Seguir Revisando'
+        );
+
+        if (result) {
+            try {
+                await CashController.closeCash(id, finalAmount);
+                
+                // Cerrar el modal de resumen de cierre
+                closeModal(); 
+                
+                showNotification('¡Caja cerrada exitosamente!', 'success');
+                app.navigate('cash');
+            } catch (error) {
+                // Si la caja ya está cerrada, significa que el proceso terminó con éxito previamente
+                if (error.message.includes('ya está cerrada')) {
+                    closeModal();
+                    showNotification('La caja ya se encontraba cerrada.', 'info');
+                    app.navigate('cash');
+                } else {
+                    showNotification(error.message, 'error');
+                    // Restaurar botón si hay un error real (ej: red, bd)
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.style.opacity = '1';
+                        btn.innerText = 'FINALIZAR Y CERRAR CAJA 🔒';
+                    }
+                }
+            }
+        } else {
+            // El usuario canceló la confirmación, restauramos el botón
+            if (btn) {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.innerText = 'FINALIZAR Y CERRAR CAJA 🔒';
+            }
         }
     },
 
@@ -1965,6 +2153,92 @@ const CashView = {
             }
         } catch (error) {
             showNotification(error.message, 'error');
+        }
+    },
+
+    showExpenseForm() {
+        const content = `
+            <div style="padding: 1.5rem;">
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Descripción del Gasto</label>
+                    <input type="text" id="expenseDescription" class="form-control" placeholder="Ej: Luz, Agua, Suministros..." style="font-size: 1rem; padding: 0.75rem;">
+                </div>
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Monto</label>
+                    <input type="number" id="expenseAmount" class="form-control" placeholder="0" min="0" style="font-size: 1rem; padding: 0.75rem;">
+                </div>
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Categoría</label>
+                    <select id="expenseCategory" class="form-control" style="font-size: 1rem; padding: 0.75rem;">
+                        <option value="servicios">Servicios (Luz, Agua, Internet)</option>
+                        <option value="suministros">Suministros</option>
+                        <option value="mantenimiento">Mantenimiento</option>
+                        <option value="transporte">Transporte</option>
+                        <option value="otros">Otros</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Notas (opcional)</label>
+                    <textarea id="expenseNotes" class="form-control" placeholder="Notas adicionales..." rows="3" style="font-size: 1rem; padding: 0.75rem;"></textarea>
+                </div>
+            </div>
+        `;
+
+        const footer = `
+            <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="CashView.saveExpense()">💰 Registrar Gasto</button>
+        `;
+
+        showModal(content, { title: '💰 Registrar Gasto Operativo', footer, width: '500px' });
+
+        // Enfocar en descripción
+        setTimeout(() => {
+            const input = document.getElementById('expenseDescription');
+            if (input) input.focus();
+        }, 100);
+    },
+
+    async saveExpense() {
+        const description = document.getElementById('expenseDescription').value.trim();
+        const amount = parseFloat(document.getElementById('expenseAmount').value) || 0;
+        const category = document.getElementById('expenseCategory').value;
+        const notes = document.getElementById('expenseNotes').value.trim();
+
+        if (!description) {
+            showNotification('Ingresa una descripción', 'error');
+            return;
+        }
+
+        if (amount <= 0) {
+            showNotification('Ingresa un monto válido', 'error');
+            return;
+        }
+
+        try {
+            const openCash = await CashRegister.getOpen();
+            if (!openCash) {
+                showNotification('No hay caja abierta', 'error');
+                return;
+            }
+
+            // Registrar el gasto como movimiento de salida de caja
+            await CashMovement.create({
+                cashRegisterId: openCash.id,
+                type: 'out',
+                amount: amount,
+                description: `Gasto: ${description} (${category})`,
+                category: category,
+                notes: notes,
+                date: new Date().toISOString()
+            });
+
+            showNotification('Gasto registrado correctamente', 'success');
+            closeModal();
+            app.navigate('cash');
+
+        } catch (error) {
+            console.error('[Cash] Error registrando gasto:', error);
+            showNotification('Error al registrar gasto', 'error');
         }
     }
 };

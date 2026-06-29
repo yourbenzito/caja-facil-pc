@@ -13,8 +13,13 @@ class PasswordResetRepository extends BaseRepository {
      * @returns {Promise<Array>}
      */
     async findByUserId(userId) {
-        const allAttempts = await this.findAll();
-        return allAttempts.filter(attempt => attempt.userId === userId);
+        try {
+            const allAttempts = await this.findAll();
+            return allAttempts.filter(attempt => attempt.userId === userId);
+        } catch (error) {
+            console.error('Error en findByUserId:', error);
+            return [];
+        }
     }
 
     /**
@@ -23,14 +28,19 @@ class PasswordResetRepository extends BaseRepository {
      * @returns {Promise<Array>}
      */
     async findRecentAttempts(ipAddress = 'local') {
-        const allAttempts = await this.findAll();
-        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-        
-        return allAttempts.filter(attempt => {
-            const isRecent = attempt.date >= oneDayAgo;
-            const matchesIP = !ipAddress || attempt.ipAddress === ipAddress;
-            return isRecent && matchesIP;
-        });
+        try {
+            const allAttempts = await this.findAll();
+            const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            
+            return allAttempts.filter(attempt => {
+                const isRecent = attempt.date >= oneDayAgo;
+                const matchesIP = !ipAddress || attempt.ipAddress === ipAddress;
+                return isRecent && matchesIP;
+            });
+        } catch (error) {
+            console.error('Error en findRecentAttempts:', error);
+            return [];
+        }
     }
 
     /**
@@ -39,14 +49,19 @@ class PasswordResetRepository extends BaseRepository {
      * @returns {Promise<number>}
      */
     async countRecentFailedAttempts(ipAddress = 'local') {
-        const allAttempts = await this.findAll();
-        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-        
-        return allAttempts.filter(attempt => {
-            const isRecent = attempt.date >= oneHourAgo;
-            const matchesIP = !ipAddress || attempt.ipAddress === ipAddress;
-            const isFailed = !attempt.success;
-            return isRecent && matchesIP && isFailed;
-        }).length;
+        try {
+            const allAttempts = await this.findAll();
+            const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+            
+            return allAttempts.filter(attempt => {
+                const isRecent = attempt.date >= oneHourAgo;
+                const matchesIP = !ipAddress || attempt.ipAddress === ipAddress;
+                const isFailed = !attempt.success;
+                return isRecent && matchesIP && isFailed;
+            }).length;
+        } catch (error) {
+            console.error('Error en countRecentFailedAttempts:', error);
+            return 0;
+        }
     }
 }

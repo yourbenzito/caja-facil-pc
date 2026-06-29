@@ -112,46 +112,68 @@ const InventoryView = {
     },
 
     calculateDashboardMetrics() {
-        const activeProducts = this.products.filter(p => !p.deleted);
-        const totalCapital = activeProducts.reduce((sum, p) => sum + (p.stock * (parseFloat(p.cost) || 0)), 0);
-        const totalCapitalWithIva = activeProducts.reduce((sum, p) => sum + (p.stock * ((parseFloat(p.cost) || 0) * 1.19)), 0);
-        const totalProjected = activeProducts.reduce((sum, p) => sum + (p.stock * (parseFloat(p.price) || 0)), 0);
-        const profit = totalProjected - totalCapitalWithIva;
-        const margin = totalCapitalWithIva > 0 ? (profit / totalCapitalWithIva * 100) : 0;
-
-        const lowStock = activeProducts.filter(p => (parseFloat(p.stock) || 0) <= (parseFloat(p.minStock) || 0) && (parseFloat(p.stock) || 0) > 0).length;
-        const outOfStock = activeProducts.filter(p => (parseFloat(p.stock) || 0) <= 0).length;
+        let totalCapital = 0;
+        let totalCapitalWithIva = 0;
+        let totalProjected = 0;
+        let lowStock = 0;
+        let outOfStock = 0;
+        let expiringSoon = 0;
+        let activeCount = 0;
+        const categoryValues = {};
+        
         const thirtyDays = new Date();
         thirtyDays.setDate(thirtyDays.getDate() + 30);
-        const expiringSoon = activeProducts.filter(p => p.expiryDate && new Date(p.expiryDate) <= thirtyDays).length;
+        
+        const productsMap = {};
 
-        const categoryValues = {};
-        activeProducts.forEach(p => {
+        // OPTIMIZACIÓN FASE 5: Un solo bucle para todas las métricas de productos
+        this.products.forEach(p => {
+            if (p.deleted) return;
+            
+            activeCount++;
+            const stock = parseFloat(p.stock) || 0;
+            const cost = parseFloat(p.cost) || 0;
+            const price = parseFloat(p.price) || 0;
+            const minStock = parseFloat(p.minStock) || 0;
+            
+            productsMap[p.id] = p;
+
+            totalCapital += stock * cost;
+            totalCapitalWithIva += stock * (cost * 1.19);
+            totalProjected += stock * price;
+
+            if (stock <= 0) outOfStock++;
+            else if (stock <= minStock) lowStock++;
+
+            if (p.expiryDate && new Date(p.expiryDate) <= thirtyDays) expiringSoon++;
+
             const category = p.category || 'General';
             if (!categoryValues[category]) {
                 categoryValues[category] = { name: category, capital: 0, capitalWithIva: 0, projected: 0, count: 0 };
             }
-            const stock = parseFloat(p.stock) || 0;
-            const cost = parseFloat(p.cost) || 0;
-            const price = parseFloat(p.price) || 0;
-
             categoryValues[category].capital += stock * cost;
             categoryValues[category].capitalWithIva += stock * (cost * 1.19);
             categoryValues[category].projected += stock * price;
             categoryValues[category].count += 1;
         });
 
-        const categoryDistribution = Object.values(categoryValues).sort((a, b) => b.capital - a.capital).map(cat => ({
-            ...cat,
-            profit: cat.projected - cat.capitalWithIva,
-            margin: cat.capitalWithIva > 0 ? ((cat.projected - cat.capitalWithIva) / cat.capitalWithIva * 100) : 0,
-            percent: totalCapital > 0 ? (cat.capital / totalCapital * 100) : 0
-        }));
+        const totalProjectedNet = totalProjected / 1.19;
+        const profit = totalProjectedNet - totalCapital;
+        const margin = totalCapital > 0 ? (profit / totalCapital * 100) : 0;
+
+        const categoryDistribution = Object.values(categoryValues).sort((a, b) => b.capital - a.capital).map(cat => {
+            const catProjectedNet = cat.projected / 1.19;
+            const catProfit = catProjectedNet - cat.capital;
+            return {
+                ...cat,
+                profit: catProfit,
+                margin: cat.capital > 0 ? (catProfit / cat.capital * 100) : 0,
+                percent: totalCapital > 0 ? (cat.capital / totalCapital * 100) : 0
+            };
+        });
 
         // Calcular consumos y perdidas del mes actual
         const now = new Date();
-        const currentMonth = now.toISOString().substring(0, 7); // YYYY-MM
-
         let monthlyConsumption = 0;
         let monthlyLoss = 0;
         const currentYear = now.getFullYear();
@@ -161,7 +183,8 @@ const InventoryView = {
             this.recentMovements.forEach(m => {
                 const mDate = new Date(m.date);
                 if (mDate.getFullYear() === currentYear && mDate.getMonth() === currentMonthIdx) {
-                    const product = this.products.find(p => Number(p.id) === Number(m.productId));
+                    // OPTIMIZACIÓN FASE 5: Usar el mapa de productos precargado (O(1) vs O(n))
+                    const product = productsMap[m.productId];
                     const costValue = parseFloat(m.cost_value) || (product ? (Math.abs(m.quantity) * (parseFloat(product.cost) || 0)) : 0);
 
                     if (m.type === 'consumption') {
@@ -178,7 +201,7 @@ const InventoryView = {
             totalProjected,
             profit,
             margin,
-            activeItems: activeProducts.length,
+            activeItems: activeCount,
             lowStock,
             outOfStock,
             expiringSoon,
@@ -187,6 +210,7 @@ const InventoryView = {
             monthlyLoss
         };
     },
+
 
     async render() {
         if (!this.products) {
@@ -205,44 +229,53 @@ const InventoryView = {
             </div>
 
             <div class="inventory-container animate-fade-in">
-                <div class="card" style="padding: 1rem; background: #f9fafb; border: 1.5px solid #e5e7eb; margin-bottom: 0;">
-                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: flex-start;">
+                <div class="card" style="padding: 0.75rem; background: #f9fafb; border: 1.5px solid #e5e7eb; margin-bottom: 0; overflow-x: auto; -webkit-overflow-scrolling: touch;">
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: nowrap; justify-content: flex-start; min-width: max-content; padding-bottom: 5px;">
                         <button class="btn ${this.currentSection === 'inventory' ? 'btn-primary' : 'btn-secondary'}" 
                                 onclick="InventoryView.switchSection('inventory')" 
-                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 1 auto; min-width: 100px;"
+                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 0 auto; min-width: 100px;"
                                 title="Ver lista completa de productos y stock actual">
                             📦 Inventario
                         </button>
                         <button class="btn ${this.currentSection === 'bulk-adjustment' ? 'btn-primary' : 'btn-secondary'}" 
                                 onclick="InventoryView.switchSection('bulk-adjustment')" 
-                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 1 auto; min-width: 110px;"
+                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 0 auto; min-width: 110px;"
                                 title="Descontar múltiples productos por consumo o mermas">
                             ➕ Ajuste Masivo
                         </button>
                         <button class="btn ${this.currentSection === 'audit' ? 'btn-primary' : 'btn-secondary'}" 
                                 onclick="InventoryView.switchSection('audit')" 
-                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 1 auto; min-width: 150px;"
-                                title="Contar mercadería físicamente y corregir el sistema">
-                            📋 Auditoría Física
+                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 0 auto; min-width: 150px;"
+                                title="Contar mercancía físicamente y corregir el sistema">
+                            📋 Control de Inventario
                         </button>
                         <button class="btn ${this.currentSection === 'consumption-report' ? 'btn-primary' : 'btn-secondary'}" 
                                 onclick="InventoryView.switchSection('consumption-report')" 
-                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 1 auto; min-width: 130px;"
+                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 0 auto; min-width: 130px;"
                                 title="Ver cuánto se ha consumido en el local">
                             📉 Consumo Interno
                         </button>
                         <button class="btn ${this.currentSection === 'loss-report' ? 'btn-primary' : 'btn-secondary'}" 
                                 onclick="InventoryView.switchSection('loss-report')" 
-                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 1 auto; min-width: 110px;"
+                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 0 auto; min-width: 110px;"
                                 title="Listado de productos perdidos o dañados">
                             🚨 Pérdidas
                         </button>
                         <button class="btn ${this.currentSection === 'history' ? 'btn-primary' : 'btn-secondary'}" 
                                 onclick="InventoryView.switchSection('history')" 
-                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 1 auto; min-width: 90px;"
+                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 0 auto; min-width: 90px;"
                                 title="Registro de todos los cambios de stock pasados">
                             📜 Historial
                         </button>
+                        ${(() => {
+                            const lowCount = (this.products || []).filter(p => !p.deleted && (p.minStock || 0) > 0 && (p.stock || 0) <= (p.minStock || 0)).length;
+                            return `<button class="btn ${this.currentSection === 'suggestions' ? 'btn-primary' : 'btn-secondary'}" 
+                                onclick="InventoryView.switchSection('suggestions')" 
+                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 0 auto; min-width: 110px; ${lowCount > 0 && this.currentSection !== 'suggestions' ? 'border-color:#f59e0b; color:#92400e; background:#fffbeb;' : ''}"
+                                title="Ver productos que podrías reponer pronto">
+                                💡 Sugerencias${lowCount > 0 ? ` <span style="background:#f59e0b; color:#fff; border-radius:99px; padding:0 6px; font-size:0.7rem; font-weight:800; margin-left:4px;">${lowCount}</span>` : ''}
+                            </button>`;
+                        })()}
                     </div>
                 </div>
 
@@ -267,131 +300,146 @@ const InventoryView = {
                 return this.renderLossReport();
             case 'history':
                 return this.renderHistorySection(this.recentMovements);
+            case 'suggestions':
+                return this.renderSuggestions();
             default:
                 return this.renderInventoryDashboard(dashboard);
         }
     },
 
     renderInventoryDashboard(dashboard) {
+        // Calcular productos con stock bajo
+        const lowStockProducts = this.products.filter(p => {
+            const minStock = p.minStock || 0;
+            const currentStock = p.stock || 0;
+            return currentStock <= minStock && minStock > 0;
+        });
+
         return `
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem; margin-bottom: 1.5rem;">
-                <div style="background: #ffffff; border: 1.5px solid #bfdbfe; border-left: 5px solid #3b82f6; border-radius: 1rem; padding: 1.5rem; position: relative; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 12px 28px rgba(59,130,246,0.15)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none'">
+            <!-- Alertas de stock mínimo eliminadas de aquí — ver tab "💡 Sugerencias" -->
+
+            <!-- Grid de KPIs (Tarjetas Métricas) -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
+                <!-- 1. Capital Invertido -->
+                <div class="inventory-kpi-card card-blue-accent">
                     <div style="font-size: 2rem; position: absolute; right: 1.5rem; top: 1.5rem; opacity: 0.6;">💼</div>
-                    <h3 style="color: #1d4ed8; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 0.5rem; font-weight: 700;">CAPITAL INVERTIDO</h3>
-                    <div style="color: #1d4ed8; font-size: 2.1rem; font-weight: 800; line-height: 1;">${formatCLP(dashboard.totalCapital)}</div>
-                    <p style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #dbeafe; font-size: 0.78rem; color: #3b82f6; font-weight: 600;">Costo neto del total de stock (${dashboard.activeItems} productos)</p>
+                    <h3 style="padding-right: 2.5rem;">CAPITAL INVERTIDO</h3>
+                    <div class="value">${formatCLP(dashboard.totalCapital)}</div>
+                    <p class="kpi-extra-info">Costo neto del total de stock (${dashboard.activeItems} productos)</p>
                 </div>
 
-                <div style="background: #ffffff; border: 1.5px solid #e9d5ff; border-left: 5px solid #8b5cf6; border-radius: 1rem; padding: 1.5rem; position: relative; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 12px 28px rgba(139,92,246,0.15)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none'">
+                <!-- 2. Valor Venta Total (Stock) -->
+                <div class="inventory-kpi-card card-purple-accent">
                     <div style="font-size: 2rem; position: absolute; right: 1.5rem; top: 1.5rem; opacity: 0.6;">🏷️</div>
-                    <h3 style="color: #6d28d9; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 0.5rem; font-weight: 700;">VALOR VENTA TOTAL (STOCK)</h3>
-                    <div style="color: #6d28d9; font-size: 2.1rem; font-weight: 800; line-height: 1;">${formatCLP(dashboard.totalProjected)}</div>
-                    <p style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #ede9fe; font-size: 0.78rem; color: #7c3aed; font-weight: 600;">Recaudación estimada si vendes todo el stock</p>
+                    <h3 style="padding-right: 2.5rem;">VALOR VENTA TOTAL (STOCK)</h3>
+                    <div class="value">${formatCLP(dashboard.totalProjected)}</div>
+                    <p class="kpi-extra-info">Recaudación estimada si vendes todo el stock</p>
                 </div>
 
-                <div style="background: #ffffff; border: 1.5px solid #a7f3d0; border-left: 5px solid #10b981; border-radius: 1rem; padding: 1.5rem; position: relative; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 12px 28px rgba(16,185,129,0.15)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none'">
+                <!-- 3. Ganancia Bruta -->
+                <div class="inventory-kpi-card card-green-accent">
                     <div style="font-size: 2rem; position: absolute; right: 1.5rem; top: 1.5rem; opacity: 0.6;">📈</div>
-                    <h3 style="color: #065f46; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 0.5rem; font-weight: 700;">GANANCIA BRUTA (SIN IVA)</h3>
-                    <div style="color: #059669; font-size: 2.1rem; font-weight: 800; line-height: 1;">${formatCLP(dashboard.profit)}</div>
-                    <div style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #d1fae5;">
+                    <h3 style="padding-right: 2.5rem;">GANANCIA BRUTA (SIN IVA)</h3>
+                    <div class="value">${formatCLP(dashboard.profit)}</div>
+                    <div class="kpi-extra-info" style="border-top-color: rgba(0,0,0,0.08);">
                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 0.78rem; color: #059669; font-weight: 600;">Margen Global Estimado</span>
+                            <span style="font-size: 0.78rem; font-weight: 600;">Margen Global Estimado</span>
                             <span style="background: #d1fae5; color: #065f46; padding: 0.1rem 0.5rem; border-radius: 1rem; font-size: 0.75rem; font-weight: 700; border: 1px solid #a7f3d0;">+${dashboard.margin.toFixed(1)}%</span>
                         </div>
                     </div>
                 </div>
 
-                <div style="background: #ffffff; border: 1.5px solid #bfdbfe; border-left: 5px solid #3b82f6; border-radius: 1rem; padding: 1.5rem; position: relative; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 12px 28px rgba(59,130,246,0.15)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none'" onclick="InventoryView.switchSection('consumption-report')">
+                <!-- 4. Consumo Interno -->
+                <div class="inventory-kpi-card card-blue-accent" style="cursor: pointer;" onclick="InventoryView.switchSection('consumption-report')">
                     <div style="font-size: 2rem; position: absolute; right: 1.5rem; top: 1.5rem; opacity: 0.6;">🍴</div>
-                    <h3 style="color: #1d4ed8; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 0.5rem; font-weight: 700;">CONSUMO INTERNO (MES)</h3>
-                    <div style="color: #2563eb; font-size: 2.1rem; font-weight: 800; line-height: 1;">${formatCLP(dashboard.monthlyConsumption)}</div>
-                    <p style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #dbeafe; font-size: 0.78rem; color: #3b82f6; font-weight: 600;">Gasto acumulado por consumo de la casa</p>
+                    <h3 style="padding-right: 2.5rem;">CONSUMO INTERNO (MES)</h3>
+                    <div class="value">${formatCLP(dashboard.monthlyConsumption)}</div>
+                    <p class="kpi-extra-info">Gasto acumulado por consumo de la casa</p>
                 </div>
 
-                <div style="background: #ffffff; border: 1.5px solid #fecaca; border-left: 5px solid #ef4444; border-radius: 1rem; padding: 1.5rem; position: relative; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 12px 28px rgba(239,68,68,0.15)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='none'" onclick="InventoryView.switchSection('loss-report')">
+                <!-- 5. Pérdidas -->
+                <div class="inventory-kpi-card card-red-accent" style="cursor: pointer;" onclick="InventoryView.switchSection('loss-report')">
                     <div style="font-size: 2rem; position: absolute; right: 1.5rem; top: 1.5rem; opacity: 0.6;">🗑️</div>
-                    <h3 style="color: #b91c1c; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 0.5rem; font-weight: 700;">PÉRDIDAS (MES)</h3>
-                    <div style="color: #dc2626; font-size: 2.1rem; font-weight: 800; line-height: 1;">${formatCLP(dashboard.monthlyLoss)}</div>
-                    <p style="margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid #fee2e2; font-size: 0.78rem; color: #ef4444; font-weight: 600;">Valor de mercadería perdida o dañada</p>
+                    <h3 style="padding-right: 2.5rem;">PÉRDIDAS (MES)</h3>
+                    <div class="value">${formatCLP(dashboard.monthlyLoss)}</div>
+                    <p class="kpi-extra-info">Valor de mercadería perdida o dañada</p>
                 </div>
+            </div>
+            </div>
 
-                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                    <button class="stat-card stat-card-button ${this.stockFilter === 'low' ? 'stat-card-selected' : ''}"
-                            style="flex: 1; margin: 0; padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; border-radius: 0.75rem; background: ${this.stockFilter === 'low' ? '#fef3c7' : '#ffffff'}; border: 1.5px solid ${this.stockFilter === 'low' ? '#f59e0b' : '#e5e7eb'}; transition: all 0.2s;"
-                            onclick="InventoryView.setStockFilter('low')">
-                        <div style="display: flex; align-items: center; gap: 0.75rem;">
-                            <span style="font-size: 1.25rem;">⚠️</span>
-                            <span style="font-size: 0.95rem; font-weight: 600; color: ${this.stockFilter === 'low' ? '#b45309' : '#374151'};">Stock Bajo</span>
-                        </div>
-                        <span style="background: ${this.stockFilter === 'low' ? '#f59e0b' : '#e5e7eb'}; color: ${this.stockFilter === 'low' ? '#ffffff' : '#4b5563'}; padding: 0.25rem 0.75rem; border-radius: 1rem; font-weight: bold;">${dashboard.lowStock}</span>
-                    </button>
-                    
-                    <button class="stat-card stat-card-button ${this.stockFilter === 'out' ? 'stat-card-selected' : ''}"
-                            style="flex: 1; margin: 0; padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; border-radius: 0.75rem; background: ${this.stockFilter === 'out' ? '#fef2f2' : '#ffffff'}; border: 1.5px solid ${this.stockFilter === 'out' ? '#ef4444' : '#e5e7eb'}; transition: all 0.2s;"
-                            onclick="InventoryView.setStockFilter('out')">
-                        <div style="display: flex; align-items: center; gap: 0.75rem;">
-                            <span style="font-size: 1.25rem;">🛑</span>
-                            <span style="font-size: 0.95rem; font-weight: 600; color: ${this.stockFilter === 'out' ? '#b91c1c' : '#374151'};">Sin Stock</span>
-                        </div>
-                        <span style="background: ${this.stockFilter === 'out' ? '#ef4444' : '#e5e7eb'}; color: ${this.stockFilter === 'out' ? '#ffffff' : '#4b5563'}; padding: 0.25rem 0.75rem; border-radius: 1rem; font-weight: bold;">${dashboard.outOfStock}</span>
-                    </button>
-                    
-                    <button class="stat-card stat-card-button ${this.stockFilter === 'expiring' ? 'stat-card-selected' : ''}"
-                            style="flex: 1; margin: 0; padding: 1rem 1.5rem; display: flex; align-items: center; justify-content: space-between; border-radius: 0.75rem; background: ${this.stockFilter === 'expiring' ? '#f5f3ff' : '#ffffff'}; border: 1.5px solid ${this.stockFilter === 'expiring' ? '#8b5cf6' : '#e5e7eb'}; transition: all 0.2s;"
-                            onclick="InventoryView.setStockFilter('expiring')">
-                        <div style="display: flex; align-items: center; gap: 0.75rem;">
-                            <span style="font-size: 1.25rem;">⏳</span>
-                            <span style="font-size: 0.95rem; font-weight: 600; color: ${this.stockFilter === 'expiring' ? '#6d28d9' : '#374151'};">Próx. a vencer</span>
-                        </div>
-                        <span style="background: ${this.stockFilter === 'expiring' ? '#8b5cf6' : '#e5e7eb'}; color: ${this.stockFilter === 'expiring' ? '#ffffff' : '#4b5563'}; padding: 0.25rem 0.75rem; border-radius: 1rem; font-weight: bold;">${dashboard.expiringSoon}</span>
-                    </button>
-                </div>
+            <!-- Fila Horizontal de Filtros de Stock (Alertas) -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                <button class="stock-alert-card alert-low ${this.stockFilter === 'low' ? 'selected' : ''}"
+                        onclick="InventoryView.setStockFilter('low')">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span style="font-size: 1.25rem;">⚠️</span>
+                        <span style="font-size: 0.95rem; font-weight: 700; color: #374151;">Stock Bajo</span>
+                    </div>
+                    <span class="alert-badge">${dashboard.lowStock}</span>
+                </button>
+                
+                <button class="stock-alert-card alert-out ${this.stockFilter === 'out' ? 'selected' : ''}"
+                        onclick="InventoryView.setStockFilter('out')">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span style="font-size: 1.25rem;">🛑</span>
+                        <span style="font-size: 0.95rem; font-weight: 700; color: #374151;">Sin Stock</span>
+                    </div>
+                    <span class="alert-badge">${dashboard.outOfStock}</span>
+                </button>
+                
+                <button class="stock-alert-card alert-expiring ${this.stockFilter === 'expiring' ? 'selected' : ''}"
+                        onclick="InventoryView.setStockFilter('expiring')">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span style="font-size: 1.25rem;">⏳</span>
+                        <span style="font-size: 0.95rem; font-weight: 700; color: #374151;">Próx. a vencer</span>
+                    </div>
+                    <span class="alert-badge">${dashboard.expiringSoon}</span>
+                </button>
             </div>
 
             <!-- Distribución de Capital Colapsable -->
             <div style="margin-bottom: 2rem;">
-                <button class="btn btn-secondary" 
-                        style="width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 1rem; background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.1); color: #94a3b8;" 
+                <button class="capital-toggle-btn" 
                         onclick="InventoryView.toggleCapitalDistribution()">
                     <span><span style="margin-right:0.5rem">🧩</span> Ver Distribución de Capital por Categoría</span>
                     <span>${this.showCapitalDist ? '▲ Ocultar' : '▼ Mostrar Detalles'}</span>
                 </button>
                 
                 ${this.showCapitalDist ? `
-                <div class="animate-slide-down" style="margin-top: 1rem; background: rgba(15, 23, 42, 0.4); border-radius: 1rem; padding: 1.5rem; border: 1px solid rgba(255,255,255,0.05);">
+                <div class="animate-slide-down" style="margin-top: 1rem; background: #f8fafc; border-radius: 1.25rem; padding: 1.5rem; border: 1px solid #e2e8f0;">
                     <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1.25rem;">
                         ${dashboard.categoryDistribution.map(cat => {
-            const barColor = cat.percent > 15 ? '#60a5fa' : (cat.percent > 5 ? '#34d399' : '#94a3b8');
-            return `
-                            <div style="background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(255,255,255,0.08); border-radius: 0.75rem; padding: 1.25rem; position: relative; transition: all 0.2s;" onmouseover="this.style.borderColor='rgba(255,255,255,0.2)'" onmouseout="this.style.borderColor='rgba(255,255,255,0.08)'">
+                            const barColor = cat.percent > 15 ? '#3b82f6' : (cat.percent > 5 ? '#10b981' : '#64748b');
+                            return `
+                            <div class="capital-dist-card">
                                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
-                                    <h4 style="margin: 0; font-size: 1rem; color: #e2e8f0; text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65%; font-weight: 700;">${cat.name}</h4>
+                                    <h4 style="margin: 0; font-size: 1rem; color: #1e293b; text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65%; font-weight: 700;">${safeHTML(cat.name)}</h4>
                                     <div style="text-align: right;">
-                                        <div style="font-size: 0.85rem; font-weight: 700; color: ${barColor};">${cat.percent.toFixed(1)}% peso</div>
-                                        <div style="font-size: 0.75rem; color: #34d399; font-weight: 600;">+${cat.margin.toFixed(1)}% mg</div>
+                                        <div style="font-size: 0.85rem; font-weight: 800; color: ${barColor};">${cat.percent.toFixed(1)}% peso</div>
+                                        <div style="font-size: 0.75rem; color: #059669; font-weight: 700;">+${cat.margin.toFixed(1)}% mg</div>
                                     </div>
                                 </div>
                                 
-                                <div style="display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 1rem;">
-                                    <div style="display: flex; justify-content: space-between;">
-                                        <span style="font-size: 0.75rem; color: #94a3b8;">Capital:</span>
-                                        <span style="font-size: 1.1rem; font-weight: 700; color: #fff;">${formatCLP(cat.capital)}</span>
+                                <div style="display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 1rem; border-top: 1px solid #f1f5f9; padding-top: 0.75rem; margin-top: 0.75rem;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <span style="font-size: 0.8rem; color: #64748b; font-weight: 500;">Capital:</span>
+                                        <span style="font-size: 1.05rem; font-weight: 800; color: #1e293b;">${formatCLP(cat.capital)}</span>
                                     </div>
-                                    <div style="display: flex; justify-content: space-between;">
-                                        <span style="font-size: 0.75rem; color: #6ee7b7;">G. Bruta:</span>
-                                        <span style="font-size: 1.1rem; font-weight: 700; color: #34d399;">+${formatCLP(cat.profit)}</span>
+                                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                                        <span style="font-size: 0.8rem; color: #059669; font-weight: 600;">G. Bruta:</span>
+                                        <span style="font-size: 1.05rem; font-weight: 800; color: #10b981;">+${formatCLP(cat.profit)}</span>
                                     </div>
                                 </div>
 
-                                <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.75rem;">${cat.count} productos registrados</div>
+                                <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.75rem; font-weight: 500;">${cat.count} productos registrados</div>
                                 
                                 <!-- Barra de progreso visual -->
-                                <div style="width: 100%; height: 6px; background: rgba(0,0,0,0.3); border-radius: 3px; overflow: hidden;">
-                                    <div style="width: ${cat.percent}%; height: 100%; background: ${barColor}; box-shadow: 0 0 10px ${barColor}44;"></div>
+                                <div style="width: 100%; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
+                                    <div style="width: ${cat.percent}%; height: 100%; background: linear-gradient(90deg, ${barColor}, ${barColor}dd); border-radius: 3px;"></div>
                                 </div>
                             </div>
                             `;
-        }).join('')}
+                        }).join('')}
                     </div>
                 </div>` : ''}
             </div>
@@ -450,8 +498,34 @@ const InventoryView = {
                     </div>
                 </div>
                 
-                <!-- Lista de productos seleccionados con estilo ultra-claro -->
-                <div id="bulkSelectedProducts"></div>
+                <!-- Lista de productos seleccionados -->
+                <div id="bulkSelectedProducts">
+                    <div class="empty-state" style="padding: 3rem; background: rgba(17, 24, 39, 0.4); border: 1px dashed rgba(255,255,255,0.1); border-radius: 1rem; text-align: center;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;">🛒</div>
+                        <p style="color: #94a3b8; font-size: 1.1rem; margin-bottom: 0;">Aún no has agregado productos</p>
+                    </div>
+                </div>
+
+                <!-- Footer con Motivo y Botones de Acción - SIEMPRE VISIBLE -->
+                <div style="margin-top: 2rem; padding: 1.5rem; background: #ffffff; border-radius: 1.25rem; border: 2.5px solid #fde047; box-shadow: 0 4px 12px rgba(202, 138, 4, 0.05);">
+                    <div class="form-group" style="margin-bottom: 1.5rem;">
+                        <label style="color: #713f12; font-size: 1rem; margin-bottom: 0.75rem; display: block; font-weight: 800;">3. Motivo del ajuste:</label>
+                        <textarea id="bulkReason" class="form-control" rows="2" 
+                                  placeholder="Ej: Consumo del personal, rotura de envase, vencimiento..." 
+                                  style="font-size: 1.1rem; border: 2.5px solid #fde047; border-radius: 0.75rem; background: #fffcf0; padding: 0.75rem;"></textarea>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem;">
+                        <button class="btn btn-secondary" onclick="InventoryView.resetBulkForm()" 
+                                style="flex: 1; height: 55px; font-weight: 700; border: 2px solid #cbd5e1; color: #475569; background: #f8fafc;">
+                            ❌ Limpiar Formulario
+                        </button>
+                        <button class="btn btn-primary" onclick="InventoryView.saveBulkAdjustment()" 
+                                style="flex: 2; height: 55px; font-weight: 800; font-size: 1.1rem; background: #ca8a04; border: none; box-shadow: 0 4px 14px rgba(202, 138, 4, 0.3);">
+                            💾 Guardar Ajuste Masivo
+                        </button>
+                    </div>
+                </div>
             </div>
         `;
     },
@@ -486,9 +560,9 @@ const InventoryView = {
     renderHistorySection(movements) {
         return `
             <div class="card">
-                <h3 style="margin-bottom: 1.5rem; color: #fff; font-size: 1.2rem; display: flex; align-items: center; gap: 0.5rem;">📚 Historial Completo de Movimientos (Últimos 500)</h3>
+                <h3 style="margin-bottom: 1.5rem; color: #fff; font-size: 1.2rem; display: flex; align-items: center; gap: 0.5rem;">📚 Historial Completo de Movimientos (Últimos 100)</h3>
                 <div id="fullMovementsTable">
-                    ${this.renderMovements(movements.slice(0, 500))}
+                    ${this.renderMovements(movements.slice(0, 100))}
                 </div>
             </div>
         `;
@@ -559,7 +633,7 @@ const InventoryView = {
                 ` : categories.map(catName => `
                     <div class="alert-category-group" style="margin-bottom: 2rem;">
                         <h3 style="color: #6ee7b7; border-bottom: 1px solid rgba(110, 231, 183, 0.2); padding-bottom: 0.5rem; margin-bottom: 1rem; font-size: 1.1rem; display: flex; justify-content: space-between;">
-                            <span>📂 ${catName}</span>
+                            <span>📂 ${safeHTML(catName)}</span>
                             <small style="color: #94a3b8; font-weight: normal;">${grouped[catName].length} ítems</small>
                         </h3>
                         <div class="card glass-panel" style="padding: 0; overflow: hidden;">
@@ -590,23 +664,23 @@ const InventoryView = {
 
             return `
                                         <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                                            <td style="padding: 0.75rem 1rem;">
-                                                <div style="font-weight: 600; color: #e2e8f0;">${p.name}</div>
-                                                <small style="color: #64748b;">${p.barcode || 'Sin código'}</small>
+                                            <td style="padding: 0.75rem 1rem;" data-label="Producto">
+                                                <div style="font-weight: 600; color: #1e293b;">${safeHTML(p.name)}</div>
+                                                <small style="color: #64748b;">${safeHTML(p.barcode || 'Sin código')}</small>
                                             </td>
-                                            <td style="padding: 0.75rem 1rem; color: #94a3b8;">
+                                            <td style="padding: 0.75rem 1rem; color: #475569;" data-label="Proveedor">
                                                 ${p.supplierName || '—'}
                                             </td>
-                                            <td style="padding: 0.75rem 1rem; text-align: center;">
+                                            <td style="padding: 0.75rem 1rem; text-align: center;" data-label="Stock">
                                                 <div style="color: ${stockColor}; font-weight: 800; font-size: 1.1rem;">
                                                     ${formatStock(p.stock, p.type === 'weight' ? 3 : 0)}
                                                 </div>
                                                 <small style="color: ${stockColor}; font-size: 0.65rem; text-transform: uppercase;">${stockLabel}</small>
                                             </td>
-                                            <td style="padding: 0.75rem 1rem; text-align: center; color: #94a3b8; font-size: 0.9rem;">
+                                            <td style="padding: 0.75rem 1rem; text-align: center; color: #64748b; font-size: 0.9rem;" data-label="Mínimo">
                                                 ${p.minStock || 0}
                                             </td>
-                                            <td style="padding: 0.75rem 1rem; text-align: right;">
+                                            <td style="padding: 0.75rem 1rem; text-align: right;" data-label="Acción">
                                                 <button class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;" onclick="InventoryView.quickAdjustment(${p.id})" title="Corregir el stock de este producto">Ajustar</button>
                                                 <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem;" onclick="InventoryView.showKardex(${p.id})" title="Ver todos los movimientos que afectaron a este producto">Historial</button>
                                             </td>
@@ -667,7 +741,7 @@ const InventoryView = {
             : '';
         const content = `
             <div style="margin-bottom: 1rem;">
-                <p><strong>Producto:</strong> ${product.name}</p>
+                <p><strong>Producto:</strong> ${safeHTML(product.name)}</p>
                 <p><strong>Stock actual (Product.stock):</strong> ${kardex.currentStock} ${product.type === 'weight' ? 'kg' : 'un'}</p>
                 <p><strong>Saldo teórico (suma de movimientos):</strong> ${kardex.theoreticalBalance}</p>
             </div>
@@ -697,42 +771,53 @@ const InventoryView = {
             return '<div class="empty-state">No hay movimientos o cargando...</div>';
         }
 
-        const typeIcons = { 'sale': '📉', 'purchase': '📦', 'adjustment': '⚖️', 'loss': '🗑️', 'consumption': '🍴' };
+        const typeSymbols = { 
+            'sale': '↓', 
+            'purchase': '↑', 
+            'adjustment': '±', 
+            'loss': '×', 
+            'consumption': 'C' 
+        };
 
         return `
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                ${movements.map(m => {
-            const icon = typeIcons[m.type] || '📝';
-            return `
-                        <div style="background: rgba(17, 24, 39, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 0.75rem; padding: 1rem; display: flex; gap: 1rem; align-items: center; transition: background 0.2s;" onmouseover="this.style.background='rgba(31, 41, 55, 0.6)';" onmouseout="this.style.background='rgba(17, 24, 39, 0.4)';">
-                            <div style="font-size: 1.5rem; width: 40px; height: 40px; background: rgba(0,0,0,0.2); border-radius: 50%; display: flex; justify-content: center; align-items: center;">
-                                ${icon}
-                            </div>
-                            <div style="flex: 1; min-width: 0;">
-                                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.25rem;">
-                                    <strong id="product-name-${m.id}" style="font-size: 1rem; color: #fff; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 250px;">-</strong>
-                                    <span style="font-size: 0.75rem; color: var(--secondary); white-space: nowrap;">${formatDateTime(m.date)}</span>
+            <div class="stock-timeline-container">
+                <div class="stock-timeline-line"></div>
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    ${movements.map(m => {
+                        const symbol = typeSymbols[m.type] || '•';
+                        return `
+                            <div class="stock-timeline-item">
+                                <div class="stock-timeline-marker marker-${m.type}">
+                                    ${symbol}
                                 </div>
-                                <div style="display: flex; gap: 0.5rem; align-items: center; font-size: 0.85rem;">
-                                    <span class="badge ${this.getMovementBadgeClass(m.type)}">${this.getMovementTypeName(m.type)}</span>
-                                    ${m.reason ? `<span style="color: #94a3b8; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${m.reason}</span>` : ''}
+                                <div class="stock-timeline-card">
+                                    <div style="flex: 1; min-width: 0;">
+                                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.35rem; flex-wrap: wrap; gap: 0.25rem;">
+                                            <strong id="product-name-${m.id}" style="font-size: 1rem; color: #1e293b; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 280px; font-weight: 700;">-</strong>
+                                            <span style="font-size: 0.75rem; color: #94a3b8; font-weight: 700;">${formatDateTime(m.date)}</span>
+                                        </div>
+                                        <div style="display: flex; gap: 0.5rem; align-items: center; font-size: 0.85rem; flex-wrap: wrap;">
+                                            <span class="badge ${this.getMovementBadgeClass(m.type)}">${this.getMovementTypeName(m.type)}</span>
+                                            ${m.reason ? `<span style="color: #64748b; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500;">${safeHTML(m.reason)}</span>` : ''}
+                                        </div>
+                                    </div>
+                                    <div style="text-align: right; min-width: 80px;">
+                                        <span class="stock-qty-badge ${m.quantity >= 0 ? 'qty-positive' : 'qty-negative'}">
+                                            ${m.quantity >= 0 ? '+' : ''}${m.quantity}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
-                            <div style="text-align: right; min-width: 60px;">
-                                <strong style="font-size: 1.25rem; font-weight: 800; color: ${m.quantity >= 0 ? '#34d399' : '#f87171'}">
-                                    ${m.quantity >= 0 ? '+' : ''}${m.quantity}
-                                </strong>
-                            </div>
-                        </div>
-                    `;
-        }).join('')}
+                        `;
+                    }).join('')}
+                </div>
             </div>
         `;
     },
 
     async initRecentMovements() {
         const movements = this.recentMovements;
-        const limit = this.currentSection === 'history' ? Math.min(movements.length, 500) : Math.min(movements.length, 15);
+        const limit = this.currentSection === 'history' ? Math.min(movements.length, 100) : Math.min(movements.length, 15);
 
         // Solo para secciones que muestran la tabla de movimientos rápidos
         if (this.currentSection === 'inventory' || this.currentSection === 'history') {
@@ -853,11 +938,11 @@ const InventoryView = {
                 <div class="search-result-item ${index === 0 ? 'selected' : ''}" 
                      data-index="${index}"
                      data-product-id="${p.id}"
-                     onmouseover="InventoryView.highlightBulkResult(${index})"
+                     onmouseover="InventoryView.highlightBulkResult(${index}, true)"
                      onclick="InventoryView.selectBulkProduct(${p.id})">
                     <div style="flex: 1;">
-                        <div class="search-result-name" style="font-size: 1.1rem;">${p.name}</div>
-                        <div style="font-size: 0.8rem; color: #64748b; font-weight: 600;">CÓD: ${p.barcode || 'S/N'}</div>
+                        <div class="search-result-name" style="font-size: 1.1rem;">${safeHTML(p.name)}</div>
+                        <div style="font-size: 0.8rem; color: #64748b; font-weight: 600;">CÓD: ${safeHTML(p.barcode || 'S/N')}</div>
                     </div>
                     <div style="text-align: right;">
                         <div class="search-result-stock ${stockClass}" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">
@@ -871,7 +956,10 @@ const InventoryView = {
         if (products.length > 0) this.highlightBulkResult(0);
     },
 
-    highlightBulkResult(index) {
+    highlightBulkResult(index, isMouse = false) {
+        // Bloqueo de interferencia de mouse (Punto 1)
+        if (isMouse && document.body.classList.contains('keyboard-nav')) return;
+
         const resultsContainer = document.getElementById('bulkSearchResults');
         if (!resultsContainer) return;
         const items = resultsContainer.querySelectorAll('.search-result-item');
@@ -897,14 +985,14 @@ const InventoryView = {
         const isWeight = product.type === 'weight';
         const content = `
             <div style="text-align: center; margin-bottom: 1.5rem;">
-                <div style="font-size: 1.25rem; font-weight: bold; color: var(--primary); margin-bottom: 0.5rem;">${product.name}</div>
+                <div style="font-size: 1.25rem; font-weight: bold; color: var(--primary); margin-bottom: 0.5rem;">${safeHTML(product.name)}</div>
                 <div style="font-size: 0.95rem; color: var(--secondary);">
-                    Código: ${product.barcode || 'Sin código'} • Stock: ${product.stock} ${isWeight ? 'kg' : 'un'}
+                    Código: ${safeHTML(product.barcode || 'Sin código')} • Stock: ${product.stock} ${isWeight ? 'kg' : 'un'}
                 </div>
             </div>
             <div class="form-group">
                 <label>Cantidad a ajustar *</label>
-                <input type="number" id="bulkModalQty" class="form-control" 
+                <input type="number" id="bulkModalQty" step="any" class="form-control" 
                        step="${isWeight ? '0.001' : '1'}" placeholder="${isWeight ? '0.001' : '1'}" 
                        style="font-size: 1.25rem; text-align: center; padding: 0.75rem;" autofocus>
                 <small>${isWeight ? 'Kg (ej: 0.250, 1.5)' : 'Unidades'}. + sumar, − restar (solo en Ajuste de inventario).</small>
@@ -999,57 +1087,58 @@ const InventoryView = {
             const diffValue = parseFloat(p.quantity) || 0;
             const isPositive = diffValue > 0;
             const isNegative = diffValue < 0;
-            const colorIndicator = isPositive ? 'rgba(52, 211, 153, 0.2)' : (isNegative ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.1)');
-            const textIndicator = isPositive ? '#34d399' : (isNegative ? '#f87171' : '#e2e8f0');
+            const colorIndicator = isPositive ? '#10b981' : (isNegative ? '#ef4444' : '#64748b');
+            const bgIndicator = isPositive ? '#f0fdf4' : (isNegative ? '#fff1f2' : '#f8fafc');
 
             return `
-                    <div style="display: flex; align-items: center; background: rgba(15, 23, 42, 0.6); border: 1px solid rgba(255,255,255,0.05); border-radius: 0.75rem; padding: 1rem; transition: transform 0.2s, background 0.2s;" onmouseover="this.style.background='rgba(30, 41, 59, 0.8)'; this.style.transform='translateX(4px)';" onmouseout="this.style.background='rgba(15, 23, 42, 0.6)'; this.style.transform='translateX(0)';">
+                    <div style="display: flex; align-items: center; background: #ffffff; border: 2px solid #e2e8f0; border-radius: 1rem; padding: 1.25rem; transition: all 0.2s; box-shadow: var(--shadow-sm);" onmouseover="this.style.borderColor='#cbd5e1'; this.style.transform='translateX(4px)';" onmouseout="this.style.borderColor='#e2e8f0'; this.style.transform='translateX(0)';">
                         
                         <!-- Columna Info -->
                         <div style="flex: 1;">
-                            <strong style="font-size: 1.1rem; color: #f8fafc; display: block; margin-bottom: 0.25rem;">${p.name}</strong>
-                            <div style="display: flex; gap: 0.75rem; font-size: 0.82rem; color: #64748b; flex-wrap: wrap;">
-                                <span style="background: rgba(0,0,0,0.3); padding: 0.2rem 0.5rem; border-radius: 0.5rem; border: 1px solid rgba(255,255,255,0.05);">
-                                    📦 Stock: <strong>${p.stock} ${p.unit}</strong>
+                            <strong style="font-size: 1.15rem; color: #1e293b; display: block; margin-bottom: 0.5rem; font-weight: 800;">${safeHTML(p.name)}</strong>
+                            <div style="display: flex; gap: 0.75rem; font-size: 0.82rem; color: #475569; flex-wrap: wrap; font-weight: 600;">
+                                <span style="background: #f1f5f9; padding: 0.25rem 0.6rem; border-radius: 0.5rem; border: 1px solid #e2e8f0;">
+                                    📦 Stock: <strong style="color: #1e293b;">${p.stock} ${p.unit}</strong>
                                 </span>
-                                <span style="background: rgba(59, 130, 246, 0.1); color: #93c5fd; padding: 0.2rem 0.5rem; border-radius: 0.5rem; border: 1px solid rgba(59, 130, 246, 0.1);">
+                                <span style="background: #eff6ff; color: #1e40af; padding: 0.25rem 0.6rem; border-radius: 0.5rem; border: 1px solid #bfdbfe;">
                                     💰 Neto: <strong>${formatCLP(p.cost)}</strong>
                                 </span>
-                                <span style="background: rgba(16, 185, 129, 0.1); color: #6ee7b7; padding: 0.2rem 0.5rem; border-radius: 0.5rem; border: 1px solid rgba(16, 185, 129, 0.1);">
+                                <span style="background: #f0fdf4; color: #166534; padding: 0.25rem 0.6rem; border-radius: 0.5rem; border: 1px solid #bbf7d0;">
                                     🏷️ Venta: <strong>${formatCLP(p.price)}</strong>
                                 </span>
                             </div>
                         </div>
 
                         <!-- Columna Input Ajuste -->
-                        <div style="display: flex; align-items: center; gap: 1rem; margin-left: 1rem; padding-left: 1rem; border-left: 1px dashed rgba(255,255,255,0.1);">
-                            <div style="display: flex; align-items: center; background: rgba(0,0,0,0.3); border-radius: 0.5rem; border: 1px solid ${colorIndicator}; overflow: hidden; transition: border-color 0.2s;">
-                                <div style="background: ${colorIndicator}; color: ${textIndicator}; padding: 0.5rem 0.75rem; font-weight: bold; font-size: 1.2rem; display: flex; align-items: center; justify-content: center; min-width: 40px;">
+                        <div style="display: flex; align-items: center; gap: 1rem; margin-left: 1rem; padding-left: 1rem; border-left: 2px dashed #e2e8f0;">
+                            <div style="display: flex; align-items: center; background: ${bgIndicator}; border-radius: 0.75rem; border: 2px solid ${colorIndicator}; overflow: hidden; transition: all 0.2s;">
+                                <div style="background: ${colorIndicator}; color: white; padding: 0.5rem 0.75rem; font-weight: 900; font-size: 1.3rem; display: flex; align-items: center; justify-content: center; min-width: 45px;">
                                     ${isPositive ? '+' : (isNegative ? '−' : '±')}
                                 </div>
-                                <input type="number" 
+                                <input type="number" step="any" 
                                        class="bulk-qty-input" 
                                        data-index="${index}"
                                        value="${p.quantity}" 
                                        step="${p.unit === 'kg' ? '0.001' : '1'}"
                                        placeholder="${p.unit === 'kg' ? '0.001' : '1'}"
-                                       style="background: transparent; border: none; color: #fff; text-align: center; width: 100px; font-size: 1.25rem; font-weight: 600; padding: 0.5rem; outline: none;"
-                                       oninput="InventoryView.updateProductQuantity(${index}, this.value); this.parentElement.style.borderColor = parseFloat(this.value) > 0 ? 'rgba(52, 211, 153, 0.2)' : (parseFloat(this.value) < 0 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.1)'); this.previousElementSibling.textContent = parseFloat(this.value) > 0 ? '+' : (parseFloat(this.value) < 0 ? '−' : '±'); this.previousElementSibling.style.color = parseFloat(this.value) > 0 ? '#34d399' : (parseFloat(this.value) < 0 ? '#f87171' : '#e2e8f0'); this.previousElementSibling.style.background = parseFloat(this.value) > 0 ? 'rgba(52, 211, 153, 0.2)' : (parseFloat(this.value) < 0 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.1)');"
+                                       style="background: transparent; border: none; color: #1e293b; text-align: center; width: 110px; font-size: 1.3rem; font-weight: 800; padding: 0.5rem; outline: none;"
+                                       oninput="InventoryView.updateProductQuantity(${index}, this.value); const v = parseFloat(this.value); const isP = v > 0; const isN = v < 0; const cId = isP ? '#10b981' : (isN ? '#ef4444' : '#64748b'); const bId = isP ? '#f0fdf4' : (isN ? '#fff1f2' : '#f8fafc'); this.parentElement.style.borderColor = cId; this.parentElement.style.background = bId; this.previousElementSibling.textContent = isP ? '+' : (isN ? '−' : '±'); this.previousElementSibling.style.background = cId;"
                                        onkeypress="if(event.key === 'Enter') { event.preventDefault(); InventoryView.focusNextBulkInput(${index}); }">
-                                <div style="color: #64748b; padding-right: 0.75rem; font-size: 0.85rem; font-weight: 500;">
+                                <div style="color: #475569; padding-right: 0.75rem; font-size: 0.9rem; font-weight: 700;">
                                     ${p.unit}
                                 </div>
                             </div>
                             
                             <!-- Boton Quitar -->
                             <button class="btn" onclick="InventoryView.removeProductFromBulk(${index})" 
-                                    style="background: rgba(239, 68, 68, 0.1); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.2); width: 2.5rem; height: 2.5rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s;" onmouseover="this.style.background='rgba(239, 68, 68, 0.3)';" onmouseout="this.style.background='rgba(239, 68, 68, 0.1)';">
+                                    style="background: #fee2e2; color: #dc2626; border: 2px solid #fecaca; width: 2.8rem; height: 2.8rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; font-weight: bold;" onmouseover="this.style.background='#fecaca';" onmouseout="this.style.background='#fee2e2';">
                                 ✕
                             </button>
                         </div>
                     </div>
                 `}).join('')}
             </div>
+
         `;
     },
 
@@ -1123,119 +1212,143 @@ const InventoryView = {
     async loadConsumptionReport() {
         const allMovements = await StockMovement.getByType('consumption');
         const container = document.getElementById('consumptionReportContent');
-
         if (!container) return;
 
-        // Filtrar por fecha seleccionada (Día y Mes)
-        const [targetY, targetM, targetD] = this.selectedConsumptionDate.split('-').map(Number);
+        const targetDate = new Date(this.selectedConsumptionDate + 'T00:00:00');
+        const targetY = targetDate.getFullYear();
+        const targetM = targetDate.getMonth() + 1;
+        const targetD = targetDate.getDate();
+
+        // Semana actual (ISO Week or last 7 days? Let's do current week Mon-Sun)
+        const startOfWeek = new Date(targetDate);
+        const day = startOfWeek.getDay() || 7; // 1 (Mon) to 7 (Sun)
+        startOfWeek.setHours(0,0,0,0);
+        startOfWeek.setDate(startOfWeek.getDate() - (day - 1));
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(endOfWeek.getDate() + 6);
+        endOfWeek.setHours(23,59,59,999);
 
         const dayMovements = allMovements.filter(m => {
-            const mDate = new Date(m.date);
-            return mDate.getFullYear() === targetY &&
-                (mDate.getMonth() + 1) === targetM &&
-                mDate.getDate() === targetD;
+            const d = new Date(m.date);
+            return d.getFullYear() === targetY && (d.getMonth() + 1) === targetM && d.getDate() === targetD;
+        });
+
+        const weekMovements = allMovements.filter(m => {
+            const d = new Date(m.date);
+            return d >= startOfWeek && d <= endOfWeek;
         });
 
         const monthMovements = allMovements.filter(m => {
-            const mDate = new Date(m.date);
-            return mDate.getFullYear() === targetY &&
-                (mDate.getMonth() + 1) === targetM;
+            const d = new Date(m.date);
+            return d.getFullYear() === targetY && (d.getMonth() + 1) === targetM;
         });
 
-        let dayTotalQty = 0;
-        let dayTotalCost = 0;
-        let monthTotalCost = 0;
+        const calcTotal = (movs) => movs.reduce((sum, m) => {
+            const p = this.products.find(prod => prod.id === m.productId);
+            return sum + (parseFloat(m.cost_value) || (p ? Math.abs(m.quantity) * (parseFloat(p.cost) || 0) : 0));
+        }, 0);
 
-        // Cálculos del mes
-        for (const m of monthMovements) {
-            const product = this.products.find(p => Number(p.id) === Number(m.productId));
-            const costValue = parseFloat(m.cost_value) || (product ? (Math.abs(m.quantity) * (parseFloat(product.cost) || 0)) : 0);
-            monthTotalCost += costValue;
-        }
+        const dayTotalCost = calcTotal(dayMovements);
+        const weekTotalCost = calcTotal(weekMovements);
+        const monthTotalCost = calcTotal(monthMovements);
+        const dayTotalQty = dayMovements.reduce((sum, m) => sum + Math.abs(m.quantity), 0);
 
         let html = `
-            <div style="background: rgba(15, 23, 42, 0.4); padding: 1.5rem; border-radius: 1rem; margin-bottom: 2rem; border: 1px solid rgba(255,255,255,0.05);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <div style="background: #ffffff; padding: 2rem; border-radius: 1.5rem; margin-bottom: 2rem; border: 1px solid #e2e8f0; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.05);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 2px solid #f1f5f9;">
                     <div>
-                        <h3 style="margin: 0; color: #93c5fd; font-size: 1.1rem;">📅 Filtrar por Día</h3>
-                        <p style="margin: 0.2rem 0 0 0; color: #64748b; font-size: 0.85rem;">Selecciona una fecha para revisar el detalle</p>
+                        <h3 style="margin: 0; color: #1e3a8a; font-size: 1.5rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
+                            <span>📊</span> Resumen de Consumo de la Casa
+                        </h3>
+                        <p style="margin: 0.5rem 0 0 0; color: #64748b; font-size: 0.95rem; font-weight: 600;">Valores calculados a Precio de Costo (Neto)</p>
                     </div>
-                    <input type="date" value="${this.selectedConsumptionDate}" 
-                           onchange="InventoryView.setConsumptionDate(this.value)"
-                           style="background: #0f172a; border: 1px solid rgba(59, 130, 246, 0.3); color: white; padding: 0.6rem 1rem; border-radius: 0.5rem; font-size: 1rem; outline: none;">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem;">
+                        <label style="font-size: 0.75rem; font-weight: 800; color: #1e3a8a; text-transform: uppercase;">Fecha de Análisis</label>
+                        <input type="date" value="${this.selectedConsumptionDate}" 
+                               onchange="InventoryView.setConsumptionDate(this.value)"
+                               style="background: #eff6ff; border: 2px solid #bfdbfe; color: #1e40af; padding: 0.75rem 1.25rem; border-radius: 1rem; font-size: 1.1rem; font-weight: 800; outline: none; cursor: pointer; transition: all 0.2s;"
+                               onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#bfdbfe'">
+                    </div>
                 </div>
 
-                <div class="grid grid-3">
-                    <div class="stat-card" style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.2);">
-                        <h3>Total Items (Día)</h3>
-                        <div class="value" style="color: #60a5fa;" id="consumptionDayQty">0</div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem;">
+                    <div style="background: #ffffff; border: 2px solid #bfdbfe; border-radius: 1.25rem; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                        <span style="font-size: 0.8rem; font-weight: 800; color: #3b82f6; text-transform: uppercase; letter-spacing: 1px;">TOTAL HOY</span>
+                        <span style="font-size: 2.2rem; font-weight: 900; color: #1e40af;">${formatCLP(dayTotalCost)}</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; font-size: 0.85rem; color: #64748b; font-weight: 600;">
+                            <span>Cant. de productos:</span>
+                            <span style="background: #dbeafe; color: #1e40af; padding: 0.2rem 0.6rem; border-radius: 0.5rem;">${dayTotalQty} items</span>
+                        </div>
                     </div>
-                    <div class="stat-card" style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2);">
-                        <h3>Total Valor (Día)</h3>
-                        <div class="value" style="color: #f87171;" id="consumptionDayCost">$0</div>
+
+                    <div style="background: #ffffff; border: 2px solid #c084fc; border-radius: 1.25rem; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                        <span style="font-size: 0.8rem; font-weight: 800; color: #a855f7; text-transform: uppercase; letter-spacing: 1px;">ESTA SEMANA</span>
+                        <span style="font-size: 2.2rem; font-weight: 900; color: #7e22ce;">${formatCLP(weekTotalCost)}</span>
+                        <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #9333ea; font-weight: 600;">Del ${startOfWeek.toLocaleDateString()} al ${endOfWeek.toLocaleDateString()}</p>
                     </div>
-                    <div class="stat-card" style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2);">
-                        <h3>Acumulado Mes (${formatMonthYear(this.selectedConsumptionDate)})</h3>
-                        <div class="value" style="color: #34d399;" id="consumptionMonthCost">$0</div>
+
+                    <div style="background: linear-gradient(135deg, #1e3a8a, #1d4ed8); border-radius: 1.25rem; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.3);">
+                        <span style="font-size: 0.8rem; font-weight: 800; color: #bfdbfe; text-transform: uppercase; letter-spacing: 1px;">TOTAL MES</span>
+                        <span style="font-size: 2.2rem; font-weight: 900; color: #ffffff;">${formatCLP(monthTotalCost)}</span>
+                        <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #93c5fd; font-weight: 600; text-transform: capitalize;">Acumulado ${formatMonthYear(this.selectedConsumptionDate)}</p>
                     </div>
                 </div>
             </div>
-            
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Hora</th>
-                            <th>Producto</th>
-                            <th style="text-align: center;">Cantidad</th>
-                            <th style="text-align: right;">Costo (Neto)</th>
-                            <th style="text-align: right;">P. Venta</th>
-                            <th style="text-align: right;">Total Consumo</th>
-                            <th>Motivo</th>
-                        </tr>
-                    </thead>
-                    <tbody id="consumptionTableBody">
-        `;
 
-        if (dayMovements.length === 0) {
-            html += `<tr><td colspan="6" style="padding: 3rem; text-align: center; color: #64748b;">No hay registros para este día seleccionado.</td></tr>`;
-        } else {
-            for (const m of dayMovements) {
-                const product = this.products.find(p => p.id === m.productId);
-                const costValue = m.cost_value || (product ? (Math.abs(m.quantity) * product.cost) : 0);
-                const unitCost = product ? product.cost : (m.quantity !== 0 ? costValue / Math.abs(m.quantity) : 0);
-
-                dayTotalQty += Math.abs(m.quantity);
-                dayTotalCost += costValue;
-
-                html += `
-                    <tr>
-                        <td style="color: #64748b;">${new Date(m.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                        <td>
-                            <strong style="color: #e2e8f0;">${product ? product.name : 'Producto no encontrado'}</strong>
-                        </td>
-                        <td style="text-align: center;"><span class="badge badge-warning">${Math.abs(m.quantity)}</span></td>
-                        <td style="text-align: right; color: #94a3b8;">${formatCLP(unitCost)}</td>
-                        <td style="text-align: right; color: #6ee7b7;">${product ? formatCLP(product.price) : '-'}</td>
-                        <td style="text-align: right; font-weight: 700; color: #fca5a5;">${formatCLP(costValue)}</td>
-                        <td><small style="color: #64748b;">${m.reason || '-'}</small></td>
-                    </tr>
-                `;
-            }
-        }
-
-        html += `
-                    </tbody>
-                </table>
+            <div class="card" style="padding: 0; overflow: hidden; border: 1px solid #e2e8f0; border-radius: 1.5rem;">
+                <div style="padding: 1.5rem; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                    <h4 style="margin: 0; color: #334155; font-weight: 800;">Detalle de Consumo del Día</h4>
+                    <span style="font-size: 0.85rem; color: #64748b; font-weight: 700;">${dayMovements.length} Registros</span>
+                </div>
+                <div class="table-container" style="margin: 0; max-height: 500px; overflow-y: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead style="position: sticky; top: 0; background: #ffffff; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                            <tr>
+                                <th style="text-align: left; padding: 1rem 1.5rem; font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Hora</th>
+                                <th style="text-align: left; padding: 1rem 1.5rem; font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Producto</th>
+                                <th style="text-align: center; padding: 1rem 1.5rem; font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Cant.</th>
+                                <th style="text-align: right; padding: 1rem 1.5rem; font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Costo Unit.</th>
+                                <th style="text-align: right; padding: 1rem 1.5rem; font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Total Neto</th>
+                                <th style="text-align: left; padding: 1rem 1.5rem; font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Motivo</th>
+                                <th style="text-align: right; padding: 1rem 1.5rem; font-size: 0.75rem; color: #64748b; text-transform: uppercase;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${dayMovements.length === 0 ? `
+                                <tr><td colspan="7" style="padding: 4rem; text-align: center; color: #94a3b8;">No se encontraron consumos registrados para esta fecha.</td></tr>
+                            ` : dayMovements.map(m => {
+                                const p = this.products.find(prod => prod.id === m.productId);
+                                const costVal = parseFloat(m.cost_value) || (p ? Math.abs(m.quantity) * (parseFloat(p.cost) || 0) : 0);
+                                const unitC = p ? parseFloat(p.cost) : (m.quantity !== 0 ? costVal / Math.abs(m.quantity) : 0);
+                                return `
+                                    <tr style="border-bottom: 1px solid #f1f5f9; transition: background 0.2s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                                        <td style="padding: 1.25rem 1.5rem; font-weight: 700; color: #64748b;">${new Date(m.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                                        <td style="padding: 1.25rem 1.5rem;">
+                                            <div style="font-weight: 800; color: #1e293b;">${p ? safeHTML(p.name) : 'Producto no encontrado'}</div>
+                                            <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">${p ? p.barcode : '-'}</div>
+                                        </td>
+                                        <td style="padding: 1.25rem 1.5rem; text-align: center;">
+                                            <span style="background: #f1f5f9; color: #334155; padding: 0.4rem 0.8rem; border-radius: 0.5rem; font-weight: 900; font-size: 1.1rem; border: 1px solid #e2e8f0;">${Math.abs(m.quantity)}</span>
+                                        </td>
+                                        <td style="padding: 1.25rem 1.5rem; text-align: right; color: #64748b; font-weight: 700;">${formatCLP(unitC)}</td>
+                                        <td style="padding: 1.25rem 1.5rem; text-align: right;">
+                                            <div style="font-weight: 900; color: #1e293b; font-size: 1.15rem;">${formatCLP(costVal)}</div>
+                                            <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; font-weight: 700;">Valor Neto</div>
+                                        </td>
+                                        <td style="padding: 1.25rem 1.5rem; color: #64748b; font-style: italic; font-weight: 600; font-size: 0.9rem;">${safeHTML(m.reason || '-')}</td>
+                                        <td style="padding: 1.25rem 1.5rem; text-align: right;">
+                                            <button class="btn btn-sm btn-outline-danger" onclick="InventoryView.deleteConsumption(${m.id})" title="Eliminar registro">🗑️</button>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         `;
 
         container.innerHTML = html;
-
-        // Update totals
-        document.getElementById('consumptionDayQty').textContent = formatNumber(dayTotalQty);
-        document.getElementById('consumptionDayCost').textContent = formatCLP(dayTotalCost);
-        document.getElementById('consumptionMonthCost').textContent = formatCLP(monthTotalCost);
     },
 
     setConsumptionDate(date) {
@@ -1244,128 +1357,311 @@ const InventoryView = {
         this.loadConsumptionReport();
     },
 
+    async deleteConsumption(id) {
+        const movement = await StockMovement.getById(id);
+        if (!movement) {
+            showNotification('El registro no fue encontrado', 'error');
+            return;
+        }
+
+        const p = this.products.find(prod => prod.id === movement.productId);
+        const productName = p ? p.name : 'Producto desconocido';
+        const qty = Math.abs(movement.quantity);
+
+        const modalContent = `
+            <div style="text-align: center; padding: 2rem;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🍴</div>
+                <h3 style="color: #dc2626; font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">¿Eliminar Registro de Consumo Interno?</h3>
+                <p style="color: #64748b; font-size: 1rem; margin-bottom: 1.5rem;">
+                    <strong>${productName}</strong> (${qty} unidades)
+                </p>
+                <p style="color: #64748b; font-size: 0.95rem; margin-bottom: 2rem;">
+                    ¿Deseas que el stock de este producto vuelva al inventario?
+                </p>
+                <div style="display: flex; gap: 1rem; justify-content: center;">
+                    <button id="returnStockBtn" style="flex: 1; padding: 1rem 2rem; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 0.75rem; font-weight: 800; font-size: 1rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);"
+                            onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(16, 185, 129, 0.4)';"
+                            onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(16, 185, 129, 0.3)';">
+                        🟢 SÍ - Devolver Stock
+                    </button>
+                    <button id="noReturnStockBtn" style="flex: 1; padding: 1rem 2rem; background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; border-radius: 0.75rem; font-weight: 800; font-size: 1rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);"
+                            onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(239, 68, 68, 0.4)';"
+                            onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(239, 68, 68, 0.3)';">
+                        🔴 NO - Solo Eliminar
+                    </button>
+                </div>
+                <button id="cancelBtn" style="margin-top: 1.5rem; padding: 0.75rem 1.5rem; background: transparent; color: #64748b; border: 2px solid #e2e8f0; border-radius: 0.5rem; font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: all 0.2s;"
+                        onmouseover="this.style.background='#f1f5f9';"
+                        onmouseout="this.style.background='transparent';">
+                    Cancelar
+                </button>
+            </div>
+        `;
+
+        showModal(modalContent, {
+            title: '',
+            width: '500px',
+            showCloseButton: false
+        });
+
+        document.getElementById('returnStockBtn').addEventListener('click', async () => {
+            closeModal();
+            try {
+                const qtyToReturn = Math.abs(movement.quantity);
+                await StockService.createAdjustment(movement.productId, qtyToReturn, 'Devolución por eliminación de consumo interno');
+                await StockMovement.delete(id);
+                showNotification('Registro eliminado y stock devuelto', 'success');
+                await this.refreshData();
+                if (window.app) app.navigate('inventory');
+            } catch (error) {
+                console.error('Error al eliminar consumo:', error);
+                showNotification('Ocurrió un error al intentar eliminar el registro', 'error');
+            }
+        });
+
+        document.getElementById('noReturnStockBtn').addEventListener('click', async () => {
+            closeModal();
+            try {
+                await StockMovement.delete(id);
+                showNotification('Registro de consumo eliminado (stock no devuelto)', 'success');
+                await this.refreshData();
+                if (window.app) app.navigate('inventory');
+            } catch (error) {
+                console.error('Error al eliminar consumo:', error);
+                showNotification('Ocurrió un error al intentar eliminar el registro', 'error');
+            }
+        });
+
+        document.getElementById('cancelBtn').addEventListener('click', () => {
+            closeModal();
+        });
+    },
+
     async loadLossReport() {
         const allMovements = await StockMovement.getByType('loss');
         const container = document.getElementById('lossReportContent');
-
         if (!container) return;
 
-        // Filtrar por fecha seleccionada (Día y Mes)
-        const [targetY, targetM, targetD] = this.selectedLossDate.split('-').map(Number);
+        const targetDate = new Date(this.selectedLossDate + 'T00:00:00');
+        const targetY = targetDate.getFullYear();
+        const targetM = targetDate.getMonth() + 1;
+        const targetD = targetDate.getDate();
+
+        // Semana actual (Mon-Sun)
+        const startOfWeek = new Date(targetDate);
+        const day = startOfWeek.getDay() || 7;
+        startOfWeek.setHours(0,0,0,0);
+        startOfWeek.setDate(startOfWeek.getDate() - (day - 1));
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(endOfWeek.getDate() + 6);
+        endOfWeek.setHours(23,59,59,999);
 
         const dayMovements = allMovements.filter(m => {
-            const mDate = new Date(m.date);
-            return mDate.getFullYear() === targetY &&
-                (mDate.getMonth() + 1) === targetM &&
-                mDate.getDate() === targetD;
+            const d = new Date(m.date);
+            return d.getFullYear() === targetY && (d.getMonth() + 1) === targetM && d.getDate() === targetD;
+        });
+
+        const weekMovements = allMovements.filter(m => {
+            const d = new Date(m.date);
+            return d >= startOfWeek && d <= endOfWeek;
         });
 
         const monthMovements = allMovements.filter(m => {
-            const mDate = new Date(m.date);
-            return mDate.getFullYear() === targetY &&
-                (mDate.getMonth() + 1) === targetM;
+            const d = new Date(m.date);
+            return d.getFullYear() === targetY && (d.getMonth() + 1) === targetM;
         });
 
-        let dayTotalQty = 0;
-        let dayTotalCost = 0;
-        let monthTotalCost = 0;
+        const calcTotal = (movs) => movs.reduce((sum, m) => {
+            const p = this.products.find(prod => prod.id === m.productId);
+            return sum + (parseFloat(m.cost_value) || (p ? Math.abs(m.quantity) * (parseFloat(p.cost) || 0) : 0));
+        }, 0);
 
-        // Cálculos del mes
-        for (const m of monthMovements) {
-            const product = this.products.find(p => Number(p.id) === Number(m.productId));
-            const costValue = parseFloat(m.cost_value) || (product ? (Math.abs(m.quantity) * (parseFloat(product.cost) || 0)) : 0);
-            monthTotalCost += costValue;
-        }
+        const dayTotalCost = calcTotal(dayMovements);
+        const weekTotalCost = calcTotal(weekMovements);
+        const monthTotalCost = calcTotal(monthMovements);
+        const dayTotalQty = dayMovements.reduce((sum, m) => sum + Math.abs(m.quantity), 0);
 
         let html = `
-            <div style="background: rgba(15, 23, 42, 0.4); padding: 1.5rem; border-radius: 1rem; margin-bottom: 2rem; border: 1px solid rgba(255,255,255,0.05);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <div style="background: #ffffff; padding: 2rem; border-radius: 1.5rem; margin-bottom: 2rem; border: 1px solid #fee2e2; box-shadow: 0 10px 25px -5px rgba(239, 68, 68, 0.05);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding-bottom: 1.5rem; border-bottom: 2px solid #fef2f2;">
                     <div>
-                        <h3 style="margin: 0; color: #f87171; font-size: 1.1rem;">📅 Filtrar por Día</h3>
-                        <p style="margin: 0.2rem 0 0 0; color: #64748b; font-size: 0.85rem;">Selecciona una fecha para revisar el detalle</p>
+                        <h3 style="margin: 0; color: #991b1b; font-size: 1.5rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
+                            <span>🗑️</span> Reporte de Pérdidas y Mermas
+                        </h3>
+                        <p style="margin: 0.5rem 0 0 0; color: #7f1d1d; font-size: 0.95rem; font-weight: 600;">Valor de mercadería perdida a Precio de Costo (Neto)</p>
                     </div>
-                    <input type="date" value="${this.selectedLossDate}" 
-                           onchange="InventoryView.setLossDate(this.value)"
-                           style="background: #0f172a; border: 1px solid rgba(239, 68, 68, 0.3); color: white; padding: 0.6rem 1rem; border-radius: 0.5rem; font-size: 1rem; outline: none;">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem;">
+                        <label style="font-size: 0.75rem; font-weight: 800; color: #991b1b; text-transform: uppercase;">Fecha de Análisis</label>
+                        <input type="date" value="${this.selectedLossDate}" 
+                               onchange="InventoryView.setLossDate(this.value)"
+                               style="background: #fff1f2; border: 2px solid #fecaca; color: #991b1b; padding: 0.75rem 1.25rem; border-radius: 1rem; font-size: 1.1rem; font-weight: 800; outline: none; cursor: pointer;">
+                    </div>
                 </div>
 
-                <div class="grid grid-3">
-                    <div class="stat-card" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2);">
-                        <h3>Total Items (Día)</h3>
-                        <div class="value" style="color: #fca5a5;" id="lossDayQty">0</div>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.5rem;">
+                    <div style="background: #ffffff; border: 2px solid #fecaca; border-radius: 1.25rem; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                        <span style="font-size: 0.8rem; font-weight: 800; color: #ef4444; text-transform: uppercase; letter-spacing: 1px;">PÉRDIDA HOY</span>
+                        <span style="font-size: 2.2rem; font-weight: 900; color: #b91c1c;">${formatCLP(dayTotalCost)}</span>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.5rem; font-size: 0.85rem; color: #991b1b; font-weight: 600;">
+                            <span>Cant. afectada:</span>
+                            <span style="background: #fee2e2; color: #b91c1c; padding: 0.2rem 0.6rem; border-radius: 0.5rem;">${dayTotalQty} items</span>
+                        </div>
                     </div>
-                    <div class="stat-card" style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2);">
-                        <h3>Total Valor (Día)</h3>
-                        <div class="value" style="color: #ef4444;" id="lossDayCost">$0</div>
+
+                    <div style="background: #ffffff; border: 2px solid #fca5a5; border-radius: 1.25rem; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                        <span style="font-size: 0.8rem; font-weight: 800; color: #dc2626; text-transform: uppercase; letter-spacing: 1px;">ESTA SEMANA</span>
+                        <span style="font-size: 2.2rem; font-weight: 900; color: #991b1b;">${formatCLP(weekTotalCost)}</span>
+                        <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #b91c1c; font-weight: 600;">Del ${startOfWeek.toLocaleDateString()} al ${endOfWeek.toLocaleDateString()}</p>
                     </div>
-                    <div class="stat-card" style="background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2);">
-                        <h3>Acumulado Mes (${formatMonthYear(this.selectedLossDate)})</h3>
-                        <div class="value" style="color: #34d399;" id="lossMonthCost">$0</div>
+
+                    <div style="background: linear-gradient(135deg, #991b1b, #7f1d1d); border-radius: 1.25rem; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; box-shadow: 0 10px 20px -5px rgba(185, 28, 28, 0.3);">
+                        <span style="font-size: 0.8rem; font-weight: 800; color: #fca5a5; text-transform: uppercase; letter-spacing: 1px;">ACUMULADO MES</span>
+                        <span style="font-size: 2.2rem; font-weight: 900; color: #ffffff;">${formatCLP(monthTotalCost)}</span>
+                        <p style="margin: 0.5rem 0 0 0; font-size: 0.75rem; color: #fecaca; font-weight: 600; text-transform: capitalize;">Mes de ${formatMonthYear(this.selectedLossDate)}</p>
                     </div>
                 </div>
             </div>
-            
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Hora</th>
-                            <th>Producto</th>
-                            <th style="text-align: center;">Cantidad</th>
-                            <th style="text-align: right;">Costo (Neto)</th>
-                            <th style="text-align: right;">P. Venta</th>
-                            <th style="text-align: right;">Total Pérdida</th>
-                            <th>Motivo</th>
-                        </tr>
-                    </thead>
-                    <tbody id="lossTableBody">
-        `;
 
-        if (dayMovements.length === 0) {
-            html += `<tr><td colspan="6" style="padding: 3rem; text-align: center; color: #64748b;">No hay registros para este día seleccionado.</td></tr>`;
-        } else {
-            for (const m of dayMovements) {
-                const product = this.products.find(p => p.id === m.productId);
-                const costValue = m.cost_value || (product ? (Math.abs(m.quantity) * product.cost) : 0);
-                const unitCost = product ? product.cost : (m.quantity !== 0 ? costValue / Math.abs(m.quantity) : 0);
-
-                dayTotalQty += Math.abs(m.quantity);
-                dayTotalCost += costValue;
-
-                html += `
-                    <tr>
-                        <td style="color: #64748b;">${new Date(m.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
-                        <td>
-                            <strong style="color: #e2e8f0;">${product ? product.name : 'Producto no encontrado'}</strong>
-                        </td>
-                        <td style="text-align: center;"><span class="badge badge-danger">${Math.abs(m.quantity)}</span></td>
-                        <td style="text-align: right; color: #94a3b8;">${formatCLP(unitCost)}</td>
-                        <td style="text-align: right; color: #6ee7b7;">${product ? formatCLP(product.price) : '-'}</td>
-                        <td style="text-align: right; font-weight: 700; color: #fca5a5;">${formatCLP(costValue)}</td>
-                        <td><small style="color: #64748b;">${m.reason || '-'}</small></td>
-                    </tr>
-                `;
-            }
-        }
-
-        html += `
-                    </tbody>
-                </table>
+            <div class="card" style="padding: 0; overflow: hidden; border: 1px solid #fee2e2; border-radius: 1.5rem;">
+                <div style="padding: 1.5rem; background: #fff1f2; border-bottom: 1px solid #fecaca; display: flex; justify-content: space-between; align-items: center;">
+                    <h4 style="margin: 0; color: #991b1b; font-weight: 800;">Detalle de Mermas del Día</h4>
+                    <span style="font-size: 0.85rem; color: #b91c1c; font-weight: 700;">${dayMovements.length} Registros</span>
+                </div>
+                <div class="table-container" style="margin: 0; max-height: 500px; overflow-y: auto;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <thead style="position: sticky; top: 0; background: #ffffff; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                            <tr>
+                                <th style="text-align: left; padding: 1rem 1.5rem; font-size: 0.75rem; color: #991b1b; text-transform: uppercase;">Hora</th>
+                                <th style="text-align: left; padding: 1rem 1.5rem; font-size: 0.75rem; color: #991b1b; text-transform: uppercase;">Producto</th>
+                                <th style="text-align: center; padding: 1rem 1.5rem; font-size: 0.75rem; color: #991b1b; text-transform: uppercase;">Cant.</th>
+                                <th style="text-align: right; padding: 1rem 1.5rem; font-size: 0.75rem; color: #991b1b; text-transform: uppercase;">Costo Unit.</th>
+                                <th style="text-align: right; padding: 1rem 1.5rem; font-size: 0.75rem; color: #991b1b; text-transform: uppercase;">Pérdida Neta</th>
+                                <th style="text-align: left; padding: 1rem 1.5rem; font-size: 0.75rem; color: #991b1b; text-transform: uppercase;">Motivo</th>
+                                <th style="text-align: right; padding: 1rem 1.5rem; font-size: 0.75rem; color: #991b1b; text-transform: uppercase;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${dayMovements.length === 0 ? `
+                                <tr><td colspan="7" style="padding: 4rem; text-align: center; color: #fca5a5;">No hay pérdidas registradas en esta fecha.</td></tr>
+                            ` : dayMovements.map(m => {
+                                const p = this.products.find(prod => prod.id === m.productId);
+                                const costVal = parseFloat(m.cost_value) || (p ? Math.abs(m.quantity) * (parseFloat(p.cost) || 0) : 0);
+                                const unitC = p ? parseFloat(p.cost) : (m.quantity !== 0 ? costVal / Math.abs(m.quantity) : 0);
+                                return `
+                                    <tr style="border-bottom: 1px solid #fee2e2; transition: background 0.2s;" onmouseover="this.style.background='#fff1f2'" onmouseout="this.style.background='transparent'">
+                                        <td style="padding: 1.25rem 1.5rem; font-weight: 700; color: #b91c1c;">${new Date(m.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td>
+                                        <td style="padding: 1.25rem 1.5rem;">
+                                            <div style="font-weight: 800; color: #7f1d1d;">${p ? safeHTML(p.name) : 'Producto no encontrado'}</div>
+                                            <div style="font-size: 0.75rem; color: #b91c1c; margin-top: 0.25rem;">${p ? p.barcode : '-'}</div>
+                                        </td>
+                                        <td style="padding: 1.25rem 1.5rem; text-align: center;">
+                                            <span style="background: #ef4444; color: white; padding: 0.4rem 0.8rem; border-radius: 0.5rem; font-weight: 900; font-size: 1.1rem;">${Math.abs(m.quantity)}</span>
+                                        </td>
+                                        <td style="padding: 1.25rem 1.5rem; text-align: right; color: #991b1b; font-weight: 700;">${formatCLP(unitC)}</td>
+                                        <td style="padding: 1.25rem 1.5rem; text-align: right;">
+                                            <div style="font-weight: 900; color: #b91c1c; font-size: 1.15rem;">${formatCLP(costVal)}</div>
+                                            <div style="font-size: 0.7rem; color: #f87171; text-transform: uppercase; font-weight: 700;">Costo Neto</div>
+                                        </td>
+                                        <td style="padding: 1.25rem 1.5rem; color: #991b1b; font-style: italic; font-weight: 600; font-size: 0.9rem;">${safeHTML(m.reason || '-')}</td>
+                                        <td style="padding: 1.25rem 1.5rem; text-align: right;">
+                                            <button class="btn btn-sm btn-outline-danger" onclick="InventoryView.deleteLoss(${m.id})" title="Eliminar registro">🗑️</button>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         `;
 
         container.innerHTML = html;
-
-        // Update totals
-        document.getElementById('lossDayQty').textContent = formatNumber(dayTotalQty);
-        document.getElementById('lossDayCost').textContent = formatCLP(dayTotalCost);
-        document.getElementById('lossMonthCost').textContent = formatCLP(monthTotalCost);
     },
 
     setLossDate(date) {
         if (!date) return;
         this.selectedLossDate = date;
         this.loadLossReport();
+    },
+
+    async deleteLoss(id) {
+        const movement = await StockMovement.getById(id);
+        if (!movement) {
+            showNotification('El registro no fue encontrado', 'error');
+            return;
+        }
+
+        const p = this.products.find(prod => prod.id === movement.productId);
+        const productName = p ? p.name : 'Producto desconocido';
+        const qty = Math.abs(movement.quantity);
+
+        const modalContent = `
+            <div style="text-align: center; padding: 2rem;">
+                <div style="font-size: 3rem; margin-bottom: 1rem;">🗑️</div>
+                <h3 style="color: #dc2626; font-size: 1.5rem; font-weight: 800; margin-bottom: 1rem;">¿Eliminar Registro de Pérdida?</h3>
+                <p style="color: #64748b; font-size: 1rem; margin-bottom: 1.5rem;">
+                    <strong>${productName}</strong> (${qty} unidades)
+                </p>
+                <p style="color: #64748b; font-size: 0.95rem; margin-bottom: 2rem;">
+                    ¿Deseas que el stock de este producto vuelva al inventario?
+                </p>
+                <div style="display: flex; gap: 1rem; justify-content: center;">
+                    <button id="returnStockBtn" style="flex: 1; padding: 1rem 2rem; background: linear-gradient(135deg, #10b981, #059669); color: white; border: none; border-radius: 0.75rem; font-weight: 800; font-size: 1rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);"
+                            onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(16, 185, 129, 0.4)';"
+                            onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(16, 185, 129, 0.3)';">
+                        🟢 SÍ - Devolver Stock
+                    </button>
+                    <button id="noReturnStockBtn" style="flex: 1; padding: 1rem 2rem; background: linear-gradient(135deg, #ef4444, #dc2626); color: white; border: none; border-radius: 0.75rem; font-weight: 800; font-size: 1rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);"
+                            onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 6px 20px rgba(239, 68, 68, 0.4)';"
+                            onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 15px rgba(239, 68, 68, 0.3)';">
+                        🔴 NO - Solo Eliminar
+                    </button>
+                </div>
+                <button id="cancelBtn" style="margin-top: 1.5rem; padding: 0.75rem 1.5rem; background: transparent; color: #64748b; border: 2px solid #e2e8f0; border-radius: 0.5rem; font-weight: 600; font-size: 0.9rem; cursor: pointer; transition: all 0.2s;"
+                        onmouseover="this.style.background='#f1f5f9';"
+                        onmouseout="this.style.background='transparent';">
+                    Cancelar
+                </button>
+            </div>
+        `;
+
+        showModal(modalContent, {
+            title: '',
+            width: '500px',
+            showCloseButton: false
+        });
+
+        document.getElementById('returnStockBtn').addEventListener('click', async () => {
+            closeModal();
+            try {
+                const qtyToReturn = Math.abs(movement.quantity);
+                await StockService.createAdjustment(movement.productId, qtyToReturn, 'Devolución por eliminación de pérdida');
+                await StockMovement.delete(id);
+                showNotification('Registro eliminado y stock devuelto', 'success');
+                await this.refreshData();
+                if (window.app) app.navigate('inventory');
+            } catch (error) {
+                console.error('Error al eliminar pérdida:', error);
+                showNotification('Ocurrió un error al intentar eliminar el registro', 'error');
+            }
+        });
+
+        document.getElementById('noReturnStockBtn').addEventListener('click', async () => {
+            closeModal();
+            try {
+                await StockMovement.delete(id);
+                showNotification('Registro de pérdida eliminado (stock no devuelto)', 'success');
+                await this.refreshData();
+                if (window.app) app.navigate('inventory');
+            } catch (error) {
+                console.error('Error al eliminar pérdida:', error);
+                showNotification('Ocurrió un error al intentar eliminar el registro', 'error');
+            }
+        });
+
+        document.getElementById('cancelBtn').addEventListener('click', () => {
+            closeModal();
+        });
     },
 
     getMovementTypeName(type) {
@@ -1400,7 +1696,7 @@ const InventoryView = {
                     <select name="productId" class="form-control" required>
                         <option value="">Seleccionar...</option>
                         ${products.map(p => `
-                            <option value="${p.id}">${p.name} (Stock: ${p.stock})</option>
+                            <option value="${p.id}">${safeHTML(p.name)} (Stock: ${p.stock})</option>
                         `).join('')}
                     </select>
                 </div>
@@ -1419,7 +1715,7 @@ const InventoryView = {
                     <input type="number" 
                            name="quantity" 
                            class="form-control" 
-                           step="0.001" 
+                           step="any" 
                            required>
                     <small style="color: var(--text); opacity: 0.7;">
                         Para ajustes: usa valores positivos para aumentar, negativos para disminuir<br>
@@ -1476,7 +1772,7 @@ const InventoryView = {
 
         const content = `
             <div style="margin-bottom: 1.5rem;">
-                <p><strong>Producto:</strong> ${product.name}</p>
+                <p><strong>Producto:</strong> ${safeHTML(product.name)}</p>
                 <p><strong>Stock Actual:</strong> ${product.stock} ${product.type === 'weight' ? 'kg' : 'un'}</p>
             </div>
             
@@ -1488,7 +1784,7 @@ const InventoryView = {
                            class="form-control" 
                            value="${product.stock}" 
                            min="0" 
-                           step="0.001" 
+                           step="any" 
                            required>
                 </div>
                 
@@ -1518,10 +1814,8 @@ const InventoryView = {
             return;
         }
 
-        const difference = newStock - currentStock;
-
         try {
-            await StockMovement.createAdjustment(productId, difference, reason);
+            await StockService.setStock(productId, newStock, reason, 'adjustment');
             showNotification('Stock ajustado correctamente', 'success');
             closeModal();
             app.navigate('inventory');
@@ -1550,7 +1844,7 @@ const InventoryView = {
                 </div>
                 <div class="form-group">
                     <label>Nuevo stock (cantidad a la que quieres fijar) *</label>
-                    <input type="number" id="setStockNew" class="form-control" min="0" step="0.001" required placeholder="Ej: 10">
+                    <input type="number" id="setStockNew" class="form-control" min="0" step="any" required placeholder="Ej: 10">
                     <small id="setStockUnit">un</small>
                 </div>
                 <div class="form-group">
@@ -1613,75 +1907,110 @@ const InventoryView = {
         if (!this.auditState) {
             const categories = this.categories || [];
             const historyHtml = this.auditHistory.length > 0
-                ? this.auditHistory.map(log => {
+                ? this.auditHistory.map((log, idx) => {
                     const loss = log.metadata.lossMoney || 0;
                     const extra = log.metadata.extraMoney || 0;
+                    const hasLoss = loss > 0;
+                    const hasExtra = extra > 0;
+                    const cardStyle = hasLoss && hasExtra 
+                        ? 'background: linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(245, 158, 11, 0.12)); border: 1px solid rgba(239, 68, 68, 0.3);'
+                        : (hasLoss 
+                            ? 'background: linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(239, 68, 68, 0.06)); border: 1px solid rgba(239, 68, 68, 0.3);'
+                            : 'background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.06)); border: 1px solid rgba(16, 185, 129, 0.3);');
                     return `
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <td style="padding: 1rem; color: #e2e8f0;">${log.metadata.categoryName || 'Desconocida'}</td>
-                        <td style="padding: 1rem; color: #94a3b8;">${formatDateTime(log.timestamp)}</td>
-                        <td style="padding: 1rem; text-align: right;">
-                            <div style="color: #ef4444; font-size: 0.85rem; font-weight: 600;">-${formatCLP(loss)}</div>
-                            <div style="color: #34d399; font-size: 0.85rem; font-weight: 600;">+${formatCLP(extra)}</div>
-                        </td>
-                        <td style="padding: 1rem; text-align: center;">
-                            <span style="background: rgba(16, 185, 129, 0.2); color: #34d399; padding: 0.2rem 0.6rem; border-radius: 1rem; font-size: 0.85rem;">Completada</span>
-                        </td>
-                    </tr>
+                    <div onclick="InventoryView.openAuditHistoryDetail(${idx})"
+                         style="background: ${cardStyle}; border-radius: 1.25rem; padding: 1.5rem; margin-bottom: 1rem; cursor: pointer; transition: all 0.3s ease; position: relative; overflow: hidden;"
+                         onmouseover="this.style.transform='translateY(-3px) scale(1.02); this.style.boxShadow='0 12px 35px rgba(0,0,0,0.4)';"
+                         onmouseout="this.style.transform='translateY(0) scale(1); this.style.boxShadow='none';">
+                        <div style="display: flex; justify-content: space-between; align-items: center; position: relative; z-index: 1;">
+                            <div style="flex: 1;">
+                                <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem;">
+                                    <span style="font-size: 1.5rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));">📋</span>
+                                    <span style="color: #f1f5f9; font-weight: 800; font-size: 1.1rem; text-shadow: 0 2px 4px rgba(0,0,0,0.2);">${log.metadata.categoryName || 'Desconocida'}</span>
+                                </div>
+                                <div style="color: #94a3b8; font-size: 0.85rem; margin-left: 2.25rem; font-weight: 500;">${formatDateTime(log.timestamp)}</div>
+                            </div>
+                            <div style="text-align: right; min-width: 120px;">
+                                ${hasLoss ? `<div style="color: #f87171; font-weight: 900; font-size: 1.1rem; text-shadow: 0 2px 4px rgba(239, 68, 68, 0.3);">-${formatCLP(loss)}</div>` : ''}
+                                ${hasExtra ? `<div style="color: #34d399; font-weight: 900; font-size: 1.1rem; text-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);">+${formatCLP(extra)}</div>` : ''}
+                                ${!hasLoss && !hasExtra ? '<div style="color: #34d399; font-weight: 900; font-size: 1.1rem; text-shadow: 0 2px 4px rgba(16, 185, 129, 0.3);">✅ Perfecto</div>' : ''}
+                            </div>
+                        </div>
+                        <div style="position: absolute; top: -20px; right: -20px; width: 100px; height: 100px; background: ${hasLoss ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)'}; border-radius: 50%; transform: translate(30%, -30%); z-index: 0; filter: blur(20px);"></div>
+                        <div style="position: absolute; bottom: -10px; left: -10px; width: 80px; height: 80px; background: ${hasLoss ? 'rgba(239, 68, 68, 0.08)' : 'rgba(16, 185, 129, 0.08)'}; border-radius: 50%; z-index: 0; filter: blur(15px);"></div>
+                    </div>
                 `}).join('')
-                : `<tr><td colspan="4" style="padding: 2rem; text-align: center; color: #64748b;">Aún no hay registros de auditorías finalizadas.</td></tr>`;
+                : `<div style="padding: 4rem; text-align: center; color: #64748b; font-style: italic; font-size: 1rem;">Aún no hay registros de auditorías finalizadas.</div>`;
 
             return `
-                <div class="card glass-panel">
-                    <div style="text-align: center; max-width: 900px; margin: 0 auto; padding: 2rem 1rem;">
-                        <h2 style="font-size: 2.2rem; color: #6ee7b7; margin-bottom: 1.5rem;">🔍 Auditoría y Cuadratura de Stock</h2>
+                <div class="card" style="background: #1e293b; border: 1px solid rgba(255,255,255,0.05); border-radius: 1.5rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+                    <div style="text-align: center; max-width: 1000px; margin: 0 auto; padding: 3rem 1.5rem;">
+                        <div style="display: flex; flex-direction: column; align-items: center; margin-bottom: 3rem;">
+                            <div style="font-size: 3.5rem; margin-bottom: 1rem; filter: drop-shadow(0 0 15px rgba(110, 231, 183, 0.3));">📋</div>
+                            <h2 style="font-size: 2.5rem; font-weight: 800; background: linear-gradient(135deg, #f8fafc 0%, #94a3b8 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin: 0;">Control de Inventario</h2>
+                            <p style="color: #94a3b8; font-size: 1.1rem; margin-top: 0.5rem;">Cuenta físicamente tu stock y sincroniza el sistema en minutos.</p>
+                        </div>
                         
-                        <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 2rem; text-align: left;">
+                        <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 3rem; text-align: left;">
                             <!-- Columna Izquierda: Instrucciones y Selector -->
                             <div>
-                                <div style="background: rgba(59, 130, 246, 0.1); border: 2px solid rgba(59, 130, 246, 0.3); border-radius: 1rem; padding: 1.5rem; margin-bottom: 2rem;">
-                                    <h3 style="color: #60a5fa; margin-top: 0; display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem;">
-                                        💡 Instrucciones
+                                <div style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(37, 99, 235, 0.06)); border: 1px solid rgba(59, 130, 246, 0.28); border-radius: 1.25rem; padding: 1.75rem; margin-bottom: 1.25rem; position: relative; overflow: hidden;">
+                                    <div style="position: absolute; top: -10px; right: -10px; font-size: 4rem; opacity: 0.05;">💡</div>
+                                    <h3 style="color: #60a5fa; margin-top: 0; display: flex; align-items: center; gap: 0.75rem; font-size: 1.1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">
+                                        Guía rápida (3 pasos)
                                     </h3>
-                                    <ul style="color: #e2e8f0; line-height: 1.5; margin-bottom: 0; padding-left: 1.2rem; font-size: 0.95rem;">
-                                        <li>Ingreso obligatorio para <u>TODOS</u> los productos.</li>
-                                        <li>NO permite finalizar si olvidas algún producto.</li>
-                                        <li>Usa el lector de barras para sumar de 1 en 1.</li>
-                                        <li>Si hay stock 0 real, escribe "0" explícitamente.</li>
+                                    <ul style="color: #cbd5e1; line-height: 1.6; margin: 1rem 0 0 0; padding-left: 1.25rem; font-size: 0.95rem;">
+                                        <li style="margin-bottom: 0.75rem;">Selecciona una categoría (ej: <strong>Bebidas</strong>, <strong>Aseo</strong>, etc.).</li>
+                                        <li style="margin-bottom: 0.75rem;">Cuenta físicamente todos los productos y registra el número real.</li>
+                                        <li>Confirma: el sistema ajustará automáticamente diferencias (faltantes o sobrantes).</li>
                                     </ul>
                                 </div>
 
-                                <div class="form-group" style="background: rgba(0,0,0,0.2); padding: 1.5rem; border-radius: 1rem; border: 1px solid rgba(255,255,255,0.05);">
-                                    <label style="font-size: 1rem; color: #94a3b8; margin-bottom: 1rem; display: block;">Escoger Categoría para iniciar:</label>
-                                    <select id="auditCategorySelect" class="form-control" style="font-size: 1.1rem; padding: 0.8rem; background: #0f172a; border-radius: 0.5rem; margin-bottom: 1.5rem;">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.5rem; margin-bottom: 1.5rem;">
+                                    <div style="background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.24); border-radius: 0.9rem; padding: 0.75rem;">
+                                        <div style="font-size: 0.75rem; color: #6ee7b7; font-weight: 900;">✅ CUADRADO</div>
+                                        <div style="font-size: 0.8rem; color: #cbd5e1; margin-top: 0.25rem;">Conteo igual al sistema</div>
+                                    </div>
+                                    <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.24); border-radius: 0.9rem; padding: 0.75rem;">
+                                        <div style="font-size: 0.75rem; color: #fca5a5; font-weight: 900;">🚨 FALTANTE</div>
+                                        <div style="font-size: 0.8rem; color: #cbd5e1; margin-top: 0.25rem;">Hay menos físico que sistema</div>
+                                    </div>
+                                    <div style="background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.24); border-radius: 0.9rem; padding: 0.75rem;">
+                                        <div style="font-size: 0.75rem; color: #fcd34d; font-weight: 900;">📦 SOBRANTE</div>
+                                        <div style="font-size: 0.8rem; color: #cbd5e1; margin-top: 0.25rem;">Hay más físico que sistema</div>
+                                    </div>
+                                </div>
+
+                                <div style="background: rgba(15, 23, 42, 0.6); padding: 2rem; border-radius: 1.25rem; border: 1px solid rgba(255,255,255,0.05); box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);">
+                                    <label style="font-size: 0.85rem; color: #94a3b8; margin-bottom: 1rem; display: block; text-transform: uppercase; font-weight: 800; letter-spacing: 0.5px;">Categoría a controlar</label>
+                                    <select id="auditCategorySelect" class="form-control" style="font-size: 1.1rem; padding: 1.1rem; background: #0f172a; border: 2px solid rgba(99, 102, 241, 0.2); border-radius: 1rem; margin-bottom: 1.5rem; color: white; width: 100%; outline: none; transition: border-color 0.2s;">
                                         <option value="">-- Seleccionar Categoría --</option>
                                         ${categories.map(c => `<option value="${c}">${c}</option>`).join('')}
                                     </select>
-                                    <button class="btn btn-primary" style="width: 100%; font-size: 1.1rem; padding: 1rem; background: linear-gradient(135deg, #10b981, #059669); font-weight: 700;" onclick="InventoryView.startAudit()">
-                                        🚀 Comenzar Auditoría
+                                    <div style="display:flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;">
+                                        <span style="background: rgba(99,102,241,0.12); color:#c7d2fe; border:1px solid rgba(99,102,241,0.35); padding: 0.3rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 800;">⚡ Escáner compatible</span>
+                                        <span style="background: rgba(16,185,129,0.12); color:#86efac; border:1px solid rgba(16,185,129,0.35); padding: 0.3rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 800;">🧮 Conteo manual permitido</span>
+                                        <span style="background: rgba(245,158,11,0.12); color:#fcd34d; border:1px solid rgba(245,158,11,0.35); padding: 0.3rem 0.6rem; border-radius: 999px; font-size: 0.75rem; font-weight: 800;">🔒 Validación completa</span>
+                                    </div>
+                                    <button class="btn" style="width: 100%; font-size: 1.2rem; padding: 1.35rem; background: linear-gradient(135deg, #6366f1, #4f46e5); color: white; font-weight: 900; border: none; border-radius: 1rem; cursor: pointer; transition: all 0.2s; box-shadow: 0 10px 25px rgba(99, 102, 241, 0.2);" 
+                                            onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 15px 30px rgba(99, 102, 241, 0.3)';"
+                                            onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 10px 25px rgba(99, 102, 241, 0.2)';"
+                                            onclick="InventoryView.startAudit()">
+                                        🚀 Iniciar Control Ahora
                                     </button>
                                 </div>
                             </div>
 
                             <!-- Columna Derecha: Historial -->
-                            <div style="background: rgba(0,0,0,0.2); border-radius: 1rem; border: 1px solid rgba(255,255,255,0.05); padding: 1.5rem;">
-                                <h3 style="color: #94a3b8; margin-top: 0; margin-bottom: 1.5rem; font-size: 1.1rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 0.5rem;">
-                                    📝 Últimas Auditorías Realizadas
+                            <div style="background: rgba(15, 23, 42, 0.42); border-radius: 1.25rem; border: 1px solid rgba(255,255,255,0.08); padding: 2rem; display: flex; flex-direction: column; height: 100%;">
+                                <h3 style="color: #94a3b8; margin-top: 0; margin-bottom: 1.5rem; font-size: 1rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 0.5rem;">
+                                    <span>🕒 Controles Recientes</span>
                                 </h3>
-                                <div style="max-height: 350px; overflow-y: auto;">
-                                    <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
-                                        <thead>
-                                            <tr style="text-align: left; color: #64748b; font-size: 0.8rem; text-transform: uppercase;">
-                                                <th style="padding-bottom: 0.8rem;">Categoría</th>
-                                                <th style="padding-bottom: 0.8rem;">Fecha</th>
-                                                <th style="padding-bottom: 0.8rem; text-align: right;">Pérdida/Sobrante</th>
-                                                <th style="padding-bottom: 0.8rem; text-align: center;">Estado</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            ${historyHtml}
-                                        </tbody>
-                                    </table>
+                                <div style="color: rgba(148, 163, 184, 0.9); font-size: 0.85rem; margin-bottom: 1rem;">
+                                    Haz click en cualquier control para ver <strong>detalle de faltantes y sobrantes por producto</strong>.
+                                </div>
+                                <div style="flex: 1; overflow-y: auto; padding-right: 0.5rem; min-height: 500px;">
+                                    ${historyHtml}
                                 </div>
                             </div>
                         </div>
@@ -1689,6 +2018,7 @@ const InventoryView = {
                 </div>
             `;
         }
+
 
         if (this.auditState.status === 'counting') {
             const uncounted = this.auditState.items.filter(i => !i.counted).length;
@@ -1697,72 +2027,67 @@ const InventoryView = {
             const progress = totalItems > 0 ? (matchedCount / totalItems) * 100 : 0;
 
             return `
-                <div class="card glass-panel" style="padding: 1.5rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; gap: 2rem;">
+                <div class="card" style="background: #1e293b; border: 1px solid rgba(255,255,255,0.05); border-radius: 1.5rem; padding: 2rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2.5rem; gap: 2rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 1.5rem;">
                         <div style="flex: 1;">
-                            <h2 style="color: #6ee7b7; margin: 0; font-size: 1.5rem; display: flex; align-items: center; gap: 0.5rem;">
-                                📦 Recuento: ${this.auditState.categoryName}
+                            <h2 style="color: #6ee7b7; margin: 0; font-size: 1.8rem; font-weight: 800; display: flex; align-items: center; gap: 0.75rem;">
+                                <span style="font-size: 2.2rem;">📦</span> Control en Vivo: ${this.auditState.categoryName}
                             </h2>
-                            <p id="audit-progress-text" style="color: ${uncounted > 0 ? '#fbbf24' : '#34d399'}; margin-top: 0.5rem; font-weight: 600;">
-                                ${uncounted > 0 ? `⚠️ Faltan ${uncounted} productos por contar` : '✅ ¡Todos los productos han sido contados!'} 
-                                (${progress.toFixed(0)}% completado)
-                            </p>
+                            <div style="display: flex; align-items: center; gap: 1rem; margin-top: 0.75rem;">
+                                <div style="flex: 1; max-width: 300px; height: 10px; background: rgba(0,0,0,0.3); border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.05);">
+                                    <div style="width: ${progress}%; height: 100%; background: linear-gradient(90deg, #6ee7b7, #34d399); border-radius: 10px; transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);"></div>
+                                </div>
+                                <span id="audit-progress-text" style="color: ${uncounted > 0 ? '#fbbf24' : '#34d399'}; font-size: 0.95rem; font-weight: 700;">
+                                    ${uncounted > 0 ? `⚠️ Faltan ${uncounted} items` : '✅ ¡Todo contado!'} (${progress.toFixed(0)}%)
+                                </span>
+                            </div>
                         </div>
                         <div style="text-align: right;">
-                             <div style="font-size: 0.8rem; color: #94a3b8; margin-bottom: 0.5rem; background: rgba(0,0,0,0.2); padding: 0.5rem; border-radius: 0.5rem; border: 1px solid rgba(255,255,255,0.05);">
-                                <strong>Regla:</strong> Debes tocar cada producto (mínimo poner 0) para poder finalizar.
-                             </div>
-                             <button class="btn" style="background: rgba(239, 68, 68, 0.1); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.2);" onclick="InventoryView.cancelAudit()">Abandonar Auditoría</button>
+                             <button class="btn" style="background: rgba(239, 68, 68, 0.1); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.2); padding: 0.75rem 1.5rem; border-radius: 0.75rem; font-weight: 600;" onclick="InventoryView.cancelAudit()">Abandonar</button>
                         </div>
                     </div>
 
-                    <div style="background: rgba(17, 24, 39, 0.6); padding: 1.5rem; border-radius: 1rem; border: 1px dashed rgba(59, 130, 246, 0.3); margin-bottom: 2rem;">
-                        <label style="color: #93c5fd; font-size: 1rem; margin-bottom: 0.5rem; display: block;">🔍 Pistola o Código (Suma +1):</label>
-                        <div style="display: flex; gap: 1rem;">
-                            <input type="text" id="auditBarcode" class="form-control" placeholder="Escanea aquí..." style="font-size: 1.2rem; padding: 1rem; background: #0f172a; border-radius: 0.5rem; flex: 1;" autofocus onkeypress="if(event.key==='Enter') InventoryView.processAuditBarcode(this.value)">
-                            <button class="btn btn-primary" onclick="InventoryView.processAuditBarcode(document.getElementById('auditBarcode').value)">Agregar Item</button>
-                        </div>
-                    </div>
-
-                    <div style="background: rgba(0,0,0,0.2); border-radius: 1rem; border: 1px solid rgba(255,255,255,0.05); overflow: hidden; max-height: 50vh; overflow-y: auto;">
-                        <table class="table" style="margin: 0; width: 100%;">
-                            <thead style="position: sticky; top: 0; background: #1e293b; z-index: 10; box-shadow: 0 2px 10px rgba(0,0,0,0.5);">
+                    <div style="background: rgba(15, 23, 42, 0.4); border-radius: 1.25rem; border: 1px solid rgba(255,255,255,0.05); overflow: hidden; max-height: 55vh; overflow-y: auto; box-shadow: inset 0 2px 10px rgba(0,0,0,0.3);">
+                        <table class="table" style="margin: 0; width: 100%; border-collapse: separate; border-spacing: 0;">
+                            <thead style="position: sticky; top: 0; background: #1e293b; z-index: 10; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.3);">
                                 <tr>
-                                    <th style="padding: 1rem;">Producto</th>
-                                    <th style="padding: 1rem; text-align: center;">Stock Sistema</th>
-                                    <th style="padding: 1rem; text-align: center;">Conteo Real</th>
-                                    <th style="padding: 1rem; text-align: center;">Estado</th>
+                                    <th style="padding: 1.25rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800;">Producto</th>
+                                    <th style="padding: 1.25rem; text-align: center; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800;">Sistema</th>
+                                    <th style="padding: 1.25rem; text-align: center; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800;">Conteo Físico</th>
+                                    <th style="padding: 1.25rem; text-align: center; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800;">Estado / Diferencia</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 ${this.auditState.items.map((item, index) => {
                 const diff = (item.physicalCount || 0) - item.systemStock;
-                const diffColor = diff === 0 ? '#34d399' : (diff < 0 ? '#ef4444' : '#fbbf24');
+                const diffColor = diff === 0 ? '#10b981' : (diff < 0 ? '#ef4444' : '#f59e0b');
                 const diffSign = diff > 0 ? '+' : '';
                 return `
-                                        <tr id="audit-row-${item.id}" style="background: ${item.counted ? 'rgba(16, 185, 129, 0.05)' : 'rgba(239, 68, 68, 0.05)'}; border-bottom: 1px solid rgba(255,255,255,0.05);">
-                                            <td style="padding: 1rem;">
-                                                <strong style="font-size: 1.05rem; color: #e2e8f0;">${item.name}</strong><br>
-                                                <small style="color: #64748b;">${item.barcode || 'Sin código'}</small>
+                                        <tr id="audit-row-${item.id}" style="background: ${item.counted ? 'rgba(16, 185, 129, 0.03)' : 'rgba(239, 68, 68, 0.02)'}; border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                            <td style="padding: 1.25rem;">
+                                                <div style="color: #f1f5f9; font-weight: 700; font-size: 1.05rem;">${item.name}</div>
+                                                <div style="color: #64748b; font-size: 0.8rem; font-family: monospace; margin-top: 0.25rem;">${item.barcode || 'SIN CÓDIGO'}</div>
                                             </td>
-                                            <td style="font-size: 1.2rem; color: #94a3b8; text-align: center; vertical-align: middle;">${item.systemStock}</td>
-                                            <td style="vertical-align: middle; text-align: center;">
-                                                <input type="number" class="form-control audit-qty-input" 
+                                            <td style="font-size: 1.25rem; color: #94a3b8; text-align: center; font-weight: 500;">${item.systemStock}</td>
+                                            <td style="text-align: center;">
+                                                <input type="number" step="any" class="form-control audit-qty-input" 
                                                        data-index="${index}"
-                                                       style="width: 100px; text-align: center; background: #0f172a; display: inline-block; font-size: 1.1rem; padding: 0.5rem; border-width: 2px; border-color: ${item.counted ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}" 
+                                                       style="width: 120px; text-align: center; background: #0f172a; border-radius: 0.75rem; border: 2px solid ${item.counted ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.2)'}; color: white; font-size: 1.35rem; font-weight: 800; padding: 0.5rem;" 
                                                        value="${item.counted ? item.physicalCount : ''}" 
-                                                       placeholder="0"
+                                                       placeholder="?"
                                                        min="0"
-                                                       onchange="InventoryView.updateAuditPhysicalCount(${item.id}, this.value)" 
+                                                       oninput="InventoryView.updateAuditPhysicalCount(${item.id}, this.value)" 
                                                        onkeydown="if(event.key === 'Enter') { event.preventDefault(); InventoryView.focusNextAuditInput(${index}); }"
-                                                       title="Ingresa la cantidad física actual">
+                                                       onclick="this.select()"
+                                                       title="Ingresa la cantidad física actual"
+                                                       ${index === 0 ? 'autofocus' : ''}>
                                             </td>
-                                            <td id="audit-status-${item.id}" style="vertical-align: middle; text-align: center;">
+                                            <td id="audit-status-${item.id}" style="text-align: center;">
                                                 ${item.counted
                         ? (diff === 0
-                            ? `<span style="color: #34d399; font-weight: bold;">✔ OK</span>`
-                            : `<span style="color: ${diffColor}; font-weight: bold;">${diffSign}${diff} dif.</span>`)
-                        : '<span style="color:#ef4444; font-weight: bold; font-size: 0.8rem;">❌ PENDIENTE</span>'}
+                            ? `<span style="background: rgba(16, 185, 129, 0.1); color: #10b981; padding: 0.4rem 0.8rem; border-radius: 0.5rem; font-weight: 800; font-size: 0.85rem; border: 1px solid rgba(16, 185, 129, 0.2);">PERFECTO</span>`
+                            : `<span style="background: ${diff < 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(245, 158, 11, 0.1)'}; color: ${diffColor}; padding: 0.4rem 0.8rem; border-radius: 0.5rem; font-weight: 800; font-size: 0.85rem; border: 1px solid ${diff < 0 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(245, 158, 11, 0.2)'}">${diffSign}${diff} UNID.</span>`)
+                        : '<span style="color:rgba(239, 68, 68, 0.5); font-weight: 800; font-size: 0.75rem; letter-spacing: 1px;">⚙️ PENDIENTE</span>'}
                                             </td>
                                         </tr>
                                     `;
@@ -1771,78 +2096,120 @@ const InventoryView = {
                         </table>
                     </div>
                     
-                    <div style="margin-top: 1.5rem; display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 0.5rem;">
-                        <div style="color: #94a3b8; font-size: 0.9rem;">
-                            <strong>Nota:</strong> Los productos en <span style="color: #ef4444;">rojo</span> aún no han sido contados.
+                    <div style="margin-top: 2rem; display: flex; justify-content: space-between; align-items: center; background: rgba(15, 23, 42, 0.4); padding: 1.5rem; border-radius: 1.25rem; border: 1px solid rgba(255,255,255,0.05);">
+                        <div style="color: #64748b; font-size: 0.95rem; display: flex; align-items: center; gap: 0.5rem;">
+                            <span style="font-size: 1.2rem;">⌨️</span> <span>Tip: escribe una cantidad y presiona <strong>Enter</strong> para pasar al siguiente producto.</span>
                         </div>
-                        <button class="btn btn-primary" 
-                                style="background: ${uncounted > 0 ? '#334155' : 'rgba(16, 185, 129, 0.2)'}; color: ${uncounted > 0 ? '#94a3b8' : '#6ee7b7'}; border: 1px solid ${uncounted > 0 ? 'rgba(255,255,255,0.1)' : 'rgba(16, 185, 129, 0.4)'}; font-size: 1.2rem; padding: 1rem 2.5rem; cursor: ${uncounted > 0 ? 'not-allowed' : 'pointer'};" 
-                                onclick="${uncounted > 0 ? "showNotification('Debes ingresar la cantidad de todos los productos (rojos) antes de continuar', 'error')" : 'InventoryView.finishAudit()'}">
-                            📊 Ver Reporte y Sincronizar
+                        <button class="btn" 
+                                style="background: ${uncounted > 0 ? 'rgba(255,255,255,0.05)' : 'linear-gradient(135deg, #10b981, #059669)'}; color: ${uncounted > 0 ? '#475569' : 'white'}; border: none; font-size: 1.2rem; padding: 1.25rem 3rem; border-radius: 1rem; font-weight: 800; cursor: ${uncounted > 0 ? 'not-allowed' : 'pointer'}; transition: transform 0.2s, box-shadow 0.2s;" 
+                                onclick="${uncounted > 0 ? "showNotification('Debes completar el conteo de todos los productos (rojos)', 'warning')" : 'InventoryView.finishAudit()'}">
+                            📊 Finalizar y Ver Reporte
                         </button>
                     </div>
                 </div>
             `;
         }
 
+
         if (this.auditState.status === 'report') {
             const missing = this.auditState.items.filter(i => i.physicalCount < i.systemStock);
             const extra = this.auditState.items.filter(i => i.physicalCount > i.systemStock);
-            const uncounted = this.auditState.items.filter(i => !i.counted);
+            // CORRECCIÓN: Para productos sobrantes, si el stock estaba negativo, contabilizar desde 0
             const lossMoney = missing.reduce((sum, i) => sum + ((i.systemStock - i.physicalCount) * parseFloat(i.cost || 0)), 0);
+            const extraMoney = extra.reduce((sum, i) => {
+                const systemStock = i.systemStock < 0 ? 0 : i.systemStock;
+                return sum + ((i.physicalCount - systemStock) * parseFloat(i.cost || 0));
+            }, 0);
 
-            let missingHtml = missing.length > 0 ? missing.map(i => `
-                <div style="display: flex; justify-content: space-between; padding: 0.75rem; border-bottom: 1px solid rgba(239, 68, 68, 0.1);">
-                    <span>${i.name}</span>
-                    <strong style="color: #ef4444;">Faltan ${i.systemStock - i.physicalCount} (${i.physicalCount} en piso vs ${i.systemStock} en sistema)</strong>
+            let missingHtml = missing.length > 0 ? missing.map(i => {
+                const diff = (i.systemStock - i.physicalCount);
+                const displayDiff = Number.isInteger(diff) ? diff : diff.toFixed(2);
+                return `
+                <div style="display: flex; flex-direction: column; padding: 1rem; border-bottom: 1px solid rgba(239, 68, 68, 0.1);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <div style="color: #f1f5f9; font-weight: 600;">${i.name}</div>
+                        <div style="text-align: right;">
+                            <div style="color: #f87171; font-weight: 800; font-size: 1rem;">Faltan ${displayDiff}</div>
+                            <div style="color: #64748b; font-size: 0.75rem;">(${i.physicalCount} real vs ${i.systemStock} sys)</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 0.75rem; margin-top: 0.75rem;">
+                        <label class="missing-type-label" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.75rem 1rem; border-radius: 0.75rem; cursor: pointer; transition: all 0.2s ease; border: 2px solid rgba(16, 185, 129, 0.6); background: rgba(16, 185, 129, 0.2); color: #34d399; font-weight: 700; font-size: 0.9rem;">
+                            <input type="radio" name="missing-type-${i.id}" value="consumption" checked style="display: none;">
+                            <span style="font-size: 1.1rem;">🍴</span>
+                            <span>Consumo Interno</span>
+                        </label>
+                        <label class="missing-type-label" style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.75rem 1rem; border-radius: 0.75rem; cursor: pointer; transition: all 0.2s ease; border: 2px solid rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.05); color: #64748b; font-weight: 700; font-size: 0.9rem;">
+                            <input type="radio" name="missing-type-${i.id}" value="loss" style="display: none;">
+                            <span style="font-size: 1.1rem;">🗑️</span>
+                            <span>Pérdida</span>
+                        </label>
+                    </div>
                 </div>
-            `).join('') : '<div style="padding: 1rem; color: #94a3b8;">✅ Excelente: No hay productos faltantes 😊</div>';
+            `}).join('') : '<div style="padding: 3rem; text-align: center; color: #64748b; font-style: italic;">✨ No hay productos faltantes. Todo está en orden.</div>';
 
-            let extraHtml = extra.length > 0 ? extra.map(i => `
-                <div style="display: flex; justify-content: space-between; padding: 0.75rem; border-bottom: 1px solid rgba(245, 158, 11, 0.1);">
-                    <span>${i.name}</span>
-                    <strong style="color: #f59e0b;">Sobran ${i.physicalCount - i.systemStock} (${i.physicalCount} en piso vs ${i.systemStock} en sistema)</strong>
+            let extraHtml = extra.length > 0 ? extra.map(i => {
+                const diff = (i.physicalCount - i.systemStock);
+                const displayDiff = Number.isInteger(diff) ? diff : diff.toFixed(2);
+                // CORRECCIÓN: Si el stock estaba negativo, contabilizar desde 0
+                const systemStock = i.systemStock < 0 ? 0 : i.systemStock;
+                const adjustedDiff = i.physicalCount - systemStock;
+                const displayAdjustedDiff = Number.isInteger(adjustedDiff) ? adjustedDiff : adjustedDiff.toFixed(2);
+                const note = i.systemStock < 0 ? '<div style="color: #f59e0b; font-size: 0.7rem; margin-top: 0.25rem;">⚠️ Stock estaba negativo, contabiliza desde 0</div>' : '';
+                return `
+                <div style="display: flex; justify-content: space-between; padding: 1rem; border-bottom: 1px solid rgba(16, 185, 129, 0.1); align-items: center;">
+                    <div style="color: #f1f5f9; font-weight: 600;">${i.name}</div>
+                    <div style="text-align: right;">
+                        <div style="color: #34d399; font-weight: 800; font-size: 1rem;">Sobran ${displayAdjustedDiff}</div>
+                        <div style="color: #64748b; font-size: 0.75rem;">(${i.physicalCount} real vs ${systemStock} sys)</div>
+                        ${note}
+                    </div>
                 </div>
-            `).join('') : '<div style="padding: 1rem; color: #94a3b8;">No se detectaron productos sobrantes o mágicos 🎉</div>';
+            `}).join('') : '<div style="padding: 3rem; text-align: center; color: #64748b; font-style: italic;">No se detectaron productos sobrantes.</div>';
 
             return `
-                <div class="card glass-panel" style="padding: 2rem;">
-                    <div style="text-align: center; margin-bottom: 2rem;">
-                        <h2 style="font-size: 2rem; color: #6ee7b7; margin-bottom: 0.5rem;">Reporte Final de Auditoría y Filtro Mágico</h2>
-                        <p style="color: #94a3b8; font-size: 1.1rem;">Resumen de las diferencias halladas en <strong>${this.auditState.categoryName}</strong></p>
+                <div class="card" style="background: #1e293b; border: 1px solid rgba(255,255,255,0.05); border-radius: 1.5rem; padding: 3rem;">
+                    <div style="text-align: center; margin-bottom: 3.5rem;">
+                        <div style="font-size: 3rem; margin-bottom: 1rem;">📊</div>
+                        <h2 style="font-size: 2.2rem; font-weight: 800; color: white; margin: 0;">Resumen del Control de Inventario</h2>
+                        <p style="color: #94a3b8; font-size: 1.15rem; margin-top: 0.5rem;">Análisis de discrepancias para <strong>${this.auditState.categoryName}</strong></p>
                     </div>
 
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
-                        <!-- Faltantes -->
-                        <div style="background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 1rem; padding: 1.5rem;">
-                            <h3 style="color: #fca5a5; border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: 0.5rem; margin-top: 0; display: flex; justify-content: space-between;">
-                                <span>🚨 Lo que falta encontrar (Merma)</span>
-                                ${lossMoney > 0 ? `<span>Valor Perdido: ${formatCLP(lossMoney)}</span>` : ''}
-                            </h3>
-                            <div style="max-height: 250px; overflow-y: auto;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; margin-bottom: 3.5rem;">
+                        <!-- Faltantes (Merma) -->
+                        <div style="background: rgba(239, 68, 68, 0.03); border: 1px solid rgba(239, 68, 68, 0.15); border-radius: 1.5rem; padding: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid rgba(239, 68, 68, 0.2); padding-bottom: 1.25rem; margin-bottom: 1.5rem;">
+                                <h3 style="color: #fca5a5; margin: 0; font-size: 1.2rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">🚨 Merma / Faltantes</h3>
+                                ${lossMoney > 0 ? `<div style="background: #ef4444; color: white; padding: 0.4rem 1rem; border-radius: 2rem; font-size: 0.9rem; font-weight: 800;">-${formatCLP(lossMoney)}</div>` : ''}
+                            </div>
+                            <div style="max-height: 40vh; overflow-y: auto; padding-right: 0.5rem;">
                                 ${missingHtml}
                             </div>
                         </div>
 
                         <!-- Sobrantes -->
-                        <div style="background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.2); border-radius: 1rem; padding: 1.5rem;">
-                            <h3 style="color: #fcd34d; border-bottom: 1px solid rgba(245, 158, 11, 0.2); padding-bottom: 0.5rem; margin-top: 0;">⚠️ Lo que sobrará en el inventario</h3>
-                            <div style="max-height: 250px; overflow-y: auto;">
+                        <div style="background: rgba(16, 185, 129, 0.03); border: 1px solid rgba(16, 185, 129, 0.15); border-radius: 1.5rem; padding: 2rem; box-shadow: 0 10px 30px rgba(0,0,0,0.1);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid rgba(16, 185, 129, 0.2); padding-bottom: 1.25rem; margin-bottom: 1.5rem;">
+                                <h3 style="color: #6ee7b7; margin: 0; font-size: 1.2rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px;">✅ Excedentes / Sobrantes</h3>
+                                ${extraMoney > 0 ? `<div style="background: #10b981; color: white; padding: 0.4rem 1rem; border-radius: 2rem; font-size: 0.9rem; font-weight: 800;">+${formatCLP(extraMoney)}</div>` : ''}
+                            </div>
+                            <div style="max-height: 40vh; overflow-y: auto; padding-right: 0.5rem;">
                                 ${extraHtml}
                             </div>
                         </div>
                     </div>
 
-                    <div style="display: flex; gap: 1rem; justify-content: flex-end; align-items: center;">
-                        <button class="btn btn-secondary" style="font-size: 1.1rem; padding: 1rem 1.5rem;" onclick="InventoryView.backToCounting()">◀ Volver atrás y contar más</button>
-                        <button class="btn btn-secondary" style="font-size: 1.1rem; padding: 1rem 1.5rem; color: #ef4444;" onclick="InventoryView.cancelAudit()">Borrar Resumen / Descartar TODO</button>
-                        <button class="btn btn-primary" style="font-size: 1.2rem; padding: 1rem 2rem; background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.4); box-shadow: 0 0 15px rgba(16, 185, 129, 0.2);" onclick="InventoryView.applyAuditAdjustments()">
-                            ✅ Corregir software y Ajustar Definitivamente
+                    <div class="audit-report-actions">
+                        <button class="btn btn-audit-back" onclick="InventoryView.backToCounting()">◀ Volver al Conteo</button>
+                        <button class="btn btn-audit-cancel" onclick="InventoryView.cancelAudit()">Descartar Control</button>
+                        <button class="btn btn-audit-confirm" onclick="InventoryView.applyAuditAdjustments()">
+                            ✅ Sincronizar Stock en Sistema
                         </button>
                     </div>
                 </div>
             `;
         }
+
 
         return '';
     },
@@ -1929,10 +2296,20 @@ const InventoryView = {
                     : `⚠️ Faltan ${totalItems - matchedCount} productos por contar (${progress.toFixed(0)}% completado)`;
             }
 
-            // Forzar actualización del botón de finalizar si todos están contados
+            // CORRECCIÓN: No re-renderizar automáticamente cuando todos están contados para evitar perder el foco del input
+            // En su lugar, actualizar manualmente el botón de finalizar si existe
             const uncounted = this.auditState.items.filter(i => !i.counted).length;
             if (uncounted === 0) {
-                app.navigate('inventory'); // Re-render para habilitar botón
+                // Buscar el botón por su texto contenido
+                const buttons = document.querySelectorAll('button');
+                const finishBtn = Array.from(buttons).find(btn => btn.textContent.includes('Finalizar y Ver Reporte'));
+                if (finishBtn) {
+                    finishBtn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                    finishBtn.style.color = 'white';
+                    finishBtn.style.cursor = 'pointer';
+                    // CORRECCIÓN: También actualizar el onclick para permitir finalizar
+                    finishBtn.setAttribute('onclick', 'InventoryView.finishAudit()');
+                }
             }
         }
     },
@@ -1972,13 +2349,13 @@ const InventoryView = {
     cancelAudit() {
         const modal = showModal(`
             <div style="padding: 1rem; text-align: center;">
-                <p style="font-size: 1.1rem; margin-bottom: 2rem;">¿Estás seguro que deseas abandonar esta auditoría física? Perderás todo tu progreso de conteo.</p>
+                <p style="font-size: 1.1rem; margin-bottom: 2rem;">¿Estás seguro que deseas abandonar este control de inventario? Perderás todo tu progreso de conteo.</p>
                 <div style="display: flex; gap: 1rem; justify-content: center;">
                     <button class="btn btn-secondary" onclick="closeModal()">No, volver</button>
                     <button class="btn" style="background: #ef4444; color: white; border: none; padding: 0.5rem 2rem; border-radius: 0.5rem;" onclick="InventoryView.performCancelAudit(); closeModal();">Sí, Abandonar</button>
                 </div>
             </div>
-        `, { title: 'Cancelar Auditoría', width: '500px' });
+        `, { title: 'Cancelar Control de Inventario', width: '500px' });
     },
 
     performCancelAudit() {
@@ -2003,7 +2380,15 @@ const InventoryView = {
             let adjustmentsMade = 0;
 
             for (const item of differences) {
-                await StockService.setStock(item.id, item.physicalCount, reason);
+                // CORRECCIÓN ATÓMICA: Fijar stock absoluto para evitar doble descuadre por ventas simultáneas
+                if (item.physicalCount < item.systemStock) {
+                    const radioName = `missing-type-${item.id}`;
+                    const selectedType = document.querySelector(`input[name="${radioName}"]:checked`)?.value || 'loss';
+                    const detailReason = `${reason} - ${selectedType === 'consumption' ? 'Consumo interno' : 'Pérdida'}`;
+                    await StockService.setStock(item.id, item.physicalCount, detailReason, selectedType);
+                } else {
+                    await StockService.setStock(item.id, item.physicalCount, reason, 'adjustment');
+                }
                 adjustmentsMade++;
             }
 
@@ -2013,7 +2398,36 @@ const InventoryView = {
             const missing = this.auditState.items.filter(i => i.physicalCount < i.systemStock);
             const extra = this.auditState.items.filter(i => i.physicalCount > i.systemStock);
             const lossMoney = missing.reduce((sum, i) => sum + ((i.systemStock - i.physicalCount) * parseFloat(i.cost || 0)), 0);
-            const extraMoney = extra.reduce((sum, i) => sum + ((i.physicalCount - i.systemStock) * parseFloat(i.cost || 0)), 0);
+            // CORRECCIÓN: Para productos sobrantes, si el stock estaba negativo, contabilizar desde 0
+            const extraMoney = extra.reduce((sum, i) => {
+                const systemStock = i.systemStock < 0 ? 0 : i.systemStock;
+                return sum + ((i.physicalCount - systemStock) * parseFloat(i.cost || 0));
+            }, 0);
+
+            // Guardar detalle para mostrar en "Controles recientes"
+            const missingItems = missing.map(i => ({
+                productId: i.id,
+                name: i.name,
+                barcode: i.barcode || null,
+                systemStock: i.systemStock,
+                physicalCount: i.physicalCount,
+                diff: (i.physicalCount - i.systemStock),
+                unitsMissing: (i.systemStock - i.physicalCount),
+                cost: parseFloat(i.cost || 0),
+                moneyImpact: (i.systemStock - i.physicalCount) * parseFloat(i.cost || 0)
+            }));
+
+            const extraItems = extra.map(i => ({
+                productId: i.id,
+                name: i.name,
+                barcode: i.barcode || null,
+                systemStock: i.systemStock,
+                physicalCount: i.physicalCount,
+                diff: (i.physicalCount - i.systemStock),
+                unitsExtra: (i.physicalCount - i.systemStock),
+                cost: parseFloat(i.cost || 0),
+                moneyImpact: (i.physicalCount - i.systemStock) * parseFloat(i.cost || 0)
+            }));
 
             // Registrar en el log de auditoría para el historial
             await AuditLogService.log({
@@ -2026,7 +2440,10 @@ const InventoryView = {
                     adjustmentsMade,
                     itemsCounted: this.auditState.items.length,
                     lossMoney,
-                    extraMoney
+                    extraMoney,
+                    // Detalle para UI
+                    missingItems,
+                    extraItems
                 }
             });
 
@@ -2037,4 +2454,280 @@ const InventoryView = {
             showNotification('Error al ajustar automáticamente: ' + e.message, 'error');
         }
     }
+    ,
+
+    openAuditHistoryDetail(index) {
+        const log = (this.auditHistory || [])[index];
+        if (!log) {
+            showNotification('Registro no encontrado', 'warning');
+            return;
+        }
+
+        const meta = log.metadata || {};
+        const categoryName = meta.categoryName || 'Sin categoría';
+        const missingItems = Array.isArray(meta.missingItems) ? meta.missingItems : null;
+        const extraItems = Array.isArray(meta.extraItems) ? meta.extraItems : null;
+
+        const lossMoney = meta.lossMoney || 0;
+        const extraMoney = meta.extraMoney || 0;
+        const adjustmentsMade = meta.adjustmentsMade || 0;
+        const itemsCounted = meta.itemsCounted || 0;
+
+        const renderList = (items, mode) => {
+            if (!items) {
+                return `<div style="padding: 1.25rem; color: #64748b; font-weight: 600;">Este registro es antiguo y no guardó detalle por producto.</div>`;
+            }
+            if (items.length === 0) {
+                return `<div style="padding: 1.25rem; color: #64748b; font-weight: 600;">No hay ${mode === 'missing' ? 'faltantes' : 'sobrantes'}.</div>`;
+            }
+
+            return `
+                <div style="max-height: 45vh; overflow-y: auto; padding-right: 0.5rem;">
+                    ${items.map(i => `
+                        <div style="display:flex; justify-content:space-between; gap: 1rem; padding: 0.9rem 0.75rem; border-bottom: 1px solid #e2e8f0;">
+                            <div style="min-width: 0;">
+                                <div style="font-weight: 800; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${i.name}</div>
+                                <div style="color:#64748b; font-size: 0.8rem; font-family: monospace;">${i.barcode || 'SIN CÓDIGO'}</div>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-weight: 900; color: ${mode === 'missing' ? '#b91c1c' : '#047857'};">
+                                    ${mode === 'missing' ? `Faltan ${i.unitsMissing}` : `Sobran ${i.unitsExtra}`}
+                                </div>
+                                <div style="color:#94a3b8; font-size: 0.8rem;">Real ${i.physicalCount} vs Sys ${i.systemStock}</div>
+                                <div style="color:#64748b; font-size: 0.8rem;">Impacto: ${formatCLP(i.moneyImpact || 0)}</div>
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        };
+
+        const content = `
+            <div style="padding: 0.25rem 0.25rem 0.75rem 0.25rem;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem;">
+                    <div>
+                        <div style="font-size: 0.8rem; color: #64748b; text-transform: uppercase; font-weight: 900; letter-spacing: 1px;">Control de inventario</div>
+                        <div style="font-size: 1.35rem; font-weight: 900; color: #1e293b;">${categoryName}</div>
+                        <div style="color:#64748b; margin-top: 0.25rem; font-weight: 600;">${formatDateTime(log.timestamp)}</div>
+                    </div>
+                    <div style="display:flex; gap: 0.75rem; flex-wrap: wrap;">
+                        <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 0.75rem 1rem; border-radius: 0.9rem;">
+                            <div style="color:#ef4444; font-weight: 900;">Merma</div>
+                            <div style="color:#7f1d1d; font-weight: 900; font-size: 1.05rem;">-${formatCLP(lossMoney)}</div>
+                        </div>
+                        <div style="background: #ecfdf5; border: 1px solid #a7f3d0; padding: 0.75rem 1rem; border-radius: 0.9rem;">
+                            <div style="color:#10b981; font-weight: 900;">Sobrantes</div>
+                            <div style="color:#065f46; font-weight: 900; font-size: 1.05rem;">+${formatCLP(extraMoney)}</div>
+                        </div>
+                        <div style="background: #eef2ff; border: 1px solid #c7d2fe; padding: 0.75rem 1rem; border-radius: 0.9rem;">
+                            <div style="color:#6366f1; font-weight: 900;">Ajustes</div>
+                            <div style="color:#3730a3; font-weight: 900; font-size: 1.05rem;">${adjustmentsMade}</div>
+                        </div>
+                        <div style="background: #f8fafc; border: 1px solid #cbd5e1; padding: 0.75rem 1rem; border-radius: 0.9rem;">
+                            <div style="color:#475569; font-weight: 900;">Productos</div>
+                            <div style="color:#0f172a; font-weight: 900; font-size: 1.05rem;">${itemsCounted}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div style="background: #fff7f7; border: 1px solid #fecaca; border-radius: 1rem; overflow: hidden;">
+                        <div style="padding: 0.9rem 1rem; border-bottom: 1px solid #fecaca; font-weight: 900; color: #ef4444;">🚨 Faltantes</div>
+                        ${renderList(missingItems, 'missing')}
+                    </div>
+                    <div style="background: #f2fff8; border: 1px solid #a7f3d0; border-radius: 1rem; overflow: hidden;">
+                        <div style="padding: 0.9rem 1rem; border-bottom: 1px solid #a7f3d0; font-weight: 900; color: #10b981;">✅ Sobrantes</div>
+                        ${renderList(extraItems, 'extra')}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        showModal(content, {
+            title: 'Detalle del Control',
+            width: '980px',
+            footer: '<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>'
+        });
+    },
+
+    renderSuggestions() {
+        this.collapsedSuggestions = this.collapsedSuggestions || {};
+        
+        const lowStockProducts = this.products.filter(p => 
+            !p.deleted && 
+            (p.minStock || 0) > 0 && 
+            (p.stock || 0) <= (p.minStock || 0)
+        );
+
+        // Group by category
+        const grouped = lowStockProducts.reduce((acc, p) => {
+            const cat = p.category || 'General';
+            if (!acc[cat]) acc[cat] = [];
+            acc[cat].push(p);
+            return acc;
+        }, {});
+
+        const categories = Object.keys(grouped).sort();
+
+        let categoriesHtml = '';
+
+        if (categories.length === 0) {
+            categoriesHtml = `
+                <div class="card" style="text-align: center; padding: 3rem; background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: 1rem;">
+                    <span style="font-size: 3rem; display: block; margin-bottom: 1rem;">🎉</span>
+                    <h3 style="color: #166534; margin: 0 0 0.5rem 0; font-weight: 800;">¡Todo al día!</h3>
+                    <p style="color: #475569; margin: 0; font-weight: 600;">No hay sugerencias de reposición. Todos los productos tienen stock suficiente.</p>
+                </div>
+            `;
+        } else {
+            categoriesHtml = categories.map(catName => {
+                const items = grouped[catName];
+                const isCollapsed = this.collapsedSuggestions[catName] === true;
+                const chevron = isCollapsed ? '▼' : '▲';
+                const listHtml = isCollapsed ? '' : `
+                    <div style="padding: 0; border-top: 1px solid #e2e8f0; overflow-x: auto;">
+                        <table class="table compact-table" style="width: 100%; border-collapse: collapse; margin: 0;">
+                            <thead style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                                <tr>
+                                    <th style="text-align: left; padding: 0.75rem 1rem; color: #475569; font-weight: 700; font-size: 0.85rem;">Producto</th>
+                                    <th style="text-align: left; padding: 0.75rem 1rem; color: #475569; font-weight: 700; font-size: 0.85rem;">Proveedor</th>
+                                    <th style="text-align: center; padding: 0.75rem 1rem; color: #475569; font-weight: 700; font-size: 0.85rem;">Stock Actual</th>
+                                    <th style="text-align: center; padding: 0.75rem 1rem; color: #475569; font-weight: 700; font-size: 0.85rem;">Stock Mínimo</th>
+                                    <th style="text-align: center; padding: 0.75rem 1rem; color: #475569; font-weight: 700; font-size: 0.85rem;">Sugerencia Compra</th>
+                                    <th style="text-align: right; padding: 0.75rem 1rem; color: #475569; font-weight: 700; font-size: 0.85rem;">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map(p => {
+                                    const stock = parseFloat(p.stock) || 0;
+                                    const minStock = parseFloat(p.minStock) || 0;
+                                    const toBuy = Math.max(0, minStock - stock);
+                                    
+                                    let stockColor = '#ca8a04'; // Amarillo/dorado para sugerencia
+                                    let stockBg = '#fef9c3';
+                                    if (stock <= 0) {
+                                        stockColor = '#dc2626'; // Rojo si de plano no hay
+                                        stockBg = '#fee2e2';
+                                    }
+                                    
+                                    return `
+                                        <tr style="border-bottom: 1px solid #e2e8f0; transition: background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                                            <td style="padding: 0.75rem 1rem; vertical-align: middle;">
+                                                <div style="font-weight: 700; color: #1e293b;">${safeHTML(p.name)}</div>
+                                                <small style="color: #64748b; font-family: monospace; font-size: 0.8rem;">${safeHTML(p.barcode || 'Sin código')}</small>
+                                            </td>
+                                            <td style="padding: 0.75rem 1rem; vertical-align: middle; color: #475569; font-weight: 500;">
+                                                ${safeHTML(p.supplierName || '—')}
+                                            </td>
+                                            <td style="padding: 0.75rem 1rem; text-align: center; vertical-align: middle;">
+                                                <span style="background: ${stockBg}; color: ${stockColor}; padding: 0.25rem 0.6rem; border-radius: 0.5rem; font-weight: 800; font-size: 0.95rem; border: 1px solid ${stockColor}44;">
+                                                    ${formatStock(stock, p.type === 'weight' ? 3 : 0)} ${p.type === 'weight' ? 'kg' : 'un'}
+                                                </span>
+                                            </td>
+                                            <td style="padding: 0.75rem 1rem; text-align: center; vertical-align: middle; color: #475569; font-weight: 600; font-size: 0.95rem;">
+                                                ${minStock}
+                                            </td>
+                                            <td style="padding: 0.75rem 1rem; text-align: center; vertical-align: middle;">
+                                                <span style="background: #eff6ff; color: #1d4ed8; padding: 0.25rem 0.6rem; border-radius: 0.5rem; font-weight: 800; font-size: 0.95rem; border: 1px solid #bfdbfe;">
+                                                    Comprar +${formatStock(toBuy, p.type === 'weight' ? 3 : 0)}
+                                                </span>
+                                            </td>
+                                            <td style="padding: 0.75rem 1rem; text-align: right; vertical-align: middle;">
+                                                <button class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; font-weight: 700; background: #3b82f6; border-color: #3b82f6;" onclick="InventoryView.quickAdjustment(${p.id})" title="Corregir el stock de este producto">Ajustar</button>
+                                                <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; font-weight: 700; border: 1.5px solid #e2e8f0; color: #475569;" onclick="InventoryView.showKardex(${p.id})" title="Ver todos los movimientos que afectaron a este producto">Kardex</button>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `;
+
+                return `
+                    <div class="card" style="padding: 0; overflow: hidden; margin-bottom: 1.25rem; border: 1.5px solid #e2e8f0; border-radius: 1rem; box-shadow: var(--shadow-sm);">
+                        <div style="padding: 1.25rem 1.5rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; background: #ffffff; user-select: none; transition: background 0.15s;" 
+                             onclick="InventoryView.toggleSuggestionCategory('${catName.replace(/'/g, "\\'")}')"
+                             onmouseover="this.style.background='#f8fafc'"
+                             onmouseout="this.style.background='#ffffff'">
+                            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                                <span style="font-size: 1.2rem;">📂</span>
+                                <strong style="font-size: 1.1rem; color: #1e293b; text-transform: capitalize;">${safeHTML(catName)}</strong>
+                                <span style="background: #fef3c7; color: #b45309; font-weight: 800; font-size: 0.8rem; padding: 0.15rem 0.5rem; border-radius: 99px; border: 1px solid #fde047;">
+                                    ${items.length} sugeridos
+                                </span>
+                            </div>
+                            <span style="font-size: 1.1rem; color: #64748b; font-weight: bold;">${chevron}</span>
+                        </div>
+                        ${listHtml}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        return `
+            <div class="suggestions-section animate-fade-in">
+                <!-- Banner de Sugerencias Suaves -->
+                <div style="background: #eff6ff; border: 1.5px solid #bfdbfe; border-left: 5px solid #3b82f6; border-radius: 1.25rem; padding: 1.5rem; margin-bottom: 2rem; display: flex; gap: 1rem; align-items: flex-start;">
+                    <div style="font-size: 2.2rem; line-height: 1;">💡</div>
+                    <div style="flex: 1;">
+                        <h3 style="color: #1e3a8a; margin: 0 0 0.25rem 0; font-size: 1.2rem; font-weight: 800;">Sugerencias de Reposición de Stock</h3>
+                        <p style="color: #1e40af; margin: 0; font-size: 0.95rem; font-weight: 600; line-height: 1.4;">
+                            Los siguientes productos se encuentran en o por debajo de su stock mínimo configurado.
+                            Esta lista es una <strong>sugerencia</strong> para planificar tus compras y mantener tu negocio abastecido, no una alerta crítica.
+                        </p>
+                    </div>
+                    <div style="text-align: right; min-width: 140px;">
+                        <div style="font-size: 0.75rem; font-weight: 800; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px;">Total sugeridos</div>
+                        <div style="font-size: 2rem; font-weight: 900; color: #1d4ed8; line-height: 1.1; margin-top: 0.2rem;">${lowStockProducts.length}</div>
+                    </div>
+                </div>
+
+                <!-- Lista de categorías colapsables -->
+                <div>
+                    ${categoriesHtml}
+                </div>
+            </div>
+        `;
+    },
+
+    toggleSuggestionCategory(catName) {
+        this.collapsedSuggestions = this.collapsedSuggestions || {};
+        this.collapsedSuggestions[catName] = !this.collapsedSuggestions[catName];
+        app.navigate('inventory');
+    }
 };
+
+// CORRECCIÓN: Event listener global para manejar la selección de consumo interno/pérdida
+document.addEventListener('click', function(e) {
+    const label = e.target.closest('.missing-type-label');
+    if (label) {
+        const radio = label.querySelector('input[type="radio"]');
+        if (radio) {
+            const name = radio.name;
+            const allLabels = document.querySelectorAll(`.missing-type-label input[name="${name}"]`);
+            allLabels.forEach(r => {
+                const parentLabel = r.closest('.missing-type-label');
+                if (r.value === 'consumption') {
+                    parentLabel.style.borderColor = 'rgba(16, 185, 129, 0.2)';
+                    parentLabel.style.background = 'rgba(16, 185, 129, 0.05)';
+                    parentLabel.style.color = '#64748b';
+                } else {
+                    parentLabel.style.borderColor = 'rgba(239, 68, 68, 0.2)';
+                    parentLabel.style.background = 'rgba(239, 68, 68, 0.05)';
+                    parentLabel.style.color = '#64748b';
+                }
+            });
+            if (radio.value === 'consumption') {
+                label.style.borderColor = 'rgba(16, 185, 129, 0.6)';
+                label.style.background = 'rgba(16, 185, 129, 0.2)';
+                label.style.color = '#34d399';
+            } else {
+                label.style.borderColor = 'rgba(239, 68, 68, 0.6)';
+                label.style.background = 'rgba(239, 68, 68, 0.2)';
+                label.style.color = '#f87171';
+            }
+            radio.checked = true;
+        }
+    }
+});

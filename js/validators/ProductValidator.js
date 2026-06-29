@@ -32,12 +32,13 @@ class ProductValidator {
             };
         }
         
-        const stock = parseFloat(productData.stock) || 0;
-        if (stock < 0) {
-            return {
-                valid: false,
-                error: 'El stock no puede ser negativo'
-            };
+        /* 
+        Permitimos stock negativo temporalmente según solicitud del usuario 
+        para mantener operatividad hasta auditoría total.
+        */
+        const stock = parseFloat(productData.stock);
+        if (isNaN(stock)) {
+             // Si el campo stock está presente pero no es un número, podrías validar si es requerido
         }
         
         // Validate type
@@ -69,7 +70,7 @@ class ProductValidator {
      * @param {number} quantity - Required quantity
      * @returns {Object} - { valid: boolean, error?: string }
      */
-    static validateStock(product, quantity) {
+    static validateStock(product, quantity, allowNegative = true) {
         if (!product) {
             return {
                 valid: false,
@@ -83,13 +84,15 @@ class ProductValidator {
             return { valid: false, error: 'Cantidad inválida' };
         }
         
-        // Validar stock para unidad y peso (kg)
+        // Permitir ventas sin stock (solo advertencia en consola) o bloquear si no está permitido
         if (stock < qty) {
-            const unit = product.type === 'weight' ? 'kg' : 'un';
-            return {
-                valid: false,
-                error: `Stock insuficiente. Disponible: ${stock} ${unit}, Requerido: ${qty} ${unit}`
-            };
+            if (!allowNegative) {
+                return {
+                    valid: false,
+                    error: `Stock insuficiente para "${product.name}". Disponible: ${stock} un.`
+                };
+            }
+            console.warn(`⚠️ Venta con stock insuficiente: ${product.name} (stock: ${stock}, vendido: ${qty})`);
         }
         
         return { valid: true };

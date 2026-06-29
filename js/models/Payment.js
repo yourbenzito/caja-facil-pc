@@ -51,4 +51,9 @@ class Payment {
     static async delete(id) {
         return await this._repository.delete(id);
     }
+
+    static async getByDateRange(startDate, endDate) {
+        return await this._repository.findByDateRange(startDate, endDate);
+    }
 }
+

@@ -41,12 +41,14 @@ class CustomerRepository extends BaseRepository {
      * @returns {Promise<Array>}
      */
     async search(term) {
+        if (db.mode === 'sqlite') return await super.search(term);
         const customers = await this.findAll();
         const searchTerm = term.toLowerCase();
         return customers.filter(c => 
             c.name.toLowerCase().includes(searchTerm) ||
-            c.phone.includes(searchTerm) ||
-            c.email.toLowerCase().includes(searchTerm)
+            (c.rut && c.rut.toLowerCase().includes(searchTerm)) ||
+            (c.phone && c.phone.includes(searchTerm)) ||
+            (c.email && c.email.toLowerCase().includes(searchTerm))
         );
     }
 }

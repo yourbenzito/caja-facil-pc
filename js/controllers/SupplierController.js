@@ -130,6 +130,23 @@ class SupplierController {
                 existing.itemQty = parseFloat(item.quantity) || 0;
                 productOps.set(item.productId, existing);
             }
+            // Add info from old purchase items to correctly revert average cost
+            const oldVatMode = old.vatMode || 'gross';
+            for (const item of oldItems) {
+                const existing = productOps.get(item.productId) || { stockDelta: 0 };
+                const itemOldQty = parseFloat(item.quantity) || 0;
+                existing.oldQty = (existing.oldQty || 0) + itemOldQty;
+                
+                let oldItemCostNeto = 0;
+                if (oldVatMode === 'gross') {
+                    oldItemCostNeto = (parseFloat(item.cost) || 0) / 1.19;
+                } else {
+                    oldItemCostNeto = parseFloat(item.cost) || 0;
+                }
+                existing.oldTotalCostNeto = (existing.oldTotalCostNeto || 0) + (itemOldQty * oldItemCostNeto);
+                
+                productOps.set(item.productId, existing);
+            }
 
             if (db.mode === 'sqlite') {
                 const productOpsObj = {};
@@ -145,8 +162,11 @@ class SupplierController {
                 data.paidAmount = effectivePaid;
                 data.status = effectivePaid >= (parseFloat(data.total) || 0) - 0.01 ? 'paid' : 'pending';
 
-                const result = await ApiClient.put(`complex/purchase/${purchaseId}`, {
-                    purchaseData: data,
+                const cleanPurchaseData = { ...data };
+                delete cleanPurchaseData.deductFromCashRegister;
+
+                const result = await ApiClient.put('complex/purchase', purchaseId, {
+                    purchaseData: cleanPurchaseData,
                     productOps: productOpsObj
                 });
                 if (!result.success) throw new Error(result.error || 'Error en edición de compra SQLite');
@@ -199,16 +219,39 @@ class SupplierController {
                         if (newStock < 0) { tx.abort(); return; }
 
                         // Calculate weighted average cost if purchase includes this item
-                        let newCost = product.cost;
-                        let newPrice = product.price;
-                        if (ops.newCost !== undefined && ops.itemQty > 0 && newStock > 0) {
-                            const otherStock = Math.max(0, newStock - ops.itemQty);
-                            const currentCost = parseFloat(product.cost) || 0;
-                            newCost = (otherStock * currentCost + ops.itemQty * ops.newCost) / newStock;
-                            newCost = Math.round(newCost * 100) / 100;
-                        } else if (ops.newCost !== undefined && ops.itemQty > 0) {
-                            newCost = ops.newCost;
+                        let inCostNeto = 0, inCostGross = 0;
+                        if (ops.newCost !== undefined) {
+                            if (data.vatMode === 'gross') {
+                                inCostGross = ops.newCost;
+                                inCostNeto = inCostGross / 1.19;
+                            } else {
+                                inCostNeto = ops.newCost;
+                                inCostGross = Math.round(inCostNeto * 1.19);
+                            }
                         }
+
+                        const currentCostNeto = (product.costNeto !== undefined && product.costNeto !== null) ? parseFloat(product.costNeto) : ((parseFloat(product.cost) || 0) / 1.19);
+                        const oldQty = ops.oldQty || 0;
+                        const oldTotalCostNeto = ops.oldTotalCostNeto || 0;
+                        
+                        // Revert old purchase
+                        const baseStock = Math.max(0, currentStock - oldQty);
+                        let baseTotalCostNeto = (currentStock * currentCostNeto) - oldTotalCostNeto;
+                        if (baseTotalCostNeto < 0 || baseStock === 0) baseTotalCostNeto = 0;
+                        
+                        let baseAvgCostNeto = baseStock > 0 ? (baseTotalCostNeto / baseStock) : currentCostNeto;
+                        
+                        let finalAvgNeto = baseAvgCostNeto;
+                        let finalAvgGross = Math.round(finalAvgNeto * 1.19);
+                        
+                        if (ops.newCost !== undefined && ops.itemQty > 0) {
+                            const newTotalCostNeto = baseTotalCostNeto + (ops.itemQty * inCostNeto);
+                            finalAvgNeto = newStock > 0 ? (newTotalCostNeto / newStock) : inCostNeto;
+                            finalAvgNeto = Math.round(finalAvgNeto * 100) / 100;
+                            finalAvgGross = Math.round(finalAvgNeto * 1.19);
+                        }
+
+                        let newPrice = product.price;
                         if (ops.newPrice !== undefined) {
                             newPrice = ops.newPrice;
                         }
@@ -216,7 +259,8 @@ class SupplierController {
                         productStore.put({
                             ...product,
                             stock: newStock,
-                            cost: newCost,
+                            cost: finalAvgGross,
+                            costNeto: finalAvgNeto,
                             price: newPrice,
                             updatedAt: new Date().toISOString()
                         });
@@ -230,7 +274,7 @@ class SupplierController {
                                 reference: purchaseId,
                                 date: new Date().toISOString(),
                                 reason: `Edición compra #${purchaseId}`,
-                                cost_value: Math.abs(ops.stockDelta) * (parseFloat(newCost) || 0),
+                                cost_value: Math.abs(ops.stockDelta) * finalAvgGross,
                                 sale_value: Math.abs(ops.stockDelta) * (parseFloat(newPrice) || 0)
                             });
                         }
@@ -242,49 +286,25 @@ class SupplierController {
             // C8: Permiso para crear compra
             PermissionService.require('purchases.create', 'crear compras');
 
-            // Check if user wants to deduct initial paidAmount from cash register now
-            const deductFromCash = data.paidAmount > 0 && data.deductFromCashRegister === true;
-            let openCash = null;
-            if (deductFromCash) {
-                openCash = await CashRegister.getOpen();
-                if (!openCash || !openCash.id) {
-                    throw new Error('La caja está cerrada. Para registrar este pago como un egreso de efectivo hoy, primero debes abrir la caja. Si pagaste mediante transferencia o crédito (sin tocar dinero físico hoy), desmarca la opción "Extraer de Caja" en la fase de Pago.');
-                }
-            }
+            const originalPaidAmount = parseFloat(data.paidAmount) || 0;
+            const deductFromCash = originalPaidAmount > 0 && data.deductFromCashRegister === true;
+
+            // Forzar que la compra se cree con paidAmount 0 para que el pago se registre de forma exclusiva
+            // a través de SupplierPaymentService y evitar el doble egreso de caja
+            data.paidAmount = 0;
+            data.status = 'pending';
 
             const newPurchaseId = await Purchase.create(data);
 
-            if (deductFromCash && openCash) {
-                const supplierObj = await Supplier.getById(data.supplierId);
-                const desc = `Pago inicial compra a proveedor: ${supplierObj ? supplierObj.name : data.supplierId} (Compra #${newPurchaseId})`;
-
-                // First create the payment record to get its ID
-                const paymentId = await SupplierPayment.create({
+            if (originalPaidAmount > 0) {
+                await SupplierPaymentService.registerPayment({
                     supplierId: data.supplierId,
                     purchaseId: newPurchaseId,
-                    amount: parseFloat(data.paidAmount),
-                    method: 'cash',
-                    reference: 'Pago al momento de comprar',
-                    notes: ''
-                });
-
-                // Then create cash movement linked to this payment ID
-                await CashMovement.create({
-                    cashRegisterId: openCash.id,
-                    type: 'out',
-                    amount: parseFloat(data.paidAmount),
-                    reason: desc,
-                    paymentId: paymentId // FIX: Link so deletion can find it
-                });
-            } else if (parseFloat(data.paidAmount) > 0) {
-                // Even if we don't deduct from cash, if there's a paidAmount, record it as a generic payment
-                await SupplierPayment.create({
-                    supplierId: data.supplierId,
-                    purchaseId: newPurchaseId,
-                    amount: parseFloat(data.paidAmount),
-                    method: 'other', // Or default method
-                    reference: 'Abono inicial en compra',
-                    notes: ''
+                    amount: originalPaidAmount,
+                    method: deductFromCash ? 'cash' : 'other',
+                    reference: deductFromCash ? 'Pago al momento de comprar' : 'Abono inicial en compra',
+                    notes: '',
+                    deductFromCashRegister: deductFromCash
                 });
             }
 
@@ -296,13 +316,16 @@ class SupplierController {
         // C8: Permiso para eliminar compra
         PermissionService.require('purchases.delete', 'eliminar compras');
 
-        showConfirm('¿Estás seguro de que deseas eliminar esta compra? El stock de los productos se revertirá y cualquier pago asociado (incluyendo caja) será anulado.', async () => {
+        showConfirm('¿Estás seguro de que deseas anular esta compra? El stock de los productos se revertirá y cualquier pago asociado (incluyendo caja) será anulado. Esta compra quedará registrada como ANULADA en el historial.', async () => {
+            const reason = prompt('Por favor, ingresa el motivo de la anulación (ej: Error de digitación, Devolución):', 'Anulación manual');
+            if (reason === null) return; // Canceló el prompt
+            
             try {
-                await Purchase.delete(id);
-                showNotification('Compra eliminada y stock revertido exitosamente', 'success');
+                await Purchase.delete(id, reason || 'Anulación manual');
+                showNotification('Compra anulada y stock revertido exitosamente', 'success');
                 app.navigate('purchases');
             } catch (error) {
-                showNotification('Error al eliminar compra: ' + error.message, 'error');
+                showNotification('Error al anular compra: ' + error.message, 'error');
             }
         });
     }

@@ -35,11 +35,12 @@ class PermissionService {
         'nav.customers': ['owner', 'admin', 'cashier'],
         'nav.suppliers': ['owner', 'admin', 'cashier'],
         'nav.purchases': ['owner', 'admin', 'cashier'],
-        'nav.expenses': ['owner', 'admin'],
         'nav.cash': ['owner', 'admin', 'cashier'],
+        'nav.expenses': ['owner', 'admin', 'cashier'],
         'nav.inventory': ['owner', 'admin'],
         'nav.reports': ['owner', 'admin'],
         'nav.sales': ['owner', 'admin', 'cashier'],
+        'nav.creditNotes': ['owner', 'admin', 'cashier'],
         'nav.settings': ['owner', 'admin'],
         'nav.auditLogs': ['owner'],
 
@@ -69,6 +70,8 @@ class PermissionService {
         // ─── Ventas ───
         'sales.edit': ['owner', 'admin'],
         'sales.return': ['owner', 'admin'],
+        'sales.delete': ['owner', 'admin'],
+        'sales.repairFolios': ['owner', 'admin'],
 
         // ─── Inventario ───
         'inventory.adjust': ['owner', 'admin'],
@@ -77,10 +80,7 @@ class PermissionService {
         'cash.open': ['owner', 'admin', 'cashier'],
         'cash.close': ['owner', 'admin', 'cashier'],
 
-        // ─── Gastos ───
-        'expenses.create': ['owner', 'admin'],
-        'expenses.edit': ['owner', 'admin'],
-        'expenses.delete': ['owner', 'admin'],
+
 
         // ─── Configuración ───
         'settings.backup': ['owner'],
@@ -113,9 +113,8 @@ class PermissionService {
         const role = this.getCurrentRole();
         const allowedRoles = this.PERMISSIONS[permission];
         if (!allowedRoles) {
-            // Permiso no definido → permitir por defecto (no romper flujos existentes)
-            console.warn(`PermissionService.can: permiso no definido: "${permission}". Permitiendo por defecto.`);
-            return true;
+            console.warn(`PermissionService.can: permiso no definido: "${permission}". Denegando por defecto.`);
+            return false;
         }
         return allowedRoles.includes(role);
     }

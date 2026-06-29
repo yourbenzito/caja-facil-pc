@@ -41,6 +41,14 @@ class StockMovement {
         return await this._repository.findAll();
     }
 
+    static async getById(id) {
+        return await this._repository.findById(id);
+    }
+
+    static async delete(id) {
+        return await this._repository.delete(id);
+    }
+
     static async getByProduct(productId) {
         return await this._repository.findByProductId(productId);
     }

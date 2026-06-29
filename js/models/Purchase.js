@@ -2,6 +2,32 @@ class Purchase {
     static _repository = new PurchaseRepository();
 
     /**
+     * Generate next purchase number (consecutivo).
+     */
+    static async generatePurchaseNumber() {
+        let max = 0;
+        if (db.mode === 'sqlite') {
+            try {
+                const res = await window.ApiClient.get('purchases/max-purchase-number');
+                max = (res && typeof res.max !== 'undefined') ? (parseInt(res.max, 10) || 0) : 0;
+                return max + 1;
+            } catch (e) {
+                console.warn('generatePurchaseNumber fallback due to API failure:', e);
+            }
+        }
+
+        // Fallback or IndexedDB
+        try {
+            const all = await this.getAll();
+            const lastNum = all.length > 0 ? Math.max(...all.map(p => parseInt(p.purchaseNumber, 10) || 0)) : 0;
+            return lastNum + 1;
+        } catch (e) {
+            console.error('Error generating purchase number:', e);
+            return 1;
+        }
+    }
+
+    /**
      * Create a new purchase
      * CRITICAL: All operations execute in a single atomic transaction
      * - Purchase record is created in database
@@ -35,18 +61,26 @@ class Purchase {
             }
         }
 
+        const subtotal = parseFloat(data.subtotal) || 0;
+        const total = parseFloat(data.total) || 0;
+        const paidAmount = parseFloat(data.paidAmount) || 0;
+
+        // Generar número de compra si no viene (es creación, no edición)
+        const purchaseNumber = parseInt(data.purchaseNumber || await this.generatePurchaseNumber(), 10) || 1;
+
         const purchase = {
+            purchaseNumber: purchaseNumber,
             supplierId: data.supplierId,
             date: data.date || new Date().toISOString(),
             documentType: data.documentType || 'factura',
             invoiceNumber: data.invoiceNumber || '',
             invoiceDate: data.invoiceDate || '',
             items: data.items || [],
-            subtotal: parseFloat(data.subtotal) || 0,
+            subtotal: subtotal,
             ivaAmount: parseFloat(data.ivaAmount) || 0,
-            total: parseFloat(data.total) || 0,
-            status: data.status || 'pending',
-            paidAmount: parseFloat(data.paidAmount) || 0,
+            total: total,
+            status: data.status || (paidAmount >= total && total > 0 ? 'paid' : 'pending'),
+            paidAmount: paidAmount,
             dueDate: data.dueDate || null,
             vatMode: data.vatMode || 'net'
         };
@@ -82,6 +116,12 @@ class Purchase {
             if (db.mode === 'sqlite') {
                 const result = await ApiClient.post('complex/purchase', { purchase, items: purchase.items });
                 if (!result.success) throw new Error(result.error || 'Error al registrar compra en SQLite');
+                
+                // CRITICAL: Invalidate relevant caches
+                db.clearCache('purchases');
+                db.clearCache('products');
+                db.clearCache('stockMovements');
+                
                 purchaseId = result.id;
             } else {
                 purchaseId = await new Promise((resolve, reject) => {
@@ -121,13 +161,25 @@ class Purchase {
                                 if (!product) { tx.abort(); return; }
 
                                 const currentStock = parseFloat(product.stock) || 0;
-                                const currentCost = parseFloat(product.cost) || 0;
+                                const currentCostNeto = (product.costNeto !== undefined && product.costNeto !== null) ? parseFloat(product.costNeto) : ((parseFloat(product.cost) || 0) / 1.19);
                                 const newQuantity = parseFloat(item.quantity);
-                                const newCost = parseFloat(item.cost);
+                                const newCostRaw = parseFloat(item.cost);
+                                
+                                let inCostNeto, inCostGross;
+                                if (purchase.vatMode === 'gross') {
+                                    inCostGross = newCostRaw;
+                                    inCostNeto = parseFloat((newCostRaw / 1.19).toFixed(2));
+                                } else {
+                                    inCostNeto = newCostRaw;
+                                    inCostGross = parseFloat((newCostRaw * 1.19).toFixed(2));
+                                }
 
-                                const averageCost = Product.calculateAverageCost(
-                                    currentStock, currentCost, newQuantity, newCost
+                                const avgNeto = Product.calculateAverageCost(
+                                    currentStock, currentCostNeto, newQuantity, inCostNeto
                                 );
+                                const finalAvgNeto = Math.round(avgNeto * 100) / 100;
+                                const finalAvgGross = parseFloat((finalAvgNeto * 1.19).toFixed(2));
+
                                 const newStock = currentStock + newQuantity;
                                 const newPrice = item.price !== undefined && item.price !== null
                                     ? parseFloat(item.price)
@@ -140,10 +192,12 @@ class Purchase {
 
                                 productStore.put({
                                     ...product,
-                                    cost: averageCost,
+                                    cost: finalAvgGross,
+                                    costNeto: finalAvgNeto,
                                     price: newPrice,
                                     stock: newStock,
-                                    updatedAt: new Date().toISOString()
+                                    updatedAt: new Date().toISOString(),
+                                    lastSupplierId: purchase.supplierId
                                 });
 
                                 movementStore.add({
@@ -153,8 +207,7 @@ class Purchase {
                                     reference: pId,
                                     date: new Date().toISOString(),
                                     reason: `Compra #${pId}`,
-                                    // FIX PUR-04: Use actual purchase cost for the movement value, not the pool's average
-                                    cost_value: newCost * newQuantity,
+                                    cost_value: inCostGross * newQuantity,
                                     sale_value: (newPrice || 0) * newQuantity
                                 });
                             };
@@ -193,23 +246,30 @@ class Purchase {
      * CRITICAL FIX: Single transaction ensures stock revert + movement creation + purchase deletion
      * all succeed or all fail together.
      */
-    static async delete(id) {
+    static async delete(id, reason = 'Anulación manual') {
         if (db.mode === 'sqlite') {
-            const result = await ApiClient.delete(`complex/purchase/${id}`);
-            if (!result.success) throw new Error(result.error || 'Error al eliminar compra en SQLite');
+            const result = await ApiClient.post(`complex/purchase/${id}/cancel`, { reason });
+            if (!result.success) throw new Error(result.error || 'Error al anular compra en SQLite');
+            
+            // CRITICAL: Invalidate relevant caches
+            db.clearCache('purchases');
+            db.clearCache('products');
+            db.clearCache('stockMovements');
+            
             return;
         }
 
         const purchase = await this.getById(id);
         if (!purchase) throw new Error('Compra no encontrada');
+        if (purchase.status === 'cancelled') throw new Error('La compra ya está anulada');
 
         const items = (purchase.items || []).filter(item => item && item.productId && parseFloat(item.quantity) > 0);
 
         await new Promise((resolve, reject) => {
             const tx = db.db.transaction(['purchases', 'products', 'stockMovements', 'supplierPayments', 'cashMovements'], 'readwrite');
 
-            tx.onerror = () => reject(new Error(`Error al eliminar compra: ${tx.error?.message || 'Error desconocido'}`));
-            tx.onabort = () => reject(new Error('Eliminación abortada: todos los cambios fueron revertidos'));
+            tx.onerror = () => reject(new Error(`Error al anular compra: ${tx.error?.message || 'Error desconocido'}`));
+            tx.onabort = () => reject(new Error('Anulación abortada: todos los cambios fueron revertidos'));
             tx.oncomplete = () => resolve();
 
             const purchaseStore = tx.objectStore('purchases');
@@ -252,10 +312,7 @@ class Purchase {
             getPaymentsReq.onsuccess = () => {
                 const payments = getPaymentsReq.result;
                 for (const payment of payments) {
-                    // Si fue efectivo, buscar y borrar movimiento de caja
                     if (payment.method === 'cash') {
-                        // En IndexedDB buscamos por paymentId si está indexado, si no por descripción
-                        // (Asumimos que CashMovement indexa paymentId en versiones recientes)
                         try {
                             const cashIndex = cashStore.index('paymentId');
                             const movementsReq = cashIndex.getAll(payment.id);
@@ -263,7 +320,6 @@ class Purchase {
                                 movementsReq.result.forEach(m => cashStore.delete(m.id));
                             };
                         } catch (e) {
-                            // Fallback a búsqueda manual por razón si no hay índice
                             const getAllCash = cashStore.openCursor();
                             getAllCash.onsuccess = (e) => {
                                 const cursor = e.target.result;
@@ -281,8 +337,15 @@ class Purchase {
                 }
             };
 
-            // 3. Delete purchase record
-            purchaseStore.delete(id);
+            // 3. Mark purchase record as cancelled (soft-delete)
+            purchaseStore.put({
+                ...purchase,
+                status: 'cancelled',
+                cancelledAt: new Date().toISOString(),
+                cancelReason: reason,
+                paidAmount: 0,
+                updatedAt: new Date().toISOString()
+            });
         });
     }
 
@@ -292,28 +355,6 @@ class Purchase {
 
     static async getAll() {
         return await this._repository.findAll();
-    }
-
-    /**
-     * C6: Obtener solo las compras más recientes para optimización de carga.
-     * @param {number} limit 
-     */
-    static async getLatest(limit = 50) {
-        if (db.mode === 'sqlite') {
-            return await ApiClient.get('purchases/list/latest', { limit });
-        }
-        return (await this.getAll()).slice(0, limit);
-    }
-
-    /**
-     * C6: Obtener resumen estadístico y de deudas directamente del servidor.
-     */
-    static async getStatsSummary() {
-        if (db.mode === 'sqlite') {
-            return await ApiClient.get('purchases/stats/summary');
-        }
-        // Fallback para IndexedDB si es necesario (aunque el modo forzado es SQLite)
-        return null;
     }
 
     static async getBySupplier(supplierId) {
@@ -358,9 +399,72 @@ class Purchase {
      * Get purchases by date range
      * @param {Date|string} startDate
      * @param {Date|string} endDate
+     * @param {Object} params - Pagination and filters
      * @returns {Promise<Array>}
      */
-    static async getByDateRange(startDate, endDate) {
-        return await this._repository.findByDateRange(startDate, endDate);
+    /**
+     * Get purchases for a specific date
+     * @param {Date|string} date
+     * @returns {Promise<Array>}
+     */
+    static async getByDate(date) {
+        const d = new Date(date);
+        const start = new Date(d.setHours(0, 0, 0, 0));
+        const end = new Date(d.setHours(23, 59, 59, 999));
+        return await this.getByDateRange(start, end);
+    }
+
+    /**
+     * Get purchases for the current week
+     * @returns {Promise<Array>}
+     */
+    static async getThisWeek() {
+        const now = new Date();
+        const first = now.getDate() - now.getDay(); // Sunday
+        const last = first + 6; // Saturday
+
+        const start = new Date(now.setDate(first));
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(now.setDate(last));
+        end.setHours(23, 59, 59, 999);
+
+        return await this.getByDateRange(start, end);
+    }
+
+    /**
+     * Get purchases for the current month
+     * @returns {Promise<Array>}
+     */
+    static async getThisMonth() {
+        const now = new Date();
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        end.setHours(23, 59, 59, 999);
+
+        return await this.getByDateRange(start, end);
+    }
+
+    static async getByDateRange(startDate, endDate, params = {}) {
+        return await this._repository.findByDateRange(startDate, endDate, params);
+    }
+
+    static async getLatest(limit = 50, offset = 0) {
+        if (db.mode === 'sqlite') {
+            return await ApiClient.get('purchases/list/latest', { limit, offset });
+        }
+        return await this._repository.findAll({ limit, offset });
+    }
+
+    static async getStatsSummary() {
+        if (db.mode === 'sqlite') {
+            return await ApiClient.get('purchases/stats/summary');
+        }
+        return null; // Fallback handled in View
+    }
+
+    static async count() {
+        return await this._repository.count();
     }
 }
+
+

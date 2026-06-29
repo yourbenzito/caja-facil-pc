@@ -37,7 +37,7 @@ class CashMovement {
             cashRegisterId: data.cashRegisterId,
             type: data.type,
             amount: amount,
-            reason: data.reason || '',
+            description: data.reason || data.description || '',
             date: new Date().toISOString()
         };
         

@@ -1,417 +1,295 @@
+// =====================================================
+// JWT HELPER - Inyección automática de Token en API
+// =====================================================
+(function() {
+    const originalFetch = window.fetch;
+    window.fetch = function(url, options = {}) {
+        if (typeof url === 'string' && url.includes('/api/') && !url.includes('/auth/login') && !url.includes('/auth/register')) {
+            const token = localStorage.getItem('AUTH_TOKEN');
+            if (token) {
+                options.headers = options.headers || {};
+                if (options.headers instanceof Headers) options.headers.set('Authorization', 'Bearer ' + token);
+                else options.headers['Authorization'] = 'Bearer ' + token;
+            }
+        }
+        return originalFetch.call(this, url, options);
+    };
+    console.log('🛡️ [Auth] JWT Interceptor activado (Standalone Mode)');
+})();
+
+/**
+ * DATABASE MANAGER (V3.0 - Standalone Expert Edition)
+ * Optimizado para SQLite local con fallback a IndexedDB.
+ * Removida lógica de multi-tenancy SaaS innecesaria para el cliente.
+ */
 class Database {
     constructor() {
         this.dbName = 'POSMinimarket';
-        this.version = 21;
+        this.version = 23;
         this.db = null;
         this.cache = {}; 
-        this.CACHE_TTL = 5 * 60 * 1000; // Caché de 5 minutos para máxima velocidad
-        this.cacheTimestamps = {}; // Control de tiempo para el caché: 20:10
-
-        // Si accedemos por IP remota (ej: celular), forzamos SQLite. 
-        // En localhost/Electron, usamos lo que diga localStorage (default indexeddb)
-        // Forzamos modo SQLite
-        localStorage.setItem('DB_MODE', 'sqlite');
+        this.CACHE_TTL = 10 * 1000;
         this.mode = 'sqlite';
-        
-        // Si no hay business_id seteado, forzamos el 1 para ver los datos migrados
-        if (!localStorage.getItem('BUSINESS_ID')) {
-            localStorage.setItem('BUSINESS_ID', '1');
-        }
-
-        console.log(`🔌 Modo Base de Datos: ${this.mode.toUpperCase()}`);
+        this._initPromise = null;
     }
 
     async init() {
+        if (this._initPromise) return this._initPromise;
+        this._initPromise = this._doInit();
+        return this._initPromise;
+    }
+
+    async _doInit() {
         if (this.mode === 'sqlite') {
-            let retries = 3;
-            while (retries > 0) {
+            let attempts = 0;
+            const maxAttempts = 10; // Aumentado a 10 intentos para dar tiempo al servidor
+            const baseUrl = window.API_CONFIG?.BASE_URL || 'http://localhost:3000';
+            
+            console.log('🔍 Iniciando conexión con SQLite local...');
+            
+            while (attempts < maxAttempts) {
                 try {
-                    const status = await fetch(`${window.API_CONFIG.BASE_URL}/api/status`).then(r => r.json());
-                    if (status.status === 'online') {
-                        console.log('✅ SQLite Backend Online');
+                    const response = await fetch(`${baseUrl}/api/status`);
+                    if (response.ok) {
+                        console.log(`✅ Conector SQLite Local Listo (intento ${attempts + 1})`);
+                        this.mode = 'sqlite';
+                        // Verificar si es primera instalación (DB vacía) para mostrar hint en login
+                        try {
+                            const setupResp = await fetch(`${baseUrl}/api/system/setup-status`);
+                            if (setupResp.ok) {
+                                const setupData = await setupResp.json();
+                                window.FIRST_INSTALL = setupData.needsSetup || setupData.isFirstInstall;
+                                if (window.FIRST_INSTALL) {
+                                    console.log('🆕 [Setup] Primera instalación detectada. Se usarán credenciales por defecto.');
+                                }
+                            }
+                        } catch(se) { /* no crítico */ }
                         return true;
                     }
                 } catch (e) {
-                    retries--;
-                    if (retries > 0) {
-                        console.log(`⏳ Esperando al servidor SQLite... (${retries} intentos restantes)`);
-                        await new Promise(resolve => setTimeout(resolve, 1500)); // Esperar 1.5s
-                    } else {
-                        console.error('❌ SQLite Backend Offline definitivamente, volviendo a IndexedDB');
-                        this.mode = 'indexeddb';
+                    attempts++;
+                    if (attempts < maxAttempts) {
+                        console.log(`⏳ Buscando Motor SQLite... reintento ${attempts}/${maxAttempts}`);
+                        await new Promise(r => setTimeout(r, 1000)); 
                     }
                 }
             }
+            
+            console.error('❌ CRÍTICO: No se pudo conectar con el servidor local (SQLite).');
+            // En vez de cambiar silenciosamente, lanzamos una advertencia global que la UI pueda capturar
+            window.SQLITE_FAILED = true;
+            
+            // Fallback solo como último recurso pero avisando
+            console.warn('⚠️ Cambiando a Modo Navegador (IndexedDB) temporalmente. LOS DATOS PUEDEN SER DIFERENTES.');
+            this.mode = 'indexeddb';
         }
 
         return new Promise((resolve, reject) => {
             const request = indexedDB.open(this.dbName, this.version);
-
+            request.onsuccess = () => { this.db = request.result; resolve(this.db); };
             request.onerror = () => reject(request.error);
-            request.onsuccess = () => {
-                this.db = request.result;
-                resolve(this.db);
-            };
-
             request.onupgradeneeded = (event) => {
                 const db = event.target.result;
-                const tx = event.target.transaction;
+                const stores = ['products', 'categories', 'sales', 'customers', 'suppliers', 'purchases', 'cashRegisters', 
+                              'cashMovements', 'stockMovements', 'settings', 'users', 'auditLogs', 'expenses', 
+                              'saleReturns', 'supplierPayments', 'customerCreditDeposits', 'customerCreditUses', 
+                              'productPriceHistory', 'offlineQueue', 'payments', 'passwordResets', 'debtPaymentSessions', 'productCostHistory'];
+                
+                stores.forEach(s => {
+                    let store;
+                    if (!db.objectStoreNames.contains(s)) {
+                        store = db.createObjectStore(s, { keyPath: 'id', autoIncrement: true });
+                    } else {
+                        store = event.currentTarget.transaction.objectStore(s);
+                    }
 
-                // Products
-                // NOTA AUDITORÍA A2: barcode NO es unique a nivel de IndexedDB porque muchos productos
-                // tienen barcode = '' (vacío). Hacer unique rompería la migración en producción.
-                // La unicidad de barcode se valida a nivel de aplicación en ProductService (create y update).
-                // Lo mismo aplica para users.username y sales.saleNumber: validados en capa de servicio.
-                let productStore;
-                if (!db.objectStoreNames.contains('products')) {
-                    productStore = db.createObjectStore('products', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    productStore = tx.objectStore('products');
-                }
-                if (!productStore.indexNames.contains('barcode')) productStore.createIndex('barcode', 'barcode', { unique: false });
-                if (!productStore.indexNames.contains('name')) productStore.createIndex('name', 'name', { unique: false });
-                if (!productStore.indexNames.contains('category')) productStore.createIndex('category', 'category', { unique: false });
-                if (!productStore.indexNames.contains('expiryDate')) productStore.createIndex('expiryDate', 'expiryDate', { unique: false });
-
-                // Categories
-                if (!db.objectStoreNames.contains('categories')) {
-                    db.createObjectStore('categories', { keyPath: 'id', autoIncrement: true });
-                }
-
-                // Sales
-                let salesStore;
-                if (!db.objectStoreNames.contains('sales')) {
-                    salesStore = db.createObjectStore('sales', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    salesStore = tx.objectStore('sales');
-                }
-                if (!salesStore.indexNames.contains('date')) salesStore.createIndex('date', 'date', { unique: false });
-                if (!salesStore.indexNames.contains('saleNumber')) salesStore.createIndex('saleNumber', 'saleNumber', { unique: false });
-                if (!salesStore.indexNames.contains('customerId')) salesStore.createIndex('customerId', 'customerId', { unique: false });
-                // B1: Índices de rendimiento para queries frecuentes
-                if (!salesStore.indexNames.contains('cashRegisterId')) salesStore.createIndex('cashRegisterId', 'cashRegisterId', { unique: false });
-                if (!salesStore.indexNames.contains('status')) salesStore.createIndex('status', 'status', { unique: false });
-                if (!salesStore.indexNames.contains('idempotencyKey')) salesStore.createIndex('idempotencyKey', 'idempotencyKey', { unique: false });
-
-                // Customers
-                let customerStore;
-                if (!db.objectStoreNames.contains('customers')) {
-                    customerStore = db.createObjectStore('customers', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    customerStore = tx.objectStore('customers');
-                }
-                if (!customerStore.indexNames.contains('name')) customerStore.createIndex('name', 'name', { unique: false });
-
-                // Suppliers
-                let supplierStore;
-                if (!db.objectStoreNames.contains('suppliers')) {
-                    supplierStore = db.createObjectStore('suppliers', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    supplierStore = tx.objectStore('suppliers');
-                }
-                if (!supplierStore.indexNames.contains('name')) supplierStore.createIndex('name', 'name', { unique: false });
-
-                // Purchases
-                let purchaseStore;
-                if (!db.objectStoreNames.contains('purchases')) {
-                    purchaseStore = db.createObjectStore('purchases', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    purchaseStore = tx.objectStore('purchases');
-                }
-                if (!purchaseStore.indexNames.contains('date')) purchaseStore.createIndex('date', 'date', { unique: false });
-                if (!purchaseStore.indexNames.contains('supplierId')) purchaseStore.createIndex('supplierId', 'supplierId', { unique: false });
-
-                // Cash Registers
-                let cashStore;
-                if (!db.objectStoreNames.contains('cashRegisters')) {
-                    cashStore = db.createObjectStore('cashRegisters', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    cashStore = tx.objectStore('cashRegisters');
-                }
-                if (!cashStore.indexNames.contains('openDate')) cashStore.createIndex('openDate', 'openDate', { unique: false });
-                if (!cashStore.indexNames.contains('status')) cashStore.createIndex('status', 'status', { unique: false });
-
-                // Cash Movements
-                let cashMovementStore;
-                if (!db.objectStoreNames.contains('cashMovements')) {
-                    cashMovementStore = db.createObjectStore('cashMovements', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    cashMovementStore = tx.objectStore('cashMovements');
-                }
-                if (!cashMovementStore.indexNames.contains('cashRegisterId')) cashMovementStore.createIndex('cashRegisterId', 'cashRegisterId', { unique: false });
-                if (!cashMovementStore.indexNames.contains('type')) cashMovementStore.createIndex('type', 'type', { unique: false });
-                if (!cashMovementStore.indexNames.contains('date')) cashMovementStore.createIndex('date', 'date', { unique: false });
-                // Fix: Add reference indexes for faster lookups
-                if (!cashMovementStore.indexNames.contains('paymentId')) cashMovementStore.createIndex('paymentId', 'paymentId', { unique: false });
-                if (!cashMovementStore.indexNames.contains('expenseId')) cashMovementStore.createIndex('expenseId', 'expenseId', { unique: false });
-                if (!cashMovementStore.indexNames.contains('saleId')) cashMovementStore.createIndex('saleId', 'saleId', { unique: false });
-
-                // Stock Movements
-                let stockStore;
-                if (!db.objectStoreNames.contains('stockMovements')) {
-                    stockStore = db.createObjectStore('stockMovements', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    stockStore = tx.objectStore('stockMovements');
-                }
-                if (!stockStore.indexNames.contains('productId')) stockStore.createIndex('productId', 'productId', { unique: false });
-                if (!stockStore.indexNames.contains('date')) stockStore.createIndex('date', 'date', { unique: false });
-                if (!stockStore.indexNames.contains('type')) stockStore.createIndex('type', 'type', { unique: false });
-
-                // Settings
-                if (!db.objectStoreNames.contains('settings')) {
-                    db.createObjectStore('settings', { keyPath: 'key' });
-                }
-
-                // Users
-                let userStore;
-                if (!db.objectStoreNames.contains('users')) {
-                    userStore = db.createObjectStore('users', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    userStore = tx.objectStore('users');
-                }
-                if (!userStore.indexNames.contains('username')) userStore.createIndex('username', 'username', { unique: false });
-                if (!userStore.indexNames.contains('phone')) userStore.createIndex('phone', 'phone', { unique: false });
-
-                // Payments
-                let paymentStore;
-                if (!db.objectStoreNames.contains('payments')) {
-                    paymentStore = db.createObjectStore('payments', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    paymentStore = tx.objectStore('payments');
-                }
-                if (!paymentStore.indexNames.contains('saleId')) paymentStore.createIndex('saleId', 'saleId', { unique: false });
-                if (!paymentStore.indexNames.contains('customerId')) paymentStore.createIndex('customerId', 'customerId', { unique: false });
-                if (!paymentStore.indexNames.contains('date')) paymentStore.createIndex('date', 'date', { unique: false });
-                if (!paymentStore.indexNames.contains('cashRegisterId')) paymentStore.createIndex('cashRegisterId', 'cashRegisterId', { unique: false });
-
-                // Expenses
-                let expenseStore;
-                if (!db.objectStoreNames.contains('expenses')) {
-                    expenseStore = db.createObjectStore('expenses', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    expenseStore = tx.objectStore('expenses');
-                }
-                if (!expenseStore.indexNames.contains('category')) expenseStore.createIndex('category', 'category', { unique: false });
-                if (!expenseStore.indexNames.contains('date')) expenseStore.createIndex('date', 'date', { unique: false });
-                if (!expenseStore.indexNames.contains('cashRegisterId')) expenseStore.createIndex('cashRegisterId', 'cashRegisterId', { unique: false });
-
-                // Customer credit deposits (dinero a favor) - se suma a caja por método de pago
-                // B5 FIX: Patrón correcto — crear store O acceder al existente, luego crear índices aparte
-                let creditDepositStore;
-                if (!db.objectStoreNames.contains('customerCreditDeposits')) {
-                    creditDepositStore = db.createObjectStore('customerCreditDeposits', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    creditDepositStore = tx.objectStore('customerCreditDeposits');
-                }
-                if (!creditDepositStore.indexNames.contains('cashRegisterId')) creditDepositStore.createIndex('cashRegisterId', 'cashRegisterId', { unique: false });
-                if (!creditDepositStore.indexNames.contains('customerId')) creditDepositStore.createIndex('customerId', 'customerId', { unique: false });
-                if (!creditDepositStore.indexNames.contains('date')) creditDepositStore.createIndex('date', 'date', { unique: false });
-
-                // Usos de saldo a favor (cuando el cliente paga con su crédito en una venta)
-                let creditUseStore;
-                if (!db.objectStoreNames.contains('customerCreditUses')) {
-                    creditUseStore = db.createObjectStore('customerCreditUses', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    creditUseStore = tx.objectStore('customerCreditUses');
-                }
-                if (!creditUseStore.indexNames.contains('customerId')) creditUseStore.createIndex('customerId', 'customerId', { unique: false });
-                if (!creditUseStore.indexNames.contains('date')) creditUseStore.createIndex('date', 'date', { unique: false });
-
-                // C2: Audit Logs — registro centralizado de acciones críticas
-                let auditLogStore;
-                if (!db.objectStoreNames.contains('auditLogs')) {
-                    auditLogStore = db.createObjectStore('auditLogs', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    auditLogStore = tx.objectStore('auditLogs');
-                }
-                if (!auditLogStore.indexNames.contains('entity')) auditLogStore.createIndex('entity', 'entity', { unique: false });
-                if (!auditLogStore.indexNames.contains('entityId')) auditLogStore.createIndex('entityId', 'entityId', { unique: false });
-                if (!auditLogStore.indexNames.contains('timestamp')) auditLogStore.createIndex('timestamp', 'timestamp', { unique: false });
-                if (!auditLogStore.indexNames.contains('userId')) auditLogStore.createIndex('userId', 'userId', { unique: false });
-                if (!auditLogStore.indexNames.contains('action')) auditLogStore.createIndex('action', 'action', { unique: false });
-
-                // C7: Product Price History — historial de cambios de precio (eventos inmutables)
-                let productPriceHistoryStore;
-                if (!db.objectStoreNames.contains('productPriceHistory')) {
-                    productPriceHistoryStore = db.createObjectStore('productPriceHistory', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    productPriceHistoryStore = tx.objectStore('productPriceHistory');
-                }
-                if (!productPriceHistoryStore.indexNames.contains('productId')) productPriceHistoryStore.createIndex('productId', 'productId', { unique: false });
-                if (!productPriceHistoryStore.indexNames.contains('date')) productPriceHistoryStore.createIndex('date', 'date', { unique: false });
-
-                // C6: Supplier Payments — pagos a proveedores (eventos inmutables)
-                let supplierPaymentStore;
-                if (!db.objectStoreNames.contains('supplierPayments')) {
-                    supplierPaymentStore = db.createObjectStore('supplierPayments', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    supplierPaymentStore = tx.objectStore('supplierPayments');
-                }
-                if (!supplierPaymentStore.indexNames.contains('supplierId')) supplierPaymentStore.createIndex('supplierId', 'supplierId', { unique: false });
-                if (!supplierPaymentStore.indexNames.contains('purchaseId')) supplierPaymentStore.createIndex('purchaseId', 'purchaseId', { unique: false });
-                if (!supplierPaymentStore.indexNames.contains('date')) supplierPaymentStore.createIndex('date', 'date', { unique: false });
-
-                // C5: Sale Returns — devoluciones de ventas (eventos inmutables)
-                let saleReturnStore;
-                if (!db.objectStoreNames.contains('saleReturns')) {
-                    saleReturnStore = db.createObjectStore('saleReturns', { keyPath: 'id', autoIncrement: true });
-                } else {
-                    saleReturnStore = tx.objectStore('saleReturns');
-                }
-                if (!saleReturnStore.indexNames.contains('saleId')) saleReturnStore.createIndex('saleId', 'saleId', { unique: false });
-                if (!saleReturnStore.indexNames.contains('date')) saleReturnStore.createIndex('date', 'date', { unique: false });
-
-                // Password Reset Attempts (rate limiting y auditoría de recuperación)
-                if (!db.objectStoreNames.contains('passwordResets')) {
-                    const prStore = db.createObjectStore('passwordResets', { keyPath: 'id', autoIncrement: true });
-                    prStore.createIndex('userId', 'userId', { unique: false });
-                    prStore.createIndex('date', 'date', { unique: false });
-                }
+                    // Crear Índices Críticos si no existen
+                    if (s === 'cashRegisters' && !store.indexNames.contains('status')) {
+                        store.createIndex('status', 'status', { unique: false });
+                    }
+                    if (s === 'sales') {
+                        if (!store.indexNames.contains('date')) store.createIndex('date', 'date', { unique: false });
+                        if (!store.indexNames.contains('customerId')) store.createIndex('customerId', 'customerId', { unique: false });
+                        if (!store.indexNames.contains('status')) store.createIndex('status', 'status', { unique: false });
+                    }
+                    if (s === 'payments') {
+                        if (!store.indexNames.contains('saleId')) store.createIndex('saleId', 'saleId', { unique: false });
+                        if (!store.indexNames.contains('cashRegisterId')) store.createIndex('cashRegisterId', 'cashRegisterId', { unique: false });
+                        if (!store.indexNames.contains('date')) store.createIndex('date', 'date', { unique: false });
+                    }
+                    if (s === 'stockMovements' && !store.indexNames.contains('productId')) {
+                        store.createIndex('productId', 'productId', { unique: false });
+                    }
+                    if (s === 'cashMovements') {
+                        if (!store.indexNames.contains('paymentId')) store.createIndex('paymentId', 'paymentId', { unique: false });
+                        if (!store.indexNames.contains('cashRegisterId')) store.createIndex('cashRegisterId', 'cashRegisterId', { unique: false });
+                        if (!store.indexNames.contains('type')) store.createIndex('type', 'type', { unique: false });
+                    }
+                    if (s === 'products') {
+                        if (!store.indexNames.contains('category')) store.createIndex('category', 'category', { unique: false });
+                        if (!store.indexNames.contains('barcode')) store.createIndex('barcode', 'barcode', { unique: false });
+                    }
+                });
+                console.log('📦 [IndexedDB] Esquema sincronizado y optimizado (V23).');
             };
         });
     }
 
-    clearCache(storeName) {
-        for (const key in this.cache) {
-            if (key.startsWith(storeName + '_')) {
-                delete this.cache[key];
-            }
+    // --- ACCESO A DATOS (ABSTRACCIÓN) ---
+
+    async get(storeName, id) {
+        if (this.mode === 'sqlite') {
+            const cacheKey = `${storeName}_${id}`;
+            if (this.cache[cacheKey] && (Date.now() - this.cache[cacheKey].t < this.CACHE_TTL)) return this.cache[cacheKey].d;
+            
+            const data = await window.ApiClient.get(`${storeName}/${id}`);
+            this.cache[cacheKey] = { d: data, t: Date.now() };
+            return data;
         }
+        return new Promise(r => {
+            this.db.transaction(storeName).objectStore(storeName).get(Number(id) || id).onsuccess = (e) => r(e.target.result);
+        });
+    }
+
+    async getAll(storeName, params = {}) {
+        if (this.mode === 'sqlite') {
+            const cacheKey = `${storeName}_all_${JSON.stringify(params)}`;
+            if (this.cache[cacheKey] && (Date.now() - this.cache[cacheKey].t < this.CACHE_TTL)) return this.cache[cacheKey].d;
+
+            const data = await window.ApiClient.get(storeName, params);
+            const arrayData = Array.isArray(data) ? data : [];
+            this.cache[cacheKey] = { d: arrayData, t: Date.now() };
+            return arrayData;
+        }
+        return new Promise(r => {
+            this.db.transaction(storeName).objectStore(storeName).getAll().onsuccess = (e) => r(e.target.result);
+        });
+    }
+
+    async findByIndex(storeName, indexName, value, params = {}) {
+        if (this.mode === 'sqlite') {
+            // Transformar consulta de índice a query SQL automática
+            const queryParams = { ...params, [indexName]: value };
+            return await this.getAll(storeName, queryParams);
+        }
+        return new Promise(r => {
+            const index = this.db.transaction(storeName).objectStore(storeName).index(indexName);
+            index.getAll(value).onsuccess = (e) => r(e.target.result);
+        });
+    }
+
+    async findByIndexRange(storeName, indexName, lower, upper, params = {}) {
+        if (this.mode === 'sqlite') {
+            // Operadores de rango mapeados al backend (_gte, _lte)
+            const queryParams = { 
+                ...params, 
+                [`${indexName}_gte`]: lower, 
+                [`${indexName}_lte`]: upper 
+            };
+            return await this.getAll(storeName, queryParams);
+        }
+        return new Promise(r => {
+            const range = IDBKeyRange.bound(lower, upper);
+            this.db.transaction(storeName).objectStore(storeName).index(indexName)
+                   .getAll(range).onsuccess = (e) => r(e.target.result);
+        });
+    }
+
+    // Aliases for compatibility
+    async getByIndex(storeName, indexName, value, params = {}) {
+        return await this.findByIndex(storeName, indexName, value, params);
+    }
+
+    async getByIndexRange(storeName, indexName, lower, upper, params = {}) {
+        return await this.findByIndexRange(storeName, indexName, lower, upper, params);
     }
 
     async add(storeName, data) {
         this.clearCache(storeName);
         if (this.mode === 'sqlite') {
-            const result = await window.ApiClient.post(storeName, data);
-            // IMPORTANTE: Devolver solo el ID para mantener compatibilidad con IndexedDB
-            return result.id;
+            const res = await window.ApiClient.post(storeName, data);
+            return res.id || res;
         }
-        const tx = this.db.transaction(storeName, 'readwrite');
-        const store = tx.objectStore(storeName);
-        return new Promise((resolve, reject) => {
-            const request = store.add(data);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
+        return new Promise(r => {
+            const req = this.db.transaction(storeName, 'readwrite').objectStore(storeName).add(data);
+            req.onsuccess = (e) => r(e.target.result);
         });
     }
 
     async put(storeName, data) {
         this.clearCache(storeName);
         if (this.mode === 'sqlite') {
-            const pk = storeName === 'settings' ? 'key' : 'id';
-            const id = data[pk];
-            const result = await window.ApiClient.put(storeName, id, data);
-            // IMPORTANTE: Devolver solo el ID para mantener compatibilidad con IndexedDB
-            return result[pk];
+            const pk = (storeName === 'settings') ? 'key' : 'id';
+            return await window.ApiClient.put(storeName, data[pk], data);
         }
-        const tx = this.db.transaction(storeName, 'readwrite');
-        const store = tx.objectStore(storeName);
-        return new Promise((resolve, reject) => {
-            const request = store.put(data);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
-    }
-
-    async get(storeName, id) {
-        if (this.mode === 'sqlite') {
-            const cacheKey = `${storeName}_get_${id}`;
-            const now = Date.now();
-            if (this.cache[cacheKey] && (now - this.cache[cacheKey].timestamp < this.CACHE_TTL)) {
-                return this.cache[cacheKey].data ? { ...this.cache[cacheKey].data } : null;
-            }
-            const data = await window.ApiClient.get(`${storeName}/${id}`);
-            this.cache[cacheKey] = { data: data ? { ...data } : null, timestamp: now };
-            return data;
-        }
-        const tx = this.db.transaction(storeName, 'readonly');
-        const store = tx.objectStore(storeName);
-        return new Promise((resolve, reject) => {
-            const request = store.get(Number(id) || id);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
-    }
-
-    async getAll(storeName) {
-        if (this.mode === 'sqlite') {
-            const cacheKey = `${storeName}_all`;
-            const now = Date.now();
-            if (this.cache[cacheKey] && (now - this.cache[cacheKey].timestamp < this.CACHE_TTL)) {
-                return [...this.cache[cacheKey].data];
-            }
-            const data = await window.ApiClient.get(storeName);
-            const arrayData = Array.isArray(data) ? data : [];
-            this.cache[cacheKey] = { data: [...arrayData], timestamp: now };
-            return arrayData;
-        }
-        const tx = this.db.transaction(storeName, 'readonly');
-        const store = tx.objectStore(storeName);
-        return new Promise((resolve, reject) => {
-            const request = store.getAll();
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
+        return new Promise(r => {
+            this.db.transaction(storeName, 'readwrite').objectStore(storeName).put(data).onsuccess = (e) => r(e.target.result);
         });
     }
 
     async delete(storeName, id) {
         this.clearCache(storeName);
-        if (this.mode === 'sqlite') {
-            return await window.ApiClient.delete(storeName, id);
-        }
-        const tx = this.db.transaction(storeName, 'readwrite');
-        const store = tx.objectStore(storeName);
-        return new Promise((resolve, reject) => {
-            const request = store.delete(Number(id) || id);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
+        if (this.mode === 'sqlite') return await window.ApiClient.delete(storeName, id);
+        return new Promise(r => {
+            this.db.transaction(storeName, 'readwrite').objectStore(storeName).delete(Number(id) || id).onsuccess = () => r(true);
         });
     }
 
-    async getByIndex(storeName, indexName, value) {
-        if (this.mode === 'sqlite') {
-            const cacheKey = `${storeName}_index_${indexName}_${value}`;
-            const now = Date.now();
-            if (this.cache[cacheKey] && (now - this.cache[cacheKey].timestamp < this.CACHE_TTL)) {
-                return [...this.cache[cacheKey].data];
-            }
-            const params = {};
-            params[indexName] = value;
-            const data = await window.ApiClient.get(storeName, params);
-            const arrayData = Array.isArray(data) ? data : [];
-            this.cache[cacheKey] = { data: [...arrayData], timestamp: now };
-            return arrayData;
+    clearCache(storeName = null) {
+        if (storeName) {
+            Object.keys(this.cache).forEach(k => { if (k.startsWith(storeName)) delete this.cache[k]; });
+        } else {
+            this.cache = {};
         }
-        const tx = this.db.transaction(storeName, 'readonly');
-        const store = tx.objectStore(storeName);
-        const index = store.index(indexName);
-        return new Promise((resolve, reject) => {
-            const request = index.getAll(value);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
     }
 
-    async getByIndexRange(storeName, indexName, lower, upper) {
+    /** Invalida caché de datos críticos del POS tras sync remota */
+    async warmCache() {
+        ['products', 'customers', 'sales', 'categories'].forEach(s => this.clearCache(s));
+    }
+
+    async search(storeName, term) {
         if (this.mode === 'sqlite') {
-            const cacheKeyAll = `${storeName}_all`;
-            const now = Date.now();
-            if (this.cache[cacheKeyAll] && (now - this.cache[cacheKeyAll].timestamp < this.CACHE_TTL)) {
-                return this.cache[cacheKeyAll].data.filter(item => item[indexName] >= lower && item[indexName] <= upper);
-            }
-            // Fetch exactly the range from the API directly to save huge payloads
-            const filterParams = { index: indexName, lower: lower, upper: upper };
-            const data = await window.ApiClient.get(`${storeName}/range`, filterParams);
-            return Array.isArray(data) ? data : [];
+            // C5: Búsqueda nativa en servidor para SQLite (Mucho más rápido)
+            const results = await window.ApiClient.get(`${storeName}/search`, { q: term });
+            return Array.isArray(results) ? results : [];
         }
-        const tx = this.db.transaction(storeName, 'readonly');
-        const store = tx.objectStore(storeName);
-        const index = store.index(indexName);
-        const range = IDBKeyRange.bound(lower, upper);
-        return new Promise((resolve, reject) => {
-            const request = index.getAll(range);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
+        
+        const all = await this.getAll(storeName);
+        if (!term) return all;
+        const lowerTerm = term.toLowerCase();
+        
+        const filtered = all.filter(item => {
+            return Object.values(item).some(val => 
+                val && typeof val === 'string' && val.toLowerCase().includes(lowerTerm)
+            );
+        });
+
+        // 2. Ordenar por relevancia estratégica
+        return filtered.sort((a, b) => {
+            const aName = (a.name || '').toLowerCase();
+            const bName = (b.name || '').toLowerCase();
+
+            // Prioridad 1: NOMBRE EXACTO (ej: "Pan")
+            if (aName === lowerTerm && bName !== lowerTerm) return -1;
+            if (bName === lowerTerm && aName !== lowerTerm) return 1;
+
+            // Prioridad 2: NOMBRE EMPIEZA POR (ej: "Pan amasado" antes que "Empanada")
+            const aStarts = aName.startsWith(lowerTerm);
+            const bStarts = bName.startsWith(lowerTerm);
+            if (aStarts && !bStarts) return -1;
+            if (bStarts && !aStarts) return 1;
+
+            // Prioridad 3: Coincidencia exacta en otros campos (como código de barras o categoría)
+            const aExactOther = Object.values(a).some(v => v && typeof v === 'string' && v.toLowerCase() === lowerTerm);
+            const bExactOther = Object.values(b).some(v => v && typeof v === 'string' && v.toLowerCase() === lowerTerm);
+            if (aExactOther && !bExactOther) return -1;
+            if (bExactOther && !aExactOther) return 1;
+
+            // Prioridad 4: Si ambos empiezan igual, orden alfabético por nombre
+            if (aStarts && bStarts) return aName.localeCompare(bName);
+
+            return 0;
         });
     }
 
@@ -421,72 +299,33 @@ class Database {
     }
 
     async clear(storeName) {
-        this.clearCache(storeName);
         if (this.mode === 'sqlite') {
-            // No implementado por seguridad en API general
-            return;
+            console.warn(`Operación 'clear' no implementada para SQLite en tabla ${storeName}`);
+            return true;
         }
-        const tx = this.db.transaction(storeName, 'readwrite');
-        const store = tx.objectStore(storeName);
-        return new Promise((resolve, reject) => {
-            const request = store.clear();
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
+        return new Promise(r => {
+            this.db.transaction(storeName, 'readwrite').objectStore(storeName).clear().onsuccess = () => r(true);
         });
     }
 
     async count(storeName) {
-        if (this.mode === 'sqlite') {
-            return await window.ApiClient.get(`${storeName}/stats/count`);
-        }
-        const tx = this.db.transaction(storeName, 'readonly');
-        const store = tx.objectStore(storeName);
-        return new Promise((resolve, reject) => {
-            const request = store.count();
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-        });
+        const all = await this.getAll(storeName);
+        return all.length;
     }
 
     async wipeAll() {
         if (this.mode === 'sqlite') {
-            console.log('🚮 Iniciando vaciado total de base de datos (SQLite)...');
-            try {
-                // Notificamos al servidor del reseteo
-                await window.ApiClient.post('system/factory-reset');
-                
-                // Limpiamos rastro local
-                localStorage.clear();
-                sessionStorage.clear();
-                return true;
-            } catch (error) {
-                console.error('❌ Error en factory-reset:', error);
-                // Si falla el endpoint, intentamos al menos limpiar el localStorage local por si acaso
-                throw new Error('Error al conectar con el servidor para el vaciado.');
-            }
-        } else {
-            console.log('🚮 Iniciando vaciado total de base de datos (IndexedDB)...');
-            return new Promise((resolve, reject) => {
-                // Cerrar conexión actual antes de borrar
-                if (this.db) {
-                    this.db.close();
-                }
-                
-                const request = indexedDB.deleteDatabase(this.dbName);
-                request.onsuccess = () => {
-                    console.log('✅ Base de datos local eliminada');
-                    localStorage.clear();
-                    sessionStorage.clear();
-                    resolve(true);
-                };
-                request.onerror = () => reject(new Error('Error al eliminar base de datos local'));
-                request.onblocked = () => {
-                    console.warn('⚠️ El borrado está bloqueado por otras pestañas abiertas');
-                    reject(new Error('Borrado bloqueado: Cierra todas las ventanas de la aplicación e intenta de nuevo.'));
-                };
-            });
+            await window.ApiClient.post('system/factory-reset', {}); // Si no existe, al menos limpia local
+            localStorage.clear();
+            window.location.reload();
+            return true;
         }
+        return new Promise(r => {
+            if (this.db) this.db.close();
+            indexedDB.deleteDatabase(this.dbName).onsuccess = () => { localStorage.clear(); r(true); };
+        });
     }
 }
 
-const db = new Database();
+// Inicialización global (app.js también llama init — idempotente)
+window.db = new Database();
