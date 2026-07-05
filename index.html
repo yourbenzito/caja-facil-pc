@@ -129,9 +129,12 @@
                         <span class="sidebar-role-badge" id="currentUserRole"
                             style="font-size: 0.65rem; padding: 0.1rem 0.4rem; border-radius: 0.25rem; background: rgba(99,102,241,0.3); color: #a5b4fc; margin-left: 0.3rem;"></span>
                     </div>
-                    <div class="sidebar-top-actions">
+                    <div class="sidebar-top-actions" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; margin-top: 0.5rem;">
                         <button class="btn btn-secondary btn-sm" onclick="AuthManager.logout()">Cerrar sesión</button>
                         <button class="btn btn-secondary btn-sm" onclick="ShortcutHelper.show()">⌨️ Atajos</button>
+                        <button class="btn btn-secondary btn-sm" onclick="NotificationCenter.show()" style="grid-column: span 2; display: flex; align-items: center; justify-content: center; gap: 0.25rem; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25); color: #a5b4fc; font-weight: 700; border-radius: 0.5rem; padding: 0.45rem 0; cursor: pointer; transition: background 0.2s;">
+                            🔔 Avisos y Alertas <span id="nav-notification-badge" style="display: none;"></span>
+                        </button>
                     </div>
                 </div>
                 <ul class="nav-menu">
@@ -188,6 +191,7 @@
     <script src="js/utils/formatter.js?v=2.1" defer></script>
     <script src="js/utils/dom-patcher.js" defer></script>
     <script src="js/utils/alerts.js?v=2026.final.2" defer></script>
+    <script src="js/utils/notification-center.js?v=2026.final.2" defer></script>
     <script src="js/utils/backup.js?v=4.0" defer></script>
     <script src="js/utils/debounce.js?v=2.4" defer></script>
     <script src="js/utils/keyboard.js?v=2.3" defer></script>
@@ -210,6 +214,7 @@
     <script src="js/repositories/SaleReturnRepository.js?v=4.0" defer></script>
     <script src="js/repositories/SupplierPaymentRepository.js?v=1.0" defer></script>
     <script src="js/repositories/ProductPriceHistoryRepository.js?v=1.0" defer></script>
+    <script src="js/repositories/ExpenseRepository.js?v=1.0" defer></script>
     <!-- Gráficos (Chart.js — 100% Local) -->
     <script src="js/libs/chart.js"></script>
     <!-- Excel (XLSX — 100% Local. Ya cargado arriba con defer en línea 172) -->
@@ -247,6 +252,7 @@
     <script src="js/models/Payment.js?v=2.2" defer></script>
     <script src="js/models/CustomerCreditUse.js?v=1.0" defer></script>
     <script src="js/models/CustomerCreditDeposit.js?v=1.0" defer></script>
+    <script src="js/models/Expense.js?v=1.0" defer></script>
     <script src="js/controllers/ProductController.js?v=2.1" defer></script>
     <script src="js/controllers/POSController.js?v=2.2" defer></script>
     <script src="js/controllers/CustomerController.js?v=2.1" defer></script>

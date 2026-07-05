@@ -278,6 +278,12 @@ CREATE TABLE IF NOT EXISTS expenses (
     description TEXT,
     date TEXT,
     cashRegisterId INTEGER,
+    documentType TEXT DEFAULT 'comprobante_interno',
+    documentNumber TEXT,
+    paymentMethod TEXT DEFAULT 'cash',
+    supplierId INTEGER,
+    userId INTEGER,
+    attachmentPath TEXT,
     business_id INTEGER DEFAULT 1,
     is_synced INTEGER DEFAULT 0,
     server_id INTEGER

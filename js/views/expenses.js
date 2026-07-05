@@ -198,7 +198,13 @@ const ExpensesView = {
         if (!panel) return;
 
         if (tab === 'register') {
-            panel.innerHTML = this.renderRegisterPanel();
+            let suppliers = [];
+            try {
+                suppliers = await Supplier.getAll();
+            } catch (err) {
+                console.warn('Error al cargar proveedores:', err);
+            }
+            panel.innerHTML = this.renderRegisterPanel(suppliers);
             this.setupCategorySelection();
         } else if (tab === 'history') {
             panel.innerHTML = this.renderHistoryPanel();
@@ -216,10 +222,29 @@ const ExpensesView = {
     /* PANEL: REGISTRAR                                                     */
     /* ------------------------------------------------------------------ */
 
-    renderRegisterPanel() {
+    attachmentBase64: '',
+
+    handleAttachment(input) {
+        const file = input.files[0];
+        if (!file) return;
+        if (file.size > 2 * 1024 * 1024) {
+            showNotification('El archivo es demasiado grande (máximo 2MB)', 'warning');
+            input.value = '';
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            ExpensesView.attachmentBase64 = e.target.result;
+            const label = document.getElementById('attachment-label');
+            if (label) label.textContent = `✅ ${file.name.slice(0, 15)}...`;
+        };
+        reader.readAsDataURL(file);
+    },
+
+    renderRegisterPanel(suppliers = []) {
         const today = new Date().toISOString().slice(0, 10);
         return `
-            <div style="max-width: 600px; margin: 0 auto; animation: expFadeUp 0.3s ease;">
+            <div style="max-width: 650px; margin: 0 auto; animation: expFadeUp 0.3s ease;">
                 <div class="card" style="padding: 2rem; background: #fff; border-radius: 1.25rem; box-shadow: 0 4px 24px rgba(0,0,0,0.07);">
 
                     <!-- Monto grande -->
@@ -244,18 +269,70 @@ const ExpensesView = {
                     </div>
 
                     <!-- Descripción -->
-                    <div style="margin-bottom: 1rem;">
+                    <div style="margin-bottom: 1.25rem;">
                         <label style="display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Descripción</label>
                         <input type="text" id="exp-desc" class="form-control" placeholder="Ej: Factura de luz mes de junio"
                                style="font-size: 1rem; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px solid #e2e8f0;"
-                               onkeypress="if(event.key==='Enter') ExpensesView.saveExpense()">
+                               onkeypress="if(event.key==='Enter') document.getElementById('exp-document-number').focus()">
                     </div>
 
-                    <!-- Fecha -->
-                    <div style="margin-bottom: 1.75rem;">
-                        <label style="display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Fecha</label>
-                        <input type="date" id="exp-date" class="form-control" value="${today}"
-                               style="font-size: 1rem; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px solid #e2e8f0;">
+                    <!-- Fila 1: Medio de Pago & Tipo de Documento -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Medio de Pago</label>
+                            <select id="exp-payment-method" class="form-control" style="font-size: 1rem; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px solid #e2e8f0; height: auto;"
+                                    onchange="document.getElementById('affects-cash-container').style.display = this.value === 'cash' ? 'flex' : 'none';">
+                                <option value="cash">💵 Efectivo Caja</option>
+                                <option value="transfer">🏦 Transferencia Bancaria</option>
+                                <option value="card">💳 Tarjeta Crédito/Débito</option>
+                            </select>
+                            <div id="affects-cash-container" style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="exp-affects-cash" checked style="width: 1.1rem; height: 1.15rem; cursor: pointer;">
+                                <label for="exp-affects-cash" style="font-size: 0.75rem; color: #475569; font-weight: 600; cursor: pointer; margin: 0; user-select: none;">¿Descontar de la caja activa?</label>
+                            </div>
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Tipo de Documento</label>
+                            <select id="exp-document-type" class="form-control" style="font-size: 1rem; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px solid #e2e8f0; height: auto;">
+                                <option value="comprobante_interno">📝 Comprobante Interno</option>
+                                <option value="boleta">🧾 Boleta</option>
+                                <option value="factura">📄 Factura</option>
+                                <option value="honorarios">🧑‍💻 Boleta Honorarios</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Fila 2: N° Documento & Proveedor -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">N° de Documento / Folio</label>
+                            <input type="text" id="exp-document-number" class="form-control" placeholder="Ej: 10423"
+                                   style="font-size: 1rem; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px solid #e2e8f0;">
+                        </div>
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Proveedor</label>
+                            <select id="exp-supplier" class="form-control" style="font-size: 1rem; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px solid #e2e8f0; height: auto;">
+                                <option value="">👤 Gasto General / Sin Proveedor</option>
+                                ${suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Fila 3: Fecha & Adjuntar Recibo -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; align-items: end;">
+                        <div>
+                            <label style="display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Fecha</label>
+                            <input type="date" id="exp-date" class="form-control" value="${today}"
+                                   style="font-size: 1rem; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px solid #e2e8f0;">
+                        </div>
+                        <div>
+                            <input type="file" id="exp-attachment" accept="image/*,application/pdf" style="display:none;" onchange="ExpensesView.handleAttachment(this)">
+                            <button type="button" onclick="document.getElementById('exp-attachment').click()"
+                                    style="width: 100%; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px dashed #cbd5e1; background: #f8fafc; font-weight: 600; color: #64748b; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-size: 0.9rem;"
+                                    onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#f8fafc'">
+                                📎 <span id="attachment-label">Adjuntar Recibo</span>
+                            </button>
+                        </div>
                     </div>
 
                     <!-- Botón guardar -->
@@ -277,7 +354,6 @@ const ExpensesView = {
     selectedCategory: '',
 
     setupCategorySelection() {
-        // Pre-seleccionar primera categoría por defecto
         this.selectCategory('servicios');
     },
 
@@ -295,6 +371,14 @@ const ExpensesView = {
         const description = (document.getElementById('exp-desc')?.value || '').trim();
         const category = document.getElementById('exp-category')?.value || 'otros';
         const dateVal = document.getElementById('exp-date')?.value || new Date().toISOString().slice(0, 10);
+        const paymentMethod = document.getElementById('exp-payment-method')?.value || 'cash';
+        const documentType = document.getElementById('exp-document-type')?.value || 'comprobante_interno';
+        const documentNumber = (document.getElementById('exp-document-number')?.value || '').trim();
+        const supplierId = document.getElementById('exp-supplier')?.value || '';
+        const attachmentPath = ExpensesView.attachmentBase64 || '';
+        
+        const affectsCashCheckbox = document.getElementById('exp-affects-cash');
+        const affectsCash = paymentMethod === 'cash' && affectsCashCheckbox ? affectsCashCheckbox.checked : false;
 
         if (amountRaw <= 0) {
             showNotification('Ingresa un monto válido', 'warning');
@@ -309,12 +393,49 @@ const ExpensesView = {
 
         const catInfo = this.CATEGORIES.find(c => c.key === category) || this.CATEGORIES[6];
 
+        let expenseId;
         try {
-            const openCash = await CashRegister.getOpen();
-            if (!openCash) {
-                // Registrar igual pero sin asociar a caja (guardamos en un objeto especial)
-                await this._saveWithoutCash({ amount: amountRaw, description, category, dateVal, catInfo });
-            } else {
+            // Obtener usuario activo para trazabilidad
+            let activeUserId = null;
+            try {
+                const user = JSON.parse(localStorage.getItem('currentUser') || 'null');
+                if (user && user.id) activeUserId = user.id;
+            } catch (e) {}
+
+            expenseId = await Expense.create({
+                category,
+                amount: amountRaw,
+                description,
+                date: new Date(dateVal).toISOString(),
+                documentType,
+                documentNumber,
+                paymentMethod,
+                supplierId: supplierId ? parseInt(supplierId) : null,
+                userId: activeUserId,
+                attachmentPath,
+                cashRegisterId: null
+            });
+        } catch (error) {
+            console.error('[Expenses] Error guardando gasto en IndexedDB/SQLite:', error);
+            showNotification('Error al registrar el gasto: ' + error.message, 'error');
+            return;
+        }
+
+        // Si el pago es en Efectivo Caja y afecta la caja activa, registrar el movimiento físico
+        if (paymentMethod === 'cash' && affectsCash) {
+            try {
+                const openCash = await CashRegister.getOpen();
+                if (!openCash) {
+                    // Si se seleccionó Efectivo pero la caja está cerrada, bloqueamos por seguridad
+                    await Expense.delete(expenseId);
+                    showNotification('No hay caja abierta. Abre una caja primero para registrar gastos en efectivo.', 'warning');
+                    return;
+                }
+
+                // Asociar el gasto a la caja
+                await Expense.update(expenseId, { cashRegisterId: openCash.id });
+
+                // Crear el egreso en movimientos de caja
                 await CashMovement.create({
                     cashRegisterId: openCash.id,
                     type: 'out',
@@ -322,54 +443,37 @@ const ExpensesView = {
                     description: `[GASTO] ${description}`,
                     reason: `[GASTO] ${description}`,
                     category: category,
+                    expenseId: expenseId,
                     date: new Date(dateVal).toISOString()
                 });
+            } catch (cashErr) {
+                console.error('[Expenses] Error al registrar movimiento de caja:', cashErr);
+                // Rollback del gasto para mantener integridad
+                await Expense.delete(expenseId);
+                showNotification('Error al registrar salida de dinero físico. Operación cancelada.', 'error');
+                return;
             }
-
-            showNotification(`${catInfo.icon} Gasto registrado: ${formatCLP(amountRaw)}`, 'success');
-
-            // Reset form
-            document.getElementById('exp-amount').value = '';
-            document.getElementById('exp-desc').value = '';
-            const todayStr = new Date().toISOString().slice(0, 10);
-            document.getElementById('exp-date').value = todayStr;
-            this.selectCategory('servicios');
-            document.getElementById('exp-amount')?.focus();
-
-            // Actualizar KPIs
-            await this.loadKPIs();
-            this.checkBudgetAlert(category, amountRaw);
-
-        } catch (error) {
-            console.error('[Expenses] Error guardando gasto:', error);
-            showNotification('Error al guardar el gasto', 'error');
         }
-    },
 
-    async _saveWithoutCash({ amount, description, category, dateVal, catInfo }) {
-        // Sin caja abierta: guardar en un movimiento sin cash register usando un ID ficticio (0)
-        // Esto permite registrar gastos aunque no haya caja abierta en el momento
-        try {
-            // Intentar usar la última caja (cerrada)
-            const allCash = await CashRegister.getAll();
-            const lastCash = allCash.sort((a, b) => new Date(b.openDate) - new Date(a.openDate))[0];
-            if (lastCash) {
-                await CashMovement.create({
-                    cashRegisterId: lastCash.id,
-                    type: 'out',
-                    amount: amount,
-                    description: `[GASTO] ${description}`,
-                    reason: `[GASTO] ${description}`,
-                    category: category,
-                    date: new Date(dateVal).toISOString()
-                });
-            } else {
-                showNotification('No hay caja disponible. Abre una caja primero para registrar gastos.', 'warning');
-                throw new Error('No hay caja disponible');
-            }
-        } catch (e) {
-            throw e;
-        }
+        showNotification(`${catInfo.icon} Gasto registrado: ${formatCLP(amountRaw)}`, 'success');
+
+        // Resetear formulario y variables
+        ExpensesView.attachmentBase64 = '';
+        if (document.getElementById('exp-amount')) document.getElementById('exp-amount').value = '';
+        if (document.getElementById('exp-desc')) document.getElementById('exp-desc').value = '';
+        if (document.getElementById('exp-document-number')) document.getElementById('exp-document-number').value = '';
+        if (document.getElementById('exp-supplier')) document.getElementById('exp-supplier').value = '';
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (document.getElementById('exp-date')) document.getElementById('exp-date').value = todayStr;
+        const attachmentLabel = document.getElementById('attachment-label');
+        if (attachmentLabel) attachmentLabel.textContent = 'Adjuntar Recibo';
+        
+        this.selectCategory('servicios');
+        document.getElementById('exp-amount')?.focus();
+
+        // Recargar KPIs
+        await this.loadKPIs();
+        this.checkBudgetAlert(category, amountRaw);
     },
 
     /* ------------------------------------------------------------------ */
@@ -386,8 +490,8 @@ const ExpensesView = {
                            style="flex: 1; min-width: 150px; border-radius: 0.625rem; border: 2px solid #e2e8f0; padding: 0.625rem 0.875rem;"
                            onchange="ExpensesView.loadHistory()">
                     <select id="hist-cat" class="form-control"
-                            style="flex: 1; min-width: 160px; border-radius: 0.625rem; border: 2px solid #e2e8f0; padding: 0.625rem 0.875rem;"
-                            onchange="ExpensesView.loadHistory()">
+                           style="flex: 1; min-width: 160px; border-radius: 0.625rem; border: 2px solid #e2e8f0; padding: 0.625rem 0.875rem;"
+                           onchange="ExpensesView.loadHistory()">
                         <option value="all">Todas las categorías</option>
                         ${this.CATEGORIES.map(c => `<option value="${c.key}">${c.icon} ${c.label}</option>`).join('')}
                     </select>
@@ -420,7 +524,13 @@ const ExpensesView = {
         const cat    = catEl?.value || 'all';
         const search = (searchEl?.value || '').toLowerCase();
 
-        const expenses = await this._getExpenseMovements(month);
+        const [expenses, suppliers] = await Promise.all([
+            this._getExpenseMovements(month),
+            Supplier.getAll().catch(() => [])
+        ]);
+
+        const supplierMap = {};
+        suppliers.forEach(s => supplierMap[s.id] = s);
 
         let filtered = expenses;
         if (cat !== 'all') filtered = filtered.filter(e => e.category === cat);
@@ -449,17 +559,64 @@ const ExpensesView = {
         list.innerHTML = sorted.map((exp, idx) => {
             const catInfo = this.CATEGORIES.find(c => c.key === exp.category) || this.CATEGORIES[6];
             const dateStr = new Date(exp.date).toLocaleDateString('es-CL', { day: '2-digit', month: 'short', year: 'numeric' });
+            
+            // Proveedor
+            const supplierName = exp.supplierId && supplierMap[exp.supplierId] ? supplierMap[exp.supplierId].name : '';
+            
+            // Folio / Documento
+            const docLabelMap = {
+                'comprobante_interno': 'Comp. Interno',
+                'boleta': 'Boleta',
+                'factura': 'Factura',
+                'honorarios': 'B. Honorarios'
+            };
+            const docTypeLabel = docLabelMap[exp.documentType] || 'Comprobante';
+            const docInfo = exp.documentNumber ? `${docTypeLabel} N° ${exp.documentNumber}` : docTypeLabel;
+            
+            // Medio de Pago
+            const payMethodMap = {
+                'cash': '💵 Efectivo',
+                'transfer': '🏦 Transferencia',
+                'card': '💳 Tarjeta'
+            };
+            let payMethodLabel = payMethodMap[exp.paymentMethod] || 'Efectivo';
+            if (exp.paymentMethod === 'cash' && !exp.cashRegisterId) {
+                payMethodLabel = '💵 Efectivo (Caja Fuerte/Bolsillo)';
+            }
+
+            // Archivo Adjunto (Download Button)
+            let attachmentBtn = '';
+            if (exp.attachmentPath && exp.attachmentPath.startsWith('data:')) {
+                attachmentBtn = `
+                    <a href="${exp.attachmentPath}" download="comprobante-${exp.category}-${exp.id}.png"
+                       style="text-decoration:none; display:inline-flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%; background:#f1f5f9; color:#475569; font-size:0.85rem; border: 1px solid #cbd5e1; cursor:pointer; margin-right: 0.5rem;"
+                       title="Descargar Comprobante">
+                        📎
+                    </a>
+                `;
+            }
+
             return `
-                <div class="exp-hist-row" style="animation-delay:${idx * 0.04}s;">
+                <div class="exp-hist-row" style="grid-template-columns: 2.5rem 1.5fr 1fr 1fr auto auto; gap: 0.75rem; align-items: center; animation-delay:${idx * 0.04}s;">
                     <div style="width:2.5rem; height:2.5rem; border-radius:0.625rem; background:${catInfo.color}18; display:flex; align-items:center; justify-content:center; font-size:1.2rem; flex-shrink:0;">
                         ${catInfo.icon}
                     </div>
                     <div>
-                        <div style="font-weight: 600; color: #0f172a; font-size: 0.9rem;">${exp.description.replace('[GASTO] ','')}</div>
-                        <div style="font-size: 0.75rem; color: #64748b;">${dateStr}</div>
+                        <div style="font-weight: 700; color: #0f172a; font-size: 0.9rem;">${exp.description.replace('[GASTO] ','')}</div>
+                        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.1rem;">${dateStr}</div>
                     </div>
-                    <span class="exp-badge" style="background:${catInfo.color}18; color:${catInfo.color};">${catInfo.icon} ${catInfo.label}</span>
-                    <div style="font-weight: 800; color: #ef4444; font-size: 0.95rem; white-space: nowrap;">${formatCLP(exp.amount)}</div>
+                    <div style="font-size: 0.8rem; color: #475569; display: flex; flex-direction: column; gap: 0.1rem;">
+                        <span style="font-weight: 600;">${docInfo}</span>
+                        ${supplierName ? `<span style="color:#64748b; font-size:0.75rem;">👤 ${supplierName}</span>` : ''}
+                    </div>
+                    <div style="font-size: 0.8rem; color: #64748b;">
+                        <span>${payMethodLabel}</span>
+                    </div>
+                    <span class="exp-badge" style="background:${catInfo.color}18; color:${catInfo.color}; justify-self: start;">${catInfo.icon} ${catInfo.label}</span>
+                    <div style="display: flex; align-items: center; gap: 0.5rem; justify-self: end;">
+                        ${attachmentBtn}
+                        <div style="font-weight: 800; color: #ef4444; font-size: 0.95rem; white-space: nowrap;">${formatCLP(exp.amount)}</div>
+                    </div>
                 </div>
             `;
         }).join('');
@@ -786,21 +943,17 @@ const ExpensesView = {
 
     async _getExpenseMovements(month) {
         try {
-            const all = await CashMovement.getAll();
-            return all.filter(m => {
-                const isOut = m.type === 'out';
-                const isGasto = (m.description || '').includes('[GASTO]') ||
-                                (m.category && m.category !== '' &&
-                                 !['sale','payment','withdraw','add'].includes(m.category));
-                const inMonth = m.date && m.date.startsWith(month);
-                return isOut && isGasto && inMonth;
-            }).map(m => ({
-                ...m,
-                category: m.category || 'otros',
-                description: m.description || m.reason || ''
+            const all = await Expense.getAll();
+            return all.filter(e => {
+                const inMonth = e.date && e.date.startsWith(month);
+                return inMonth;
+            }).map(e => ({
+                ...e,
+                category: e.category || 'otros',
+                description: e.description || ''
             }));
         } catch (e) {
-            console.error('[Expenses] Error cargando movimientos:', e);
+            console.error('[Expenses] Error cargando gastos de tabla expenses:', e);
             return [];
         }
     },

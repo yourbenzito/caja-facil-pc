@@ -29,6 +29,12 @@ async function runSchemaMigrations() {
         ['cashMovements', 'saleId', 'INTEGER'],
         ['cashMovements', 'expenseId', 'INTEGER'],
         ['products', 'costNeto', 'REAL'],
+        ['expenses', 'documentType', 'TEXT DEFAULT "comprobante_interno"'],
+        ['expenses', 'documentNumber', 'TEXT'],
+        ['expenses', 'paymentMethod', 'TEXT DEFAULT "cash"'],
+        ['expenses', 'supplierId', 'INTEGER'],
+        ['expenses', 'userId', 'INTEGER'],
+        ['expenses', 'attachmentPath', 'TEXT'],
     ];
     for (const [table, col, def] of migrations) {
         try { 

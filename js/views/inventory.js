@@ -126,6 +126,8 @@ const InventoryView = {
         let totalCapital = 0;
         let totalCapitalWithIva = 0;
         let totalProjected = 0;
+        let totalCapitalForMargin = 0;
+        let totalProjectedForMargin = 0;
         let lowStock = 0;
         let outOfStock = 0;
         let expiringSoon = 0;
@@ -153,6 +155,11 @@ const InventoryView = {
             totalCapitalWithIva += stock * (cost * 1.19);
             totalProjected += stock * price;
 
+            if (cost > 0) {
+                totalCapitalForMargin += stock * cost;
+                totalProjectedForMargin += stock * price;
+            }
+
             if (stock <= 0) outOfStock++;
             else if (stock <= minStock) lowStock++;
 
@@ -160,25 +167,44 @@ const InventoryView = {
 
             const category = p.category || 'General';
             if (!categoryValues[category]) {
-                categoryValues[category] = { name: category, capital: 0, capitalWithIva: 0, projected: 0, count: 0 };
+                categoryValues[category] = { 
+                    name: category, 
+                    capital: 0, 
+                    capitalWithIva: 0, 
+                    projected: 0, 
+                    count: 0,
+                    capitalForMargin: 0,
+                    projectedForMargin: 0
+                };
             }
             categoryValues[category].capital += stock * cost;
             categoryValues[category].capitalWithIva += stock * (cost * 1.19);
             categoryValues[category].projected += stock * price;
             categoryValues[category].count += 1;
+            if (cost > 0) {
+                categoryValues[category].capitalForMargin += stock * cost;
+                categoryValues[category].projectedForMargin += stock * price;
+            }
         });
 
         const totalProjectedNet = totalProjected / 1.19;
         const profit = totalProjectedNet - totalCapital;
-        const margin = totalCapital > 0 ? (profit / totalCapital * 100) : 0;
+        
+        const totalProjectedNetForMargin = totalProjectedForMargin / 1.19;
+        const profitForMargin = totalProjectedNetForMargin - totalCapitalForMargin;
+        const margin = totalCapitalForMargin > 0 ? (profitForMargin / totalCapitalForMargin * 100) : 0;
 
         const categoryDistribution = Object.values(categoryValues).sort((a, b) => b.capital - a.capital).map(cat => {
             const catProjectedNet = cat.projected / 1.19;
             const catProfit = catProjectedNet - cat.capital;
+            
+            const catProjectedNetForMargin = cat.projectedForMargin / 1.19;
+            const catProfitForMargin = catProjectedNetForMargin - cat.capitalForMargin;
+            
             return {
                 ...cat,
                 profit: catProfit,
-                margin: cat.capital > 0 ? (catProfit / cat.capital * 100) : 0,
+                margin: cat.capitalForMargin > 0 ? (catProfitForMargin / cat.capitalForMargin * 100) : 0,
                 percent: totalCapital > 0 ? (cat.capital / totalCapital * 100) : 0
             };
         });
@@ -420,6 +446,7 @@ const InventoryView = {
                     <select onchange="InventoryView.handleInventorySupplierChange(this.value)" 
                             style="padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; background: white; font-size: 0.9rem; flex: 1; min-width: 150px;">
                         <option value="">👤 Todos los Proveedores</option>
+                        <option value="none" ${selectedSupplier === 'none' ? 'selected' : ''}>👤 Sin Proveedor</option>
                         ${suppliers.map(s => `<option value="${s.id}" ${String(s.id) === selectedSupplier ? 'selected' : ''}>${s.name}</option>`).join('')}
                     </select>
                 </div>
@@ -512,7 +539,17 @@ const InventoryView = {
             if (catFilter && p.category !== catFilter) return false;
             
             // Filtro de proveedor
-            if (supplierFilter && String(p.supplierId) !== supplierFilter) return false;
+            if (supplierFilter) {
+                const activeSupplierIds = (this.suppliersList || []).map(s => String(s.id));
+                const pSupplierIdStr = p.supplierId ? String(p.supplierId) : '';
+                const hasValidSupplier = pSupplierIdStr && activeSupplierIds.includes(pSupplierIdStr);
+
+                if (supplierFilter === 'none') {
+                    if (hasValidSupplier) return false;
+                } else {
+                    if (pSupplierIdStr !== supplierFilter) return false;
+                }
+            }
             
             // Filtro de estado de stock
             const stock = parseFloat(p.stock) || 0;
@@ -1417,6 +1454,9 @@ const InventoryView = {
         
         const isWeight = product.type === 'weight';
         const unit = isWeight ? 'kg' : 'un';
+        const stepVal = isWeight ? '0.001' : '1';
+        const minVal = isWeight ? '0.001' : '1';
+        const placeholderVal = isWeight ? '0.000 kg' : 'Cant.';
         
         panel.innerHTML = `
             <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; width: 100%;">
@@ -1427,7 +1467,7 @@ const InventoryView = {
                 
                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                     <div style="width: 90px;">
-                        <input type="number" id="lossesQtyInput" class="form-control" placeholder="Cant." min="0.001" step="any" style="padding: 0.4rem; font-size: 0.9rem; text-align: center;" required>
+                        <input type="number" id="lossesQtyInput" class="form-control" placeholder="${placeholderVal}" min="${minVal}" step="${stepVal}" style="padding: 0.4rem; font-size: 0.9rem; text-align: center;" required>
                     </div>
                     
                     <div style="display: flex; gap: 0.25rem; background: #e2e8f0; padding: 0.2rem; border-radius: 0.5rem;">
@@ -2394,11 +2434,14 @@ const InventoryView = {
 
     async quickAdjustment(productId) {
         const product = await Product.getById(productId);
+        const isWeight = product.type === 'weight';
+        const stepVal = isWeight ? '0.001' : '1';
+        const placeholderVal = isWeight ? 'Ej: 10.500' : 'Ej: 10';
 
         const content = `
             <div style="margin-bottom: 1.5rem;">
                 <p><strong>Producto:</strong> ${safeHTML(product.name)}</p>
-                <p><strong>Stock Actual:</strong> ${product.stock} ${product.type === 'weight' ? 'kg' : 'un'}</p>
+                <p><strong>Stock Actual:</strong> ${product.stock} ${isWeight ? 'kg' : 'un'}</p>
             </div>
             
             <form id="quickAdjustForm">
@@ -2409,7 +2452,8 @@ const InventoryView = {
                            class="form-control" 
                            value="${product.stock}" 
                            min="0" 
-                           step="any" 
+                           step="${stepVal}" 
+                           placeholder="${placeholderVal}"
                            required>
                 </div>
                 
@@ -2489,8 +2533,14 @@ const InventoryView = {
         function updateCurrent() {
             const opt = sel.options[sel.selectedIndex];
             if (opt && opt.value) {
-                currentInp.value = opt.getAttribute('data-stock') + ' ' + (opt.getAttribute('data-type') === 'weight' ? 'kg' : 'un');
-                unitSpan.textContent = opt.getAttribute('data-type') === 'weight' ? 'kg' : 'un';
+                const isWeight = opt.getAttribute('data-type') === 'weight';
+                currentInp.value = opt.getAttribute('data-stock') + ' ' + (isWeight ? 'kg' : 'un');
+                unitSpan.textContent = isWeight ? 'kg' : 'un';
+                const setStockNewInp = document.getElementById('setStockNew');
+                if (setStockNewInp) {
+                    setStockNewInp.step = isWeight ? '0.001' : '1';
+                    setStockNewInp.placeholder = isWeight ? 'Ej: 10.500' : 'Ej: 10';
+                }
             } else {
                 currentInp.value = '';
                 unitSpan.textContent = 'un';

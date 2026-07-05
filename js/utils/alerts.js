@@ -1,4 +1,22 @@
 const showNotification = (message, type = 'info') => {
+    // ponytail: Traducir errores técnicos nativos a un español amigable de negocio
+    if (type === 'error') {
+        const msg = String(message).toLowerCase();
+        if (msg.includes('signal is aborted') || msg.includes('timeout') || msg.includes('aborted')) {
+            message = 'El servidor tardó demasiado en responder. La operación ha sido cancelada por seguridad.';
+        } else if (msg.includes('payload too large') || msg.includes('too large')) {
+            message = 'El archivo es demasiado grande para ser procesado por el sistema.';
+        } else if (msg.includes('failed to fetch') || msg.includes('net::err_connection')) {
+            message = 'No se pudo conectar con el servidor local. Asegúrate de que el servidor esté encendido.';
+        } else if (msg.includes('foreign key constraint failed') || msg.includes('foreign key')) {
+            message = 'Error de integridad: Algún dato no coincide con los registros existentes.';
+        } else if (msg.includes('unique constraint failed') || msg.includes('unique constraint')) {
+            message = 'Este registro ya existe en el sistema (código o RUT duplicado).';
+        } else if (msg.includes('sqlite_error')) {
+            message = 'Error interno en la base de datos: ' + message;
+        }
+    }
+
     const container = document.getElementById('notification-container');
     if (!container) return;
 
@@ -18,14 +36,32 @@ const showNotification = (message, type = 'info') => {
         info: 'ℹ'
     };
 
+    // ponytail: Registrar notificación en el centro de avisos
+    if (typeof NotificationCenter !== 'undefined') {
+        NotificationCenter.add(message, type);
+    }
+
     notification.innerHTML = `
         <span style="font-size: 1.25rem;">${icons[type] || icons.info}</span>
-        <span>${message}</span>
+        <div style="display: flex; flex-direction: column; gap: 0.15rem;">
+            <span>${message}</span>
+            ${type === 'error' ? `<small style="font-size: 0.7rem; opacity: 0.8; font-weight: 700; text-decoration: underline;">💡 Haz clic para ver solución</small>` : ''}
+        </div>
     `;
+
+    if (type === 'error') {
+        notification.style.cursor = 'pointer';
+        notification.title = 'Haz clic para ver solución recomendada';
+        notification.onclick = () => {
+            if (typeof NotificationCenter !== 'undefined') {
+                NotificationCenter.showSolutionModal(message);
+            }
+        };
+    }
 
     container.appendChild(notification);
 
-    const duration = type === 'error' ? 5000 : 3000;
+    const duration = type === 'error' ? 8000 : 3000; // Aumentar duración del error para que de tiempo a hacer clic
 
     setTimeout(() => {
         notification.style.animation = 'slideUp 0.35s ease-in reverse';

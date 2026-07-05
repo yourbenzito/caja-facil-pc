@@ -67,15 +67,9 @@ class ReportController {
         // Gastos Operativos reales del periodo
         let operationalExpenses = 0;
         try {
-            const movements = await CashMovement.getByDateRange(startDate, endDate);
-            movements.forEach(m => {
-                const isOut = m.type === 'out';
-                const isGasto = (m.description || '').includes('[GASTO]') ||
-                                (m.category && m.category !== '' &&
-                                 !['sale','payment','withdraw','add'].includes(m.category));
-                if (isOut && isGasto) {
-                    operationalExpenses += parseFloat(m.amount) || 0;
-                }
+            const expenses = await Expense.getByDateRange(startDate, endDate);
+            expenses.forEach(e => {
+                operationalExpenses += parseFloat(e.amount) || 0;
             });
         } catch (e) {
             console.warn('Error al calcular gastos en getFiscalSummary:', e);
@@ -191,18 +185,12 @@ class ReportController {
         totalNeto -= returnedNeto;
         ivaDebito -= returnedIVA;
 
-        // Gastos Operativos reales del periodo semanal
+        // Gastos Operativos del periodo
         let operationalExpenses = 0;
         try {
-            const movements = await CashMovement.getByDateRange(start, end);
-            movements.forEach(m => {
-                const isOut = m.type === 'out';
-                const isGasto = (m.description || '').includes('[GASTO]') ||
-                                (m.category && m.category !== '' &&
-                                 !['sale','payment','withdraw','add'].includes(m.category));
-                if (isOut && isGasto) {
-                    operationalExpenses += parseFloat(m.amount) || 0;
-                }
+            const expenses = await Expense.getByDateRange(start, end);
+            expenses.forEach(e => {
+                operationalExpenses += parseFloat(e.amount) || 0;
             });
         } catch (e) {
             console.warn('Error al calcular gastos en getWeeklySales:', e);
@@ -483,18 +471,12 @@ class ReportController {
         totalRevenue -= totalReturnedRevenue;
         totalCostOfSales -= totalReturnedCost;
 
-        // Gastos Operativos reales del periodo de rentabilidad
+        // Gastos Operativos
         let totalExpenses = 0;
         try {
-            const movements = await CashMovement.getByDateRange(startDate, endDate);
-            movements.forEach(m => {
-                const isOut = m.type === 'out';
-                const isGasto = (m.description || '').includes('[GASTO]') ||
-                                (m.category && m.category !== '' &&
-                                 !['sale','payment','withdraw','add'].includes(m.category));
-                if (isOut && isGasto) {
-                    totalExpenses += parseFloat(m.amount) || 0;
-                }
+            const expenses = await Expense.getByDateRange(startDate, endDate);
+            expenses.forEach(e => {
+                totalExpenses += parseFloat(e.amount) || 0;
             });
         } catch (e) {
             console.warn('Error al calcular gastos en getProfitability:', e);

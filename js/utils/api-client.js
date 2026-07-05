@@ -36,7 +36,7 @@ const ApiClient = {
         return await response.json();
     },
 
-    async post(endpoint, data, isSync = false) {
+    async post(endpoint, data, isSync = false, options = {}) {
         // BLINDAJE 100% OFFLINE: Siempre intentar conexión local. 
         // Solo guardamos en cola si el servidor local falla realmente (catch), no por falta de internet.
         
@@ -44,7 +44,8 @@ const ApiClient = {
         const response = await this.fetchWithTimeout(`${window.API_CONFIG.API_URL}/${endpoint}`, {
             method: 'POST',
             headers: this.getHeaders(),
-            body: JSON.stringify(data)
+            body: JSON.stringify(data),
+            ...options
         });
         if (!response.ok) await this.handleError(response);
         const resData = await response.json();

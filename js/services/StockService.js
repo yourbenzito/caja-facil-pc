@@ -352,7 +352,7 @@ class StockService {
      * @param {number} productId - Product ID
      * @param {number} quantity - Consumption quantity (positive number)
      * @param {string} reason - Reason for consumption
-     * @returns {Promise<number>} - Movement ID
+     * @returns {Promise<boolean>}
      */
     static async createConsumption(productId, quantity, reason) {
         const product = await Product.getById(productId);
@@ -377,45 +377,8 @@ class StockService {
             return null;
         }
 
-        return await new Promise((resolve, reject) => {
-            if (!db.db) return reject(new Error('Base de datos no inicializada'));
-            const tx = db.db.transaction(['products', 'stockMovements'], 'readwrite');
-            let movementId = null;
-
-            tx.onerror = () => reject(new Error(`Error en consumo: ${tx.error?.message || 'Error desconocido'}`));
-            tx.onabort = () => reject(new Error('Consumo abortado: stock y movimiento no fueron modificados'));
-            tx.oncomplete = () => resolve(movementId);
-
-            const productStore = tx.objectStore('products');
-            const movementStore = tx.objectStore('stockMovements');
-
-            const getReq = productStore.get(productId);
-            getReq.onsuccess = () => {
-                const currentProduct = getReq.result;
-                if (!currentProduct) { tx.abort(); return; }
-
-                const stock = parseFloat(currentProduct.stock) || 0;
-                const newStock = stock - qty;
-                if (newStock < 0) { tx.abort(); return; }
-
-                productStore.put({
-                    ...currentProduct,
-                    stock: newStock,
-                    updatedAt: new Date().toISOString()
-                });
-
-                const movReq = movementStore.add({
-                    productId,
-                    type: 'consumption',
-                    quantity: -qty,
-                    reason: reason || '',
-                    date: new Date().toISOString(),
-                    cost_value: (parseFloat(currentProduct.cost) || 0) * qty,
-                    sale_value: (parseFloat(currentProduct.price) || 0) * qty
-                });
-                movReq.onsuccess = () => { movementId = movReq.result; };
-            };
-        });
+        await this.applyStockMovement(productId, -qty, 'consumption', null, reason);
+        return true;
     }
 
     /**

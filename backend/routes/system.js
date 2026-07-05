@@ -203,60 +203,73 @@ router.post('/api/migration/import', requireRole('owner'), async (req, res) => {
     const data = req.body;
     const bid = req.business_id;
     try {
-        await withTransaction(async () => {
-            const tables = [
-                'products', 'categories', 'sales', 'customers', 'suppliers', 'purchases', 
-                'expenses', 'cashRegisters', 'cashMovements', 'stockMovements', 'settings', 'users', 
-                'payments', 'customerCreditDeposits', 'customerCreditUses', 'auditLogs', 
-                'productPriceHistory', 'productCostHistory', 'supplierPayments', 'saleReturns', 'passwordResets',
-                'businesses', 'debtPaymentSessions'
-            ];
+        // ponytail: Configurar PRAGMAs de SQLite de máxima velocidad ANTES de abrir la transacción
+        await dbRun('PRAGMA synchronous = OFF;');
+        await dbRun('PRAGMA journal_mode = MEMORY;');
 
-            for (const table of tables) {
-                try {
-                    const tableInfo = await dbAll(`PRAGMA table_info(${table})`);
-                    const hasBusinessId = tableInfo.some(info => info.name === 'business_id');
-                    
-                    if (hasBusinessId) {
-                        await dbRun(`DELETE FROM ${table} WHERE business_id = ?`, [bid]);
-                    } else if (table === 'businesses') {
-                        await dbRun(`DELETE FROM businesses WHERE id = ?`, [bid]);
+        try {
+            await withTransaction(async () => {
+                const tables = [
+                    'products', 'categories', 'sales', 'customers', 'suppliers', 'purchases', 
+                    'expenses', 'cashRegisters', 'cashMovements', 'stockMovements', 'settings', 'users', 
+                    'payments', 'customerCreditDeposits', 'customerCreditUses', 'auditLogs', 
+                    'productPriceHistory', 'productCostHistory', 'supplierPayments', 'saleReturns', 'passwordResets',
+                    'businesses', 'debtPaymentSessions'
+                ];
+
+                for (const table of tables) {
+                    try {
+                        const tableInfo = await dbAll(`PRAGMA table_info(${table})`);
+                        const hasBusinessId = tableInfo.some(info => info.name === 'business_id');
+                        
+                        if (hasBusinessId) {
+                            await dbRun(`DELETE FROM ${table} WHERE business_id = ?`, [bid]);
+                        } else if (table === 'businesses') {
+                            await dbRun(`DELETE FROM businesses WHERE id = ?`, [bid]);
+                        }
+                    } catch (e) { 
+                        console.warn(`Error limpiando tabla ${table}:`, e.message); 
                     }
-                } catch (e) { 
-                    console.warn(`Error limpiando tabla ${table}:`, e.message); 
                 }
-            }
 
-            for (const table of tables) {
-                const items = data[table];
-                if (items && Array.isArray(items) && items.length > 0) {
-                    const tableInfo = await dbAll(`PRAGMA table_info(${table})`);
-                    const dbColumns = tableInfo.map(info => info.name);
-                    
-                    for (const item of items) {
-                        const itemColumns = Object.keys(item).filter(col => dbColumns.includes(col));
+                for (const table of tables) {
+                    const items = data[table];
+                    if (items && Array.isArray(items) && items.length > 0) {
+                        const tableInfo = await dbAll(`PRAGMA table_info(${table})`);
+                        const dbColumns = tableInfo.map(info => info.name);
+                        
+                        // ponytail: Pre-compilar el SQL una única vez por tabla para no sobrecargar el compilador de SQLite
+                        const sampleItem = items[0];
+                        const itemColumns = Object.keys(sampleItem).filter(col => dbColumns.includes(col));
                         
                         if (itemColumns.length === 0) continue;
-
+                        
                         const placeholders = itemColumns.map(() => '?').join(',');
                         const sql = `INSERT INTO ${table} (${itemColumns.join(',')}) VALUES (${placeholders})`;
 
-                        const values = itemColumns.map(col => {
-                            let val = item[col];
-                            if (col === 'business_id') return bid;
-                            if (typeof val === 'object' && val !== null) return JSON.stringify(val);
-                            return val;
-                        });
+                        for (const item of items) {
+                            const values = itemColumns.map(col => {
+                                let val = item[col];
+                                if (col === 'business_id') return bid;
+                                if (val === 'null' || val === 'undefined') return null; // Limpiar 'null' strings a NULL de base de datos
+                                if (typeof val === 'object' && val !== null) return JSON.stringify(val);
+                                return val;
+                            });
 
-                        try {
-                            await dbRun(sql, values);
-                        } catch (e) {
-                            console.error(`Error insertando en ${table}:`, e.message);
+                            try {
+                                await dbRun(sql, values);
+                            } catch (e) {
+                                console.error(`Error insertando en ${table}:`, e.message);
+                            }
                         }
                     }
                 }
-            }
-        });
+            });
+        } finally {
+            // ponytail: Restaurar PRAGMAs a su estado optimizado de producción (WAL) DESPUÉS de que la transacción se haya cerrado
+            await dbRun('PRAGMA synchronous = NORMAL;');
+            await dbRun('PRAGMA journal_mode = WAL;');
+        }
         res.json({ success: true });
     } catch (err) {
         console.error('Error en importación masiva:', err);

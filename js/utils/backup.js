@@ -36,9 +36,11 @@ class BackupManager {
                 customerCreditUses: await db.getAll('customerCreditUses'),
                 auditLogs: await db.getAll('auditLogs'),
                 productPriceHistory: await db.getAll('productPriceHistory'),
+                productCostHistory: await db.getAll('productCostHistory'),
                 supplierPayments: await db.getAll('supplierPayments'),
                 saleReturns: await db.getAll('saleReturns'),
-                passwordResets: await db.getAll('passwordResets')
+                passwordResets: await db.getAll('passwordResets'),
+                debtPaymentSessions: await db.getAll('debtPaymentSessions')
             };
 
             const json = JSON.stringify(data); // Sin espacios para máxima velocidad
@@ -203,7 +205,7 @@ class BackupManager {
             if (db.mode === 'sqlite') {
                 showNotification('🚀 Iniciando transferencia inmediata...', 'success');
                 console.log('📦 Enviando datos a SQLite...');
-                const result = await ApiClient.post('migration/import', data);
+                const result = await ApiClient.post('migration/import', data, false, { timeout: 300000 });
                 console.log('📦 Resultado del servidor:', result);
                 if (!result.success) {
                     throw new Error(result.error || 'Error en servidor');
