@@ -1597,18 +1597,22 @@ const PurchasesView = {
     },
 
     highlightResult(index) {
-        const items = document.querySelectorAll('.search-result-item');
+        const resultsDiv = document.getElementById('purchaseProductSearchResults');
+        if (!resultsDiv) return;
+
+        const items = resultsDiv.querySelectorAll('.search-result-item');
         items.forEach(item => {
             item.classList.remove('selected');
         });
 
-        const target = document.querySelector(`.search-result-item[data-index="${index}"]`);
+        const target = resultsDiv.querySelector(`.search-result-item[data-index="${index}"]`);
         if (target) {
             target.classList.add('selected');
             // Ensure visible in scroll
             target.scrollIntoView({ block: 'nearest' });
         }
     },
+
 
     async searchAndShowProduct(term, addDirectly = false) {
         let product = await Product.getByBarcode(term);
@@ -2062,12 +2066,12 @@ const PurchasesView = {
                     ` : this.purchaseItems.map((item, index) => {
             const netPrice = item.cost;
             const unitIva = netPrice * 0.19;
-            const grossPrice = Math.round(netPrice * 1.19);
+            const grossPrice = Number((netPrice * 1.19).toFixed(2));
             const totalLineIva = Math.round(unitIva * item.quantity);
-            const subtotalTotal = Math.round(grossPrice * item.quantity);
+            const subtotalTotal = Math.round(item.total * 1.19);
 
             const displayNet = (item.enteredCostMode === 'net' && typeof item.enteredCost === 'number') ? item.enteredCost : Number(netPrice.toFixed(2));
-            const displayGross = (item.enteredCostMode === 'gross' && typeof item.enteredCost === 'number') ? item.enteredCost : grossPrice;
+            const displayGross = (item.enteredCostMode === 'gross' && typeof item.enteredCost === 'number') ? item.enteredCost : Number(grossPrice.toFixed(2));
 
             const inputStyle = "height: 60px; border: 3px solid #cbd5e1; background: #ffffff; color: #000; font-size: 1.2rem; font-weight: 950; border-radius: 1rem; text-align: center; width: 100%; transition: all 0.2s; padding: 0 0.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05);";
 
@@ -2109,12 +2113,12 @@ const PurchasesView = {
                         <td colspan="2" class="total-label-cell" style="padding: 2.5rem 1.5rem; text-align: right; font-weight: 950; font-size: 1.25rem; color: #1e293b; text-transform: uppercase; letter-spacing: 2px;">Totales:</td>
                         <td class="total-cell" style="padding: 2.5rem 1rem; text-align: center; color: #334155; font-weight: 950; font-size: 1.6rem; background: #f8fafc; border-radius: 1.5rem; border-bottom: 5px solid #cbd5e1;">
                             <small style="display: block; font-size: 0.8rem; color: #64748b; font-weight: 800; margin-bottom: 5px; opacity: 0.8;">${showIvaColumns ? 'TOTAL NETO' : 'SUBTOTAL'}</small>
-                            ${formatCLP(this.purchaseItems.reduce((s, i) => s + (i.cost * i.quantity), 0), true, 0)}
+                            ${formatCLP(this.purchaseItems.reduce((s, i) => s + i.total, 0), true, 0)}
                         </td>
                         ${showIvaColumns ? `
                             <td class="total-cell" style="padding: 2.5rem 1rem; text-align: center; color: #059669; font-weight: 950; font-size: 1.6rem; background: #f0fdf4; border-radius: 1.5rem; border-bottom: 5px solid #10b981;">
                                 <small style="display: block; font-size: 0.8rem; color: #64748b; font-weight: 800; margin-bottom: 5px; opacity: 0.8;">IVA ACUM.</small>
-                                ${formatCLP(this.purchaseItems.reduce((s, i) => s + (i.cost * 0.19 * i.quantity), 0), true, 1)}
+                                ${formatCLP(Math.round(this.purchaseItems.reduce((s, i) => s + i.total, 0) * 0.19), true, 0)}
                             </td>
                         ` : ''}
                         <td colspan="${showIvaColumns ? 2 : 1}"></td>
@@ -2449,42 +2453,88 @@ const PurchasesView = {
             </div>
         ` : '';
 
+        const wasEdited = effectivePaid > 0 && balance > 0;
+        
         const content = `
-            <div style="margin-bottom: 1rem; padding: 1rem; background: var(--light); border-radius: 0.375rem;">
-                <p style="margin-bottom: 0.25rem;"><strong>Proveedor:</strong> ${supplier ? supplier.name : 'N/A'}</p>
-                <p style="margin-bottom: 0.25rem;"><strong>Total compra:</strong> ${formatCLP(purchase.total)}</p>
-                <p style="margin-bottom: 0.25rem;"><strong>Pagado:</strong> ${formatCLP(effectivePaid)}</p>
-                <p style="margin-bottom: 0;"><strong>Saldo pendiente:</strong> <span style="color: var(--danger); font-size: 1.1rem;">${formatCLP(balance)}</span></p>
+            ${wasEdited ? `
+                <div style="background: #fffbeb; border: 1.5px solid #fcd34d; border-radius: 0.75rem; padding: 0.75rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.75rem; box-shadow: 0 4px 6px -1px rgba(251, 191, 36, 0.05);">
+                    <span style="font-size: 1.5rem;">⚠️</span>
+                    <div>
+                        <strong style="color: #b45309; font-size: 0.85rem; font-weight: 800; display: block; text-transform: uppercase;">Atención: Modificación Detectada</strong>
+                        <span style="font-size: 0.75rem; color: #d97706; font-weight: 600;">Esta compra fue editada o tuvo abonos parciales. Paga la diferencia para saldarla.</span>
+                    </div>
+                </div>
+            ` : ''}
+
+            <div style="background: var(--surface); border: 2px solid var(--border); border-radius: 1rem; padding: 1.25rem; margin-bottom: 1.5rem;">
+                <div style="text-align: center; margin-bottom: 1.25rem;">
+                    <div style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase;">Proveedor</div>
+                    <div style="font-size: 1.2rem; font-weight: 900; color: var(--text);">${supplier ? supplier.name : 'N/A'}</div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div style="background: var(--light); padding: 0.85rem; border-radius: 0.75rem; text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.25rem;">NUEVO TOTAL COMPRA</div>
+                        <div style="font-size: 1.25rem; font-weight: 900; color: var(--text); line-height: 1;">${formatCLP(purchase.total)}</div>
+                    </div>
+                    <div style="background: var(--light); padding: 0.85rem; border-radius: 0.75rem; text-align: center;">
+                        <div style="font-size: 0.65rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 0.25rem;">YA ENTREGADO</div>
+                        <div style="font-size: 1.25rem; font-weight: 900; color: var(--text); line-height: 1;">${formatCLP(effectivePaid)}</div>
+                    </div>
+                </div>
+
+                <div style="background: var(--danger-bg); border: 2px dashed var(--danger); padding: 1rem; border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.75rem; font-weight: 800; color: var(--danger); text-transform: uppercase; margin-bottom: 0.25rem;">DIFERENCIA A PAGAR HOY</div>
+                    <div style="font-size: 2.25rem; font-weight: 950; color: var(--danger); line-height: 1;">${formatCLP(balance)}</div>
+                </div>
             </div>
 
             ${paymentHistoryHtml}
             
             <form id="paymentForm">
-                <div class="form-group">
-                    <label>Monto a Pagar (CLP) *</label>
-                    <input type="number" 
-                           id="paymentAmount" 
-                           class="form-control" 
-                           value="${balance}" 
-                           min="1" 
-                           max="${balance}" 
-                           required>
-                </div>
-                <div class="form-group">
-                    <label>Método de Pago</label>
-                    <select id="paymentMethod" class="form-control" onchange="if(document.getElementById('purchaseCashDeductGroup')) { document.getElementById('purchaseCashDeductGroup').style.display = this.value === 'cash' ? 'block' : 'none'; }">
-                        <option value="cash">Efectivo</option>
-                        <option value="transfer">Transferencia</option>
-                        <option value="other">Otro</option>
-                    </select>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label style="font-size: 0.8rem; font-weight: 800;">Monto a Pagar (CLP) *</label>
+                        <input type="number" 
+                               id="paymentAmount" 
+                               class="form-control" 
+                               style="font-size: 1.25rem; font-weight: 900; height: 3rem;"
+                               value="${balance}" 
+                               min="1" 
+                               max="${balance}" 
+                               required>
+                    </div>
+                    <div class="form-group">
+                        <label style="font-size: 0.8rem; font-weight: 800;">Método de Pago</label>
+                        <select id="paymentMethod" class="form-control" style="font-size: 1rem; font-weight: 700; height: 3rem;" onchange="
+                            const cashBox = document.getElementById('purchaseCashDeductGroup');
+                            const cb = document.getElementById('paymentDeductFromCash');
+                            if(cashBox) { 
+                                if(this.value === 'cash') {
+                                    cashBox.style.display = 'block';
+                                    cb.checked = false; // No se marca por defecto
+                                    cashBox.style.borderColor = 'var(--danger)';
+                                    cashBox.style.background = 'var(--danger-bg)';
+                                } else {
+                                    cashBox.style.display = 'none';
+                                    cb.checked = false;
+                                }
+                            }">
+                            <option value="cash" selected>Efectivo (Caja Fija)</option>
+                            <option value="transfer">Transferencia / Tarjeta</option>
+                            <option value="other">Otro / Deuda Externa</option>
+                        </select>
+                    </div>
                 </div>
                 
-                <div class="form-group" id="purchaseCashDeductGroup" style="display: block; margin-top: 1rem;">
-                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; background: var(--light); padding: 0.75rem; border-radius: 4px; border: 1px solid var(--border);">
-                        <input type="checkbox" id="paymentDeductFromCash" value="true">
-                        <span>📉 Extraer efectivo de la Caja Activa</span>
+                <div id="purchaseCashDeductGroup" style="display: block; margin-top: 1rem; margin-bottom: 1.5rem; background: var(--danger-bg); border: 2px solid var(--danger); border-radius: 0.75rem; padding: 1rem; transition: all 0.3s ease;">
+                    <label style="display: flex; align-items: flex-start; gap: 1rem; cursor: pointer; margin: 0;">
+                        <input type="checkbox" id="paymentDeductFromCash" value="true" style="width: 24px; height: 24px; margin-top: 0.2rem; accent-color: var(--danger);">
+                        <div>
+                            <div style="font-size: 0.95rem; font-weight: 900; color: var(--danger);">SACAR DINERO DE LA CAJA REGISTRADORA</div>
+                            <div style="font-size: 0.75rem; color: var(--danger); font-weight: 600; opacity: 0.9; margin-top: 0.25rem; line-height: 1.4;">Atención: Si desmarcas esto, significa que le pagarás al proveedor con plata de tu bolsillo o banco, no de la caja física del negocio.</div>
+                        </div>
                     </label>
-                    <small style="margin-left: 2rem; display: block; margin-top: 0.25rem;">Si marcas esto, el dinero se descontará del saldo esperado en el cuadre final de caja.</small>
                 </div>
 
                 <div class="form-group">
@@ -2521,12 +2571,23 @@ const PurchasesView = {
             return;
         }
 
-        const btn = document.getElementById('btnRegisterPayment');
-        if (btn) { btn.disabled = true; btn.textContent = 'Procesando...'; }
-
         try {
             const purchase = await Purchase.getById(id);
+            const registeredPaid = await SupplierPayment.getTotalPaidForPurchase(id);
+            const legacyPaid = parseFloat(purchase.paidAmount) || 0;
+            const effectivePaid = Math.max(registeredPaid, legacyPaid);
+            const balance = Math.max(0, (parseFloat(purchase.total) || 0) - effectivePaid);
+
+            if (amount > balance) {
+                showNotification(`El monto no puede ser mayor a la deuda restante de ${formatCLP(balance)}`, 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btnRegisterPayment');
+            if (btn) { btn.disabled = true; btn.textContent = 'Procesando...'; }
+
             // C6: Usar SupplierPaymentService en lugar de Purchase.registerPayment
+
             await SupplierPaymentService.registerPayment({
                 supplierId: purchase.supplierId,
                 purchaseId: id,

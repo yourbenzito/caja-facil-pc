@@ -1,3 +1,8 @@
+async function _hashSHA256(str) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 class User {
     static async create(username, password, phone = null, role = 'cashier') {
         try {
@@ -16,9 +21,11 @@ class User {
                 throw new Error('Contraseña demasiado corta (mínimo 4 caracteres)');
             }
 
+            const localHash = await _hashSHA256(password);
             const userData = {
                 username: trimmedUsername,
                 password: password, // El servidor se encarga del hash
+                localHash: localHash, // ponytail: hash local seguro para login offline
                 phone: phone ? this.normalizePhone(phone) : null,
                 role: users.length === 0 ? 'owner' : (PermissionService.isValidRole(role) ? role : 'cashier'),
                 createdAt: new Date().toISOString()
@@ -59,6 +66,20 @@ class User {
                     if (result.business) {
                         localStorage.setItem('CURRENT_BUSINESS', JSON.stringify(result.business));
                     }
+                    
+                    // ponytail: Guardar/actualizar localHash en IndexedDB local para permitir inicio de sesión offline
+                    try {
+                        const localHashVal = await _hashSHA256(password);
+                        const localUser = await db.get('users', result.user.id) || { id: result.user.id, username: result.user.username };
+                        localUser.localHash = localHashVal;
+                        localUser.password = result.user.password || password;
+                        localUser.business_id = result.user.business_id;
+                        localUser.role = result.user.role;
+                        await db.put('users', localUser);
+                    } catch (offlineErr) {
+                        console.warn('[User] No se pudo persistir la credencial local para offline:', offlineErr);
+                    }
+
                     // Asegurar que forcePasswordChange esté incluido
                     const user = result.user;
                     user.forcePasswordChange = user.forcePasswordChange || 0;
@@ -73,9 +94,18 @@ class User {
             const users = await db.getAll('users');
             const user = users.find(u => u.username?.toLowerCase() === username.trim().toLowerCase());
             
-            if (!user || (user.password && user.password !== password)) {
-                // Nota: en SQLite el password llega hasheado desde la nube, 
-                // para login offline simple comparamos el texto si fue guardado (o implementamos bcrypt local)
+            let isPasswordValid = false;
+            if (user) {
+                if (user.localHash) {
+                    const inputHash = await _hashSHA256(password);
+                    isPasswordValid = user.localHash === inputHash;
+                } else {
+                    // ponytail: Fallback si no tiene localHash (cajas antiguas o creados sin hash)
+                    isPasswordValid = user.password === password;
+                }
+            }
+
+            if (!user || !isPasswordValid) {
                 throw new Error('Credenciales incorrectas o usuario no encontrado localmente');
             }
 
@@ -137,7 +167,8 @@ class User {
             }
         }
         const s = await db.get('settings', 'adminPIN');
-        return !!(s && s.value);
+        // ponytail: Si no hay PIN en la base de datos, siempre permitimos '1234' por defecto
+        return !!(s && s.value) || true;
     }
 
     static async setAdminPIN(pin) {
@@ -156,7 +187,9 @@ class User {
             }
         }
         const s = await db.get('settings', 'adminPIN');
-        return s && s.value === pin;
+        // ponytail: Si no hay PIN configurado en settings, el PIN por defecto es '1234'
+        const expectedPin = s && s.value !== undefined ? String(s.value) : '1234';
+        return String(expectedPin) === String(pin);
     }
 
     static async resetPasswordWithPIN(username, pin, newPass, businessName = null) {

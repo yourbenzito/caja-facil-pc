@@ -37,6 +37,73 @@ function getLevenshteinDistance(a, b) {
     return matrix[b.length][a.length];
 }
 
+function cleanAccents(str) {
+    if (!str) return '';
+    return str.toString()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/ñ/g, 'n');
+}
+
+function calculateSearchScore(row, query, searchFields) {
+    let score = 0;
+    const queryNormalized = cleanAccents(query).trim();
+    const queryWords = queryNormalized.split(' ').filter(w => w.length > 0);
+    
+    if (queryWords.length === 0) return 0;
+    
+    // Unir todos los valores de los campos de búsqueda en un solo texto normalizado
+    const rowValues = searchFields.map(f => row[f] ? cleanAccents(row[f]) : '');
+    const rowText = rowValues.join(' ');
+    
+    // 1. Coincidencia exacta del término completo en el nombre (si existe)
+    if (row.name) {
+        const nameNormalized = cleanAccents(row.name);
+        if (nameNormalized === queryNormalized) score += 1000;
+        else if (nameNormalized.startsWith(queryNormalized)) score += 500;
+        else if (nameNormalized.includes(' ' + queryNormalized)) score += 300;
+        else if (nameNormalized.includes(queryNormalized)) score += 100;
+    }
+    
+    // 2. Coincidencia de palabras individuales
+    queryWords.forEach(qw => {
+        if (rowText.includes(qw)) {
+            score += 150;
+        }
+    });
+    
+    // 3. Tolerancia a errores ortográficos (distancia Levenshtein)
+    const rowWords = rowText.split(/\s+/).filter(w => w.length > 2);
+    queryWords.forEach(qw => {
+        if (qw.length <= 2) return;
+        
+        let minWordDistance = 999;
+        rowWords.forEach(rw => {
+            const dist = getLevenshteinDistance(qw, rw);
+            if (dist < minWordDistance) {
+                minWordDistance = dist;
+            }
+        });
+        
+        if (minWordDistance === 0) {
+            score += 200;
+        } else if (minWordDistance === 1) {
+            score += 80;  // Tolerancia de 1 error tipográfico
+        } else if (minWordDistance === 2 && qw.length >= 5) {
+            score += 30;  // Tolerancia de 2 errores en palabras largas
+        }
+    });
+    
+    // 4. Coincidencia de código de barras exacto (especial para productos)
+    if (row.barcode && row.barcode === query) {
+        score += 2000;
+    }
+    
+    return score;
+}
+
+
 router.get('/api/:table', async (req, res) => {
     const { table } = req.params; 
     const bid = req.business_id;
@@ -124,6 +191,8 @@ router.get('/api/:table/search', async (req, res) => {
         else if (table === 'purchases') cs = ['invoiceNumber', 'purchaseNumber'];
         
         const queryTerms = q.toLowerCase().split(' ').filter(t => t);
+        if (queryTerms.length === 0) return res.json([]);
+
         const ps = [];
         if (hasBusinessId) ps.push(bid);
 
@@ -132,44 +201,27 @@ router.get('/api/:table/search', async (req, res) => {
             return `(${g.join(' OR ')})`;
         });
         
-        let sql = `SELECT * FROM ${table} WHERE ${hasBusinessId ? 'business_id = ? AND ' : ''} (${conds.join(' AND ')})`;
+        let sql = `SELECT * FROM ${table} WHERE ${hasBusinessId ? 'business_id = ? AND ' : ''} (${conds.join(' OR ')})`;
         if (['products', 'customers', 'suppliers'].includes(table)) {
             sql += ` AND isActive = 1`;
         }
-        sql += ` LIMIT 100`;
+        sql += ` LIMIT 150`;
 
         const rows = (await dbAll(sql, ps)).map(parseRow);
         
-        const searchStr = q.toLowerCase();
         const scoredRows = rows.map(row => {
-            let score = 0;
-            const name = (row.name || '').toLowerCase();
-            
-            if (name === searchStr) score += 1000; 
-            else if (name.startsWith(searchStr)) score += 500; 
-            else if (name.includes(' ' + searchStr)) score += 300; 
-            else if (name.includes(searchStr)) score += 100; 
-            
-            if (row.barcode && row.barcode === q) score += 2000;
-
-            if (searchStr.length > 2) {
-                const words = name.split(' ');
-                words.forEach(w => {
-                    const dist = getLevenshteinDistance(searchStr, w);
-                    if (dist === 0) score += 200;
-                    else if (dist === 1) score += 50; 
-                });
-            }
-
+            const score = calculateSearchScore(row, q, cs);
             return { ...row, _score: score };
         });
 
-        scoredRows.sort((a, b) => {
+        const matchedRows = scoredRows.filter(r => r._score > 0);
+
+        matchedRows.sort((a, b) => {
             if (b._score !== a._score) return b._score - a._score;
             return (a.name || '').localeCompare(b.name || '');
         });
 
-        res.json(scoredRows.slice(0, 50)); 
+        res.json(matchedRows.slice(0, 50)); 
     } catch (err) { 
         res.status(500).json({ error: err.message }); 
     }
@@ -188,6 +240,12 @@ router.post('/api/:table', async (req, res) => {
 
         const item = filterToColumns({ ...req.body }, allowedCols);
         if (hasBusinessId) item.business_id = bid;
+
+        // ponytail: Hashear contraseña si es la tabla de usuarios
+        if (table === 'users' && item.password) {
+            const bcrypt = require('bcryptjs');
+            item.password = await bcrypt.hash(String(item.password), 10);
+        }
 
         const ks = Object.keys(item); 
         const r = await dbRun(`INSERT INTO ${table} (${ks.join(',')}) VALUES (${ks.map(()=>'?').join(',')})`, ks.map(k => typeof item[k] === 'object' ? JSON.stringify(item[k]) : item[k])); 
@@ -239,6 +297,13 @@ router.put('/api/:table/:id', async (req, res) => {
         delete item.id; 
         delete item.business_id; 
         delete item.key; 
+
+        // ponytail: Hashear contraseña si es la tabla de usuarios
+        if (table === 'users' && item.password) {
+            const bcrypt = require('bcryptjs');
+            item.password = await bcrypt.hash(String(item.password), 10);
+        }
+
         const ks = Object.keys(item); 
         if (ks.length === 0) return res.json({ success: true });
         

@@ -215,7 +215,7 @@ class SupplierController {
                         if (!product) { tx.abort(); return; }
 
                         const currentStock = parseFloat(product.stock) || 0;
-                        const newStock = currentStock + ops.stockDelta;
+                        let newStock = currentStock + ops.stockDelta;
                         if (newStock < 0) { tx.abort(); return; }
 
                         // Calculate weighted average cost if purchase includes this item
@@ -232,24 +232,30 @@ class SupplierController {
 
                         const currentCostNeto = (product.costNeto !== undefined && product.costNeto !== null) ? parseFloat(product.costNeto) : ((parseFloat(product.cost) || 0) / 1.19);
                         const oldQty = ops.oldQty || 0;
-                        const oldTotalCostNeto = ops.oldTotalCostNeto || 0;
-                        
-                        // Revert old purchase
-                        const baseStock = Math.max(0, currentStock - oldQty);
-                        let baseTotalCostNeto = (currentStock * currentCostNeto) - oldTotalCostNeto;
-                        if (baseTotalCostNeto < 0 || baseStock === 0) baseTotalCostNeto = 0;
-                        
-                        let baseAvgCostNeto = baseStock > 0 ? (baseTotalCostNeto / baseStock) : currentCostNeto;
-                        
-                        let finalAvgNeto = baseAvgCostNeto;
-                        let finalAvgGross = Math.round(finalAvgNeto * 1.19);
-                        
-                        if (ops.newCost !== undefined && ops.itemQty > 0) {
-                            const newTotalCostNeto = baseTotalCostNeto + (ops.itemQty * inCostNeto);
-                            finalAvgNeto = newStock > 0 ? (newTotalCostNeto / newStock) : inCostNeto;
+                        const oldItemCostNeto = oldQty > 0 ? (ops.oldTotalCostNeto / oldQty) : 0;
+
+                        // Revertir solo la cantidad que realmente queda en stock de la compra anterior
+                        const qtyToRevert = Math.max(0, Math.min(currentStock, oldQty));
+                        const costToRevertNeto = qtyToRevert * oldItemCostNeto;
+
+                        // Stock y costo base que pertenecen a otras compras anteriores
+                        const baseStock = Math.max(0, currentStock - qtyToRevert);
+                        const baseTotalCostNeto = Math.max(0, (currentStock * currentCostNeto) - costToRevertNeto);
+
+                        // Nuevo stock e inserción de la compra editada
+                        newStock = Math.max(0, currentStock + ops.stockDelta);
+                        let finalAvgNeto = currentCostNeto;
+
+                        if (newStock > 0) {
+                            const qtyFromNewPurchase = Math.min(newStock, ops.itemQty);
+                            const newTotalCostNeto = baseTotalCostNeto + (qtyFromNewPurchase * inCostNeto);
+                            finalAvgNeto = newTotalCostNeto / newStock;
                             finalAvgNeto = Math.round(finalAvgNeto * 100) / 100;
-                            finalAvgGross = Math.round(finalAvgNeto * 1.19);
+                        } else {
+                            finalAvgNeto = inCostNeto;
                         }
+                        const finalAvgGross = Math.round(finalAvgNeto * 1.19);
+
 
                         let newPrice = product.price;
                         if (ops.newPrice !== undefined) {

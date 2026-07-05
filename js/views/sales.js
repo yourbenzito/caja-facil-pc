@@ -133,80 +133,105 @@ const SalesView = {
 
             ${kpisHtml}
             
-            <div class="sales-history-filters" style="background: var(--bg-card, #ffffff); border: 1px solid var(--border-color, #e2e8f0); border-radius: 1rem; padding: 1.25rem; margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 1rem;">
+            <style>
+                .sales-chip-premium {
+                    padding: 0.5rem 1.25rem;
+                    border-radius: 2rem;
+                    font-size: 0.85rem;
+                    font-weight: 700;
+                    background: #f1f5f9;
+                    color: #475569;
+                    border: 2px solid transparent;
+                    cursor: pointer;
+                    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+                }
+                .sales-chip-premium:hover {
+                    background: #e2e8f0;
+                    color: #1e293b;
+                    transform: translateY(-1px);
+                }
+                .sales-chip-premium.active {
+                    background: #4f46e5;
+                    color: white;
+                    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+                    transform: translateY(-2px);
+                }
+                .sales-chip-premium.active-green {
+                    background: #10b981;
+                    color: white;
+                    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+                }
+                .sales-chip-premium.active-red {
+                    background: #ef4444;
+                    color: white;
+                    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+                }
+            </style>
+
+            <div class="sales-history-filters" style="background: white; border: 1px solid rgba(0,0,0,0.06); border-radius: 1rem; padding: 1.25rem; margin-bottom: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02); display: flex; flex-direction: column; gap: 1.25rem;">
                 
-                <!-- Buscador e Info de Búsqueda -->
-                <div style="display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
-                    <div style="flex: 1; min-width: 280px; display: flex; flex-direction: column; gap: 0.35rem;">
-                        <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted, #64748b); text-transform: uppercase; letter-spacing: 0.5px;">Búsqueda Rápida</label>
+                <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: flex-end;">
+                    <!-- Buscador Rápido -->
+                    <div style="flex: 1; min-width: 250px; display: flex; flex-direction: column; gap: 0.4rem;">
+                        <label style="font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">Búsqueda Inteligente</label>
                         <div style="position: relative; display: flex; align-items: center; width: 100%;">
-                            <span style="position: absolute; left: 0.75rem; color: var(--text-muted, #64748b); font-size: 1.1rem;">🔍</span>
+                            <span style="position: absolute; left: 0.85rem; color: #94a3b8; display: flex;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                            </span>
                             <input type="text" id="salesSearchInput" class="form-control" placeholder="Buscar por número de folio o nombre del cliente..." 
                                    value="${this.currentSearchQuery || ''}"
                                    oninput="SalesView.handleSearch(this.value)"
-                                   style="padding-left: 2.25rem; height: 42px; border-radius: 0.5rem; width: 100%; border: 1px solid var(--border-color, #cbd5e1); font-size: 0.95rem;">
+                                   style="padding-left: 2.5rem; height: 44px; border-radius: 0.5rem; width: 100%; border: 1px solid #cbd5e1; font-size: 0.95rem; background: #f8fafc; transition: border-color 0.2s; font-weight: 500;">
                         </div>
                     </div>
 
-                    <!-- Botones Rápidos de Fecha -->
+                    <!-- Botones Rápidos y Limpiar -->
                     <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                        <button class="btn btn-secondary" onclick="SalesView.selectToday()" style="height: 42px; border-radius: 0.5rem; font-weight: 600; padding: 0 1rem; display: flex; align-items: center; gap: 0.35rem;">Hoy</button>
-                        <button class="btn btn-secondary" onclick="SalesView.clearDateFilter()" style="height: 42px; border-radius: 0.5rem; font-weight: 600; padding: 0 1rem; display: flex; align-items: center; gap: 0.35rem;">Limpiar</button>
+                        <button onclick="SalesView.selectToday()" title="Filtrar por Hoy" style="height: 44px; padding: 0 1.25rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; background: white; color: #3b82f6; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.9rem; transition: all 0.2s;" onmouseover="this.style.background='#eff6ff'; this.style.borderColor='#3b82f6';" onmouseout="this.style.background='white'; this.style.borderColor='#cbd5e1';">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M8 14h.01"></path><path d="M12 14h.01"></path><path d="M16 14h.01"></path><path d="M8 18h.01"></path><path d="M12 18h.01"></path><path d="M16 18h.01"></path></svg>
+                            Hoy
+                        </button>
+                        <button onclick="SalesView.clearDateFilter()" title="Limpiar Fechas" style="height: 44px; padding: 0 1.25rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; background: white; color: #ef4444; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.9rem; transition: all 0.2s;" onmouseover="this.style.background='#fef2f2'; this.style.borderColor='#ef4444';" onmouseout="this.style.background='white'; this.style.borderColor='#cbd5e1';">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                            Limpiar
+                        </button>
                     </div>
                 </div>
 
-                <!-- Acordeón / Colapsable de Rango de Fecha Personalizado -->
-                <details style="border-top: 1px solid var(--border-color, rgba(0,0,0,0.05)); padding-top: 0.75rem;" ${this.dateFrom || this.dateTo ? 'open' : ''}>
-                    <summary style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted, #64748b); cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; user-select: none;">
-                        📅 Rango de fecha detallado (Calendario)
+                <!-- Acordeón / Colapsable de Mini Calendario -->
+                <details style="border-top: 1px solid #f1f5f9; padding-top: 1rem;" ${this.dateFrom || this.dateTo ? 'open' : ''}>
+                    <summary style="font-size: 0.85rem; font-weight: 700; color: #64748b; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; user-select: none; display: flex; align-items: center; gap: 0.5rem;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                        Rango de fecha (Mini Calendario)
                     </summary>
-                    <div style="margin-top: 0.75rem;">
-                        <div class="cash-history-filter" style="margin-bottom: 0;">
-                            <div class="cash-history-filter-selects">
-                                <label>
-                                    Mes
-                                    <select id="salesHistoryMonthSelect" class="form-control"
-                                            onchange="SalesView.setSalesCalendarMonth(this.value)">
-                                        ${this._monthNames.map((name, index) => `
-                                            <option value="${index}" ${index === this._calendarMonth ? 'selected' : ''}>${name}</option>
-                                        `).join('')}
-                                    </select>
-                                </label>
-                                <label>
-                                    Año
-                                    <select id="salesHistoryYearSelect" class="form-control"
-                                            onchange="SalesView.setSalesCalendarYear(this.value)">
-                                        ${this.getCalendarYears().map(year => `
-                                            <option value="${year}" ${year === this._calendarYear ? 'selected' : ''}>${year}</option>
-                                        `).join('')}
-                                    </select>
-                                </label>
-                            </div>
-
-                            <div class="cash-history-filter-grid">
-                                <div class="cash-history-day-grid-title" id="salesHistoryDayGridTitle">
-                                    ${this._monthNames[this._calendarMonth]} ${this._calendarYear}
-                                </div>
-                                <div class="cash-history-day-grid-body" id="salesHistoryDayGrid">
-                                    ${this.renderSalesHistoryDayGridButtons(this._calendarYear, this._calendarMonth)}
-                                </div>
-                            </div>
+                    <div style="margin-top: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
+                        <div style="display: flex; gap: 0.5rem;">
+                            <select id="salesHistoryMonthSelect" class="form-control" onchange="SalesView.setSalesCalendarMonth(this.value)" style="width: auto; padding: 0.4rem 2rem 0.4rem 1rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; font-weight: 700; font-size: 0.9rem; color: #334155; background: white; cursor: pointer;">
+                                ${this._monthNames.map((name, index) => `<option value="${index}" ${index === this._calendarMonth ? 'selected' : ''}>${name}</option>`).join('')}
+                            </select>
+                            <select id="salesHistoryYearSelect" class="form-control" onchange="SalesView.setSalesCalendarYear(this.value)" style="width: auto; padding: 0.4rem 2rem 0.4rem 1rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; font-weight: 700; font-size: 0.9rem; color: #334155; background: white; cursor: pointer;">
+                                ${this.getCalendarYears().map(year => `<option value="${year}" ${year === this._calendarYear ? 'selected' : ''}>${year}</option>`).join('')}
+                            </select>
+                        </div>
+                        
+                        <div id="salesHistoryDayGrid" style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.35rem; max-width: 320px; background: #f8fafc; padding: 1rem; border-radius: 0.75rem; border: 1px solid #e2e8f0;">
+                            ${this.renderSalesHistoryDayGridButtons(this._calendarYear, this._calendarMonth)}
                         </div>
                     </div>
                 </details>
 
-                <!-- Método de Pago Chips -->
-                <div style="border-top: 1px solid var(--border-color, rgba(0,0,0,0.05)); padding-top: 0.75rem; display: flex; flex-direction: column; gap: 0.5rem;">
-                    <label style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted, #64748b); text-transform: uppercase; letter-spacing: 0.5px;">Filtrar por Método de Pago</label>
-                    <div class="sales-filter-chips">
-                        <button class="sales-chip ${this.currentFilter === 'all' ? 'active' : ''}" onclick="SalesView.filterByPaymentMethod('all')">Todas</button>
-                        <button class="sales-chip ${this.currentFilter === 'mixed' ? 'active' : ''}" onclick="SalesView.filterByPaymentMethod('mixed')">🔀 Pagos Mixtos</button>
-                        <button class="sales-chip ${this.currentFilter === 'cash' ? 'active' : ''}" onclick="SalesView.filterByPaymentMethod('cash')">💵 Efectivo</button>
-                        <button class="sales-chip ${this.currentFilter === 'card' ? 'active' : ''}" onclick="SalesView.filterByPaymentMethod('card')">💳 Tarjeta</button>
-                        <button class="sales-chip ${this.currentFilter === 'qr' ? 'active' : ''}" onclick="SalesView.filterByPaymentMethod('qr')">📱 QR</button>
-                        <button class="sales-chip ${this.currentFilter === 'other' ? 'active' : ''}" onclick="SalesView.filterByPaymentMethod('other')">➕ Otro</button>
-                        <button class="sales-chip ${this.currentFilter === 'pending' ? 'active' : ''}" onclick="SalesView.filterByPaymentMethod('pending')">📝 Anotado</button>
-                        <button class="sales-chip ${this.currentFilter === 'returns' ? 'active' : ''}" onclick="SalesView.filterByPaymentMethod('returns')">↩️ Notas de Crédito</button>
+                <!-- Filtros por Método de Pago -->
+                <div style="border-top: 1px solid #f1f5f9; padding-top: 1rem; display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap;">
+                    <label style="font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin: 0;">Filtros Adicionales</label>
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                        <button class="sales-chip-premium ${this.currentFilter === 'all' ? 'active' : ''}" onclick="SalesView.filterByPaymentMethod('all')">Todas</button>
+                        <button class="sales-chip-premium ${this.currentFilter === 'mixed' ? 'active' : ''}" onclick="SalesView.filterByPaymentMethod('mixed')">Mixtos</button>
+                        <button class="sales-chip-premium ${this.currentFilter === 'cash' ? 'active-green' : ''}" onclick="SalesView.filterByPaymentMethod('cash')">Efectivo</button>
+                        <button class="sales-chip-premium ${this.currentFilter === 'card' ? 'active' : ''}" onclick="SalesView.filterByPaymentMethod('card')">Tarjeta</button>
+                        <button class="sales-chip-premium ${this.currentFilter === 'qr' ? 'active' : ''}" onclick="SalesView.filterByPaymentMethod('qr')">QR / Digital</button>
+                        <button class="sales-chip-premium ${this.currentFilter === 'other' ? 'active' : ''}" onclick="SalesView.filterByPaymentMethod('other')">Otros</button>
+                        <button class="sales-chip-premium ${this.currentFilter === 'pending' ? 'active-red' : ''}" onclick="SalesView.filterByPaymentMethod('pending')">Anotados (Fiado)</button>
+                        <button class="sales-chip-premium ${this.currentFilter === 'returns' ? 'active-red' : ''}" onclick="SalesView.filterByPaymentMethod('returns')">Notas Crédito</button>
                     </div>
                 </div>
             </div>
@@ -359,7 +384,9 @@ const SalesView = {
 
     renderSalesHistoryDayGridButtons(year, monthIndex) {
         const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-        const monthName = this._monthNames[monthIndex] || '';
+        const firstDayOfWeek = new Date(year, monthIndex, 1).getDay();
+        // getDay() es 0(Dom) a 6(Sab). Lunes = 0, Domingo = 6 en formato ISO europeo.
+        let offset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
 
         const fromTs = this.getDateLocalTime(this.dateFrom);
         const hasEnd = !!this.dateTo;
@@ -368,7 +395,21 @@ const SalesView = {
         const fromKey = this.dateFrom;
         const toKey = hasEnd ? this.dateTo : this.dateFrom;
 
-        let html = '';
+        // Cabeceras de Lunes a Domingo
+        let html = `
+            <div style="text-align:center; font-size: 0.75rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.5rem;">LU</div>
+            <div style="text-align:center; font-size: 0.75rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.5rem;">MA</div>
+            <div style="text-align:center; font-size: 0.75rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.5rem;">MI</div>
+            <div style="text-align:center; font-size: 0.75rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.5rem;">JU</div>
+            <div style="text-align:center; font-size: 0.75rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.5rem;">VI</div>
+            <div style="text-align:center; font-size: 0.75rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.5rem;">SA</div>
+            <div style="text-align:center; font-size: 0.75rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.5rem;">DO</div>
+        `;
+
+        for (let i = 0; i < offset; i++) {
+            html += `<div></div>`;
+        }
+
         for (let day = 1; day <= daysInMonth; day++) {
             const dd = String(day).padStart(2, '0');
             const mm = String(monthIndex + 1).padStart(2, '0');
@@ -376,22 +417,29 @@ const SalesView = {
 
             const dayTs = new Date(year, monthIndex, day).getTime();
 
-            let cls = 'cash-history-day';
             const isFrom = fromKey === dayKey;
             const isTo = hasEnd && toKey === dayKey;
+            
+            let bg = 'transparent';
+            let color = '#475569';
+            let fw = '600';
 
             if (isFrom || isTo) {
-                cls += ' active';
+                bg = '#4f46e5';
+                color = 'white';
+                fw = '800';
             } else if (hasEnd && fromTs !== null && toTs !== null && dayTs >= fromTs && dayTs <= toTs) {
-                cls += ' range';
+                bg = '#e0e7ff';
+                color = '#4f46e5';
             }
 
             html += `
                 <button type="button"
-                        class="${cls}"
+                        style="border: none; background: ${bg}; color: ${color}; font-weight: ${fw}; border-radius: 0.5rem; height: 38px; cursor: pointer; transition: all 0.15s; font-size: 0.9rem;"
+                        onmouseover="if(this.style.background === 'transparent') { this.style.background='#e2e8f0'; }"
+                        onmouseout="if(this.style.background === 'rgb(226, 232, 240)' || this.style.background === '#e2e8f0') { this.style.background='transparent'; }"
                         onclick="SalesView.selectSalesCalendarDay(${day})">
-                    <span>${day}</span>
-                    <small>${monthName.slice(0, 3)}</small>
+                    ${day}
                 </button>
             `;
         }
@@ -418,6 +466,26 @@ const SalesView = {
     setSalesCalendarYear(year) {
         this._calendarYear = parseInt(year, 10);
         this.refreshSalesHistoryDayGrid();
+    },
+
+    async setDateFilter(type, value) {
+        if (type === 'from') {
+            this.dateFrom = value || null;
+        } else if (type === 'to') {
+            this.dateTo = value || null;
+        }
+        
+        // Autocorrección si "desde" es mayor a "hasta"
+        if (this.dateFrom && this.dateTo && this.dateFrom > this.dateTo) {
+            const tmp = this.dateFrom;
+            this.dateFrom = this.dateTo;
+            this.dateTo = tmp;
+        }
+
+        this.offset = 0;
+        this.allSales = [];
+        this.hasMore = true;
+        await this.refresh();
     },
 
     async selectSalesCalendarDay(day) {
@@ -722,14 +790,34 @@ const SalesView = {
 
         let html = '';
         if (!filterMethods || filterMethods.length === order.length) {
+            // Diseño Premium SaaS (Dark Theme) para el Resumen General
             html += `
-                <div style="margin-bottom: 1.5rem; padding: 1rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border-radius: 0.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
-                        <div>
-                            <h3 style="margin: 0; font-size: 1.1rem; font-weight: 600; opacity: 0.9;">📊 Resumen General${dateText}</h3>
-                            <p style="margin: 0.25rem 0 0 0; font-size: 0.9rem; opacity: 0.8;">${grandCount} venta${grandCount !== 1 ? 's' : ''} en total</p>
+                <div style="margin-bottom: 2.5rem; padding: 1.5rem; background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border: 1px solid rgba(255,255,255,0.1); border-radius: 1rem; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.15), 0 8px 10px -6px rgba(0,0,0,0.1); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1.5rem; position: relative; overflow: hidden;">
+                    <!-- Acento Superior -->
+                    <div style="position: absolute; top: 0; left: 0; right: 0; height: 3px; background: linear-gradient(90deg, #10b981 0%, #3b82f6 100%);"></div>
+                    
+                    <div style="display: flex; align-items: center; gap: 1rem; z-index: 1;">
+                        <div style="width: 48px; height: 48px; border-radius: 0.75rem; background: rgba(255, 255, 255, 0.1); color: #38bdf8; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>
                         </div>
-                        <div style="font-size: 1.5rem; font-weight: 700; background: rgba(255,255,255,0.2); padding: 0.5rem 1rem; border-radius: 0.375rem;">Total Pagado: ${formatCLP(grandTotal)}</div>
+                        <div>
+                            <h3 style="margin: 0; font-size: 1rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px;">Resumen General <span style="font-weight: 500; font-size: 0.8rem; text-transform: none; color: #64748b;">${dateText}</span></h3>
+                            <div style="font-size: 0.95rem; color: #cbd5e1; margin-top: 0.25rem; font-weight: 500;">
+                                <span style="color: white; font-weight: 700;">${grandCount}</span> transacciones en total
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; align-items: flex-end; z-index: 1;">
+                        <span style="font-size: 0.8rem; color: #94a3b8; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.25rem;">Total Recaudado</span>
+                        <div style="font-size: 2.2rem; font-weight: 800; color: white; line-height: 1; letter-spacing: -0.5px; display: flex; align-items: flex-start; gap: 0.25rem; text-shadow: 0 2px 10px rgba(0,0,0,0.2);">
+                            ${formatCLP(grandTotal)}
+                        </div>
+                    </div>
+
+                    <!-- Decoración de Fondo -->
+                    <div style="position: absolute; right: -20px; top: -20px; opacity: 0.05; pointer-events: none; z-index: 0; color: white;">
+                        <svg width="150" height="150" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>
                     </div>
                 </div>
             `;
@@ -755,40 +843,41 @@ const SalesView = {
             }, 0);
             
             const count = methodSales.length;
-            const icons = { cash: '💵', card: '💳', qr: '📱', other: '➕', pending: '📝', mixed: '🔀' };
+            
+            // Iconos SVG Premium para los headers de método de pago
+            const methodIcons = { 
+                cash: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"></rect><circle cx="12" cy="12" r="2"></circle><path d="M6 12h.01M18 12h.01"></path></svg>', 
+                card: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect><line x1="1" y1="10" x2="23" y2="10"></line></svg>', 
+                qr: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><rect x="7" y="7" width="3" height="3"></rect><rect x="14" y="7" width="3" height="3"></rect><rect x="7" y="14" width="3" height="3"></rect><rect x="14" y="14" width="3" height="3"></rect></svg>', 
+                other: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>', 
+                pending: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>', 
+                mixed: '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"></path><path d="M4 20L21 3"></path><path d="M21 16v5h-5"></path><path d="M15 15l6 6"></path><path d="M4 4l5 5"></path></svg>' 
+            };
 
             const saleRows = await Promise.all(methodSales.map(s => this.renderSaleRow(s)));
 
             html += `
-                <div class="sales-history-card">
-                    <div class="sales-history-card-header">
-                        <h3>
-                            <span>${icons[method] || '📋'}</span>
-                            <span>${methodName}</span>
-                        </h3>
-                        <div style="display: flex; gap: 1.5rem; align-items: center;">
-                            <span style="font-size: 0.95rem; opacity: 0.9;">${count} venta${count !== 1 ? 's' : ''}</span>
-                            <div class="sales-history-summary-pill">Total: ${formatCLP(total)}</div>
+                <div class="sales-history-group" style="margin-bottom: 2.5rem; animation: fadeIn 0.4s ease-out;">
+                    <!-- Cabecera de Sección Premium -->
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; padding-bottom: 0.75rem; border-bottom: 1px solid rgba(0,0,0,0.08); margin-bottom: 1rem;">
+                        <div style="display: flex; align-items: center; gap: 0.75rem;">
+                            <div style="width: 36px; height: 36px; border-radius: 0.5rem; background: linear-gradient(135deg, var(--primary) 0%, #3b82f6 100%); color: white; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);">
+                                ${methodIcons[method] || methodIcons.other}
+                            </div>
+                            <div>
+                                <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text-color); letter-spacing: -0.02em;">${methodName}</h3>
+                                <div style="font-size: 0.8rem; color: var(--text-muted); font-weight: 500;">${count} transacción${count !== 1 ? 'es' : ''}</div>
+                            </div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 0.15rem;">Total Grupo</div>
+                            <div style="font-size: 1.2rem; font-weight: 800; color: var(--text-color);">${formatCLP(total)}</div>
                         </div>
                     </div>
-                    <div class="table-container">
-                        <table class="sales-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 80px;" data-label="#">#</th>
-                                    <th style="width: 150px;" data-label="Fecha y Hora">Fecha y Hora</th>
-                                    <th style="width: 70px;" data-label="Items">Items</th>
-                                    <th style="width: 180px;" data-label="Cliente">Cliente</th>
-                                    <th style="width: 200px;" data-label="Método de Pago">Método de Pago</th>
-                                    <th style="width: 120px;" data-label="Total">Total</th>
-                                    <th style="width: 100px;" data-label="Estado">Estado</th>
-                                    <th style="width: 140px;" data-label="Acciones">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${saleRows.join('')}
-                            </tbody>
-                        </table>
+                    
+                    <!-- Contenedor de Filas -->
+                    <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                        ${saleRows.join('')}
                     </div>
                 </div>
             `;
@@ -832,68 +921,102 @@ const SalesView = {
             }
         }
 
-        const statusBadge = s.status === 'completed'
-            ? '<span class="status-badge status-completed">Completada</span>'
-            : s.status === 'partial'
-                ? '<span class="status-badge status-partial">Parcial</span>'
-                : s.status === 'cancelled'
-                    ? '<span class="status-badge status-cancelled" style="background: #94a3b8; color: white;">Anulada</span>'
-                    : '<span class="status-badge status-pending">Pendiente</span>';
-
-        // Categorizar método para el tag
-        let methodClass = 'method-tag-other';
-        if (s.paymentDetails && typeof s.paymentDetails === 'object' && Object.keys(s.paymentDetails).filter(k=>parseFloat(s.paymentDetails[k])>0).length > 1) methodClass = 'method-tag-mixed';
-        else if (s.paymentMethod === 'cash') methodClass = 'method-tag-cash';
-        else if (s.paymentMethod === 'card') methodClass = 'method-tag-card';
-        else if (s.paymentMethod === 'qr') methodClass = 'method-tag-qr';
-        else if (s.paymentMethod === 'cancelled' || s.status === 'cancelled') methodClass = 'method-tag-cancelled';
-        else if (s.paymentMethod === 'pending' || s.status === 'pending') methodClass = 'method-tag-pending';
-
+        const isCancelled = s.status === 'cancelled';
         const isDebt = s.status === 'pending' || s.status === 'partial';
-        const avatarBg = isDebt ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)';
-        const avatarBorder = isDebt ? 'rgba(245, 158, 11, 0.2)' : 'rgba(16, 185, 129, 0.2)';
-        const avatarColor = isDebt ? '#d97706' : 'var(--primary, #10b981)';
+
+        // Badges Premium
+        let badgeHtml = '';
+        if (s.status === 'completed') {
+            badgeHtml = `<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 700; background: rgba(16, 185, 129, 0.1); color: #059669; border: 1px solid rgba(16, 185, 129, 0.2);"><div style="width: 6px; height: 6px; border-radius: 50%; background: #10b981; margin-right: 0.3rem;"></div> Pagada</span>`;
+        } else if (s.status === 'partial') {
+            badgeHtml = `<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 700; background: rgba(245, 158, 11, 0.1); color: #d97706; border: 1px solid rgba(245, 158, 11, 0.2);"><div style="width: 6px; height: 6px; border-radius: 50%; background: #f59e0b; margin-right: 0.3rem;"></div> Parcial</span>`;
+        } else if (s.status === 'cancelled') {
+            badgeHtml = `<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 700; background: rgba(100, 116, 139, 0.1); color: #475569; border: 1px solid rgba(100, 116, 139, 0.2);"><div style="width: 6px; height: 6px; border-radius: 50%; background: #64748b; margin-right: 0.3rem;"></div> Anulada</span>`;
+        } else {
+            badgeHtml = `<span style="display: inline-flex; align-items: center; padding: 0.25rem 0.6rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 700; background: rgba(239, 68, 68, 0.1); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.2);"><div style="width: 6px; height: 6px; border-radius: 50%; background: #ef4444; margin-right: 0.3rem;"></div> Deuda</span>`;
+        }
+
+        // Estilo del acento lateral
+        let accentColor = isCancelled ? 'rgba(100, 116, 139, 0.5)' : (isDebt ? '#f59e0b' : 'transparent');
+        if (isDebt && s.status === 'pending') accentColor = '#ef4444';
+
+        // Iconos SVG para botones
+        const iconView = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>`;
+        const iconEdit = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>`;
+        const iconReturn = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>`;
+        const iconTrash = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
+
+        // Avatar del cliente mejorado
+        const avatarColor = customerName === 'Público General' ? '#94a3b8' : (isDebt ? '#d97706' : 'var(--primary)');
+        const avatarBg = customerName === 'Público General' ? 'rgba(148, 163, 184, 0.1)' : (isDebt ? 'rgba(245, 158, 11, 0.1)' : 'rgba(16, 185, 129, 0.1)');
 
         return `
-            <tr class="animate-fade-in">
-                <td data-label="Folio"><span class="sale-number" style="font-weight: 700; color: var(--primary, #10b981);">#${s.saleNumber}</span></td>
-                <td data-label="Fecha y Hora"><span class="sale-date" style="font-family: 'Inter', sans-serif;">${formatDateTime(s.date)}</span></td>
-                <td data-label="Items"><span style="background: rgba(0,0,0,0.04); padding: 0.2rem 0.5rem; border-radius: 0.25rem; font-weight: 600; font-family: 'Inter', sans-serif;">${s.items.length}</span></td>
-                <td data-label="Cliente">
-                    <div style="display: flex; align-items: center; gap: 0.5rem;">
-                        <div style="width: 32px; height: 32px; background: ${avatarBg}; border: 1px solid ${avatarBorder}; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 700; color: ${avatarColor}; flex-shrink: 0;">
+            <div style="background: white; border: 1px solid rgba(0,0,0,0.06); border-radius: 0.75rem; display: flex; align-items: center; justify-content: space-between; padding: 0.85rem 1.25rem; box-shadow: 0 2px 4px rgba(0,0,0,0.02); position: relative; overflow: hidden; transition: all 0.2s;" onmouseover="this.style.transform='translateY(-1px)'; this.style.boxShadow='0 6px 12px rgba(0,0,0,0.05)'; this.style.borderColor='rgba(0,0,0,0.1)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 4px rgba(0,0,0,0.02)'; this.style.borderColor='rgba(0,0,0,0.06)';">
+                
+                <!-- Borde de acento izquierdo para deudas/anuladas -->
+                ${accentColor !== 'transparent' ? `<div style="position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: ${accentColor};"></div>` : ''}
+
+                <!-- Izquierda: Folio y Cliente -->
+                <div style="display: flex; align-items: center; gap: 1.5rem; flex: 1; min-width: 0;">
+                    
+                    <!-- Avatar y Cliente -->
+                    <div style="display: flex; align-items: center; gap: 0.75rem; width: 220px; flex-shrink: 0;">
+                        <div style="width: 38px; height: 38px; border-radius: 50%; background: ${avatarBg}; color: ${avatarColor}; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; flex-shrink: 0;">
                             ${customerName.slice(0, 2).toUpperCase()}
                         </div>
-                        <span class="sale-customer" style="${isDebt ? 'color: #d97706; font-weight: 700;' : ''}">${safeHTML(customerName)}</span>
+                        <div style="min-width: 0;">
+                            <div style="font-weight: 600; color: var(--text-color); font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2;">
+                                ${safeHTML(customerName)}
+                            </div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.25rem; margin-top: 0.15rem;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.7;"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                                ${formatDateTime(s.date).replace(',', '')}
+                            </div>
+                        </div>
                     </div>
-                </td>
-                <td data-label="Pago">
-                    <span class="method-tag ${methodClass}">
-                        ${paymentMethodDisplay}
-                    </span>
-                </td>
-                <td data-label="Total"><strong style="color: var(--text-color, #0f172a); font-family: 'Inter', sans-serif;">${formatCLP(s.total)}</strong></td>
-                <td data-label="Estado">${statusBadge}</td>
-                <td data-label="Acciones">
-                    <div style="display: flex; gap: 0.35rem; justify-content: flex-end;">
-                        <button class="action-btn btn-view" onclick="SalesView.viewSale(${s.id})" title="Ver detalles">
-                            👁️
-                        </button>
-                        ${PermissionService.can('sales.edit') ? `
-                        <button class="action-btn btn-edit" onclick="SalesView.editSale(${s.id})" title="Editar venta">
-                            ✏️
-                        </button>` : ''}
-                        ${PermissionService.can('sales.return') ? `
-                        <button class="action-btn btn-return" onclick="SalesView.showReturnModal(${s.id})" title="Devolver productos">
-                            ↩️
-                        </button>` : ''}
-                        ${PermissionService.can('sales.delete') ? `
-                        <button class="action-btn btn-delete" onclick="SalesView.deleteSale(${s.id})" title="Eliminar venta">
-                            🗑️
-                        </button>` : ''}
+                    
+                    <!-- Folio e Items -->
+                    <div style="display: flex; flex-direction: column; width: 120px; flex-shrink: 0;">
+                        <span style="font-weight: 700; color: var(--text-color); font-size: 0.9rem;">#${s.saleNumber}</span>
+                        <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem;">${s.items.length} producto(s)</span>
                     </div>
-                </td>
-            </tr>
+                </div>
+
+                <!-- Centro: Badges y Pago -->
+                <div style="display: flex; align-items: center; gap: 1.5rem; justify-content: flex-end; flex: 1;">
+                    <div style="display: flex; flex-direction: column; align-items: flex-end;">
+                        ${badgeHtml}
+                        <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.35rem; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${paymentMethodDisplay}">${paymentMethodDisplay}</span>
+                    </div>
+
+                    <!-- Total -->
+                    <div style="text-align: right; width: 120px; flex-shrink: 0;">
+                        <div style="font-size: 1.15rem; font-weight: 800; color: ${isCancelled ? 'var(--text-muted)' : 'var(--text-color)'}; line-height: 1.1;">
+                            ${formatCLP(s.total)}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Derecha: Acciones -->
+                <div style="display: flex; gap: 0.25rem; margin-left: 1.5rem; border-left: 1px solid rgba(0,0,0,0.06); padding-left: 1rem; flex-shrink: 0;">
+                    <button class="action-btn" onclick="SalesView.viewSale(${s.id})" title="Ver detalles" style="padding: 0.4rem; border-radius: 0.4rem; width: 34px; height: 34px; border: 1px solid transparent; background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(0,0,0,0.04)'; this.style.color='var(--text-color)';">
+                        ${iconView}
+                    </button>
+                    ${PermissionService.can('sales.edit') && !isCancelled ? `
+                    <button class="action-btn" onclick="SalesView.editSale(${s.id})" title="Corregir pago/venta" style="padding: 0.4rem; border-radius: 0.4rem; width: 34px; height: 34px; border: 1px solid transparent; background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(59, 130, 246, 0.1)'; this.style.color='#3b82f6';">
+                        ${iconEdit}
+                    </button>` : ''}
+                    ${PermissionService.can('sales.return') && !isCancelled ? `
+                    <button class="action-btn" onclick="SalesView.showReturnModal(${s.id})" title="Devolver productos" style="padding: 0.4rem; border-radius: 0.4rem; width: 34px; height: 34px; border: 1px solid transparent; background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(245, 158, 11, 0.1)'; this.style.color='#f59e0b';">
+                        ${iconReturn}
+                    </button>` : ''}
+                    ${PermissionService.can('sales.delete') && !isCancelled ? `
+                    <button class="action-btn" onclick="SalesView.deleteSale(${s.id})" title="Anular venta" style="padding: 0.4rem; border-radius: 0.4rem; width: 34px; height: 34px; border: 1px solid transparent; background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(239, 68, 68, 0.1)'; this.style.color='#ef4444';">
+                        ${iconTrash}
+                    </button>` : ''}
+                </div>
+
+            </div>
         `;
     },
 
@@ -919,7 +1042,15 @@ const SalesView = {
             return;
         }
 
-        const customer = sale.customerId ? await Customer.getById(sale.customerId) : null;
+        let customer = null;
+        if (sale.customerId && sale.customerId !== 'null' && sale.customerId !== 'undefined') {
+            try {
+                customer = await Customer.getById(sale.customerId);
+            } catch (err) {
+                console.warn("ponytail: Cliente no encontrado o eliminado, continuando sin cliente.", err);
+                customer = null;
+            }
+        }
         const payments = await Payment.getBySale(saleId);
 
         // Calcular total pagado
@@ -1192,6 +1323,12 @@ const SalesView = {
         this._tempEditingSale = JSON.parse(JSON.stringify(sale));
         const allCustomers = await Customer.getAll();
 
+        this._currentModalRefresh = () => {
+            const modalBody = document.querySelector('.modal-body');
+            if (modalBody) modalBody.innerHTML = renderForm();
+            this.validateEditSaleForm();
+        };
+
         const renderForm = () => {
             const s = this._tempEditingSale;
             const subtotal = s.items.reduce((sum, i) => sum + (parseFloat(i.total) || 0), 0);
@@ -1225,7 +1362,7 @@ const SalesView = {
                         </div>
                         <div class="form-group" style="margin: 0;">
                             <label style="color: var(--secondary); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Fecha y Hora</label>
-                            <input type="datetime-local" class="form-control" style="background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: var(--text-color); margin-top: 0.25rem;" value="${s.date.slice(0, 19)}" onchange="SalesView._tempEditingSale.date = this.value">
+                            <input type="datetime-local" class="form-control" style="background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: var(--text-color); margin-top: 0.25rem;" value="${s.date.slice(0, 19)}" onchange="SalesView._tempEditingSale.date = this.value" onkeydown="if(event.key==='Enter') event.preventDefault()">
                         </div>
                     </div>
 
@@ -1254,7 +1391,7 @@ const SalesView = {
                                             </button>
                                             <input type="number" value="${item.quantity}" min="0.001" step="${item.type === 'weight' ? '0.001' : '1'}" 
                                                    style="width: 50px; text-align: center; background: transparent; border: none; color: var(--text-color); font-weight: 600; padding: 0.4rem 0;"
-                                                   onchange="SalesView.updateEditItem(${index}, 'quantity', this.value)">
+                                                   onchange="SalesView.updateEditItem(${index}, 'quantity', this.value)" onkeydown="if(event.key==='Enter') { event.preventDefault(); this.blur(); }">
                                             <button class="action-btn" onclick="SalesView.adjustEditQuantity(${index}, 1)" style="padding: 0.4rem 0.6rem; border: none; background: transparent; color: var(--text-color); cursor: pointer; border-left: 1px solid rgba(255,255,255,0.1);">
                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                                             </button>
@@ -1275,13 +1412,13 @@ const SalesView = {
                         </div>
                         
                         <!-- Add Product Search -->
-                        <div style="margin-top: 1rem; position: relative;">
-                            <div style="display: flex; align-items: center; background: rgba(0,0,0,0.2); border: 1px dashed rgba(255,255,255,0.2); border-radius: 0.5rem; padding: 0.25rem;">
-                                <span style="padding: 0 0.75rem; opacity: 0.5;">🔍</span>
-                                <input type="text" id="editProductSearch" style="flex: 1; background: transparent; border: none; color: var(--text-color); padding: 0.75rem 0; outline: none;" placeholder="Buscar producto para agregar a esta venta..." 
-                                       oninput="SalesView.searchEditProducts(this.value)" autocomplete="off">
+                        <div style="margin-top: 1rem; position: relative;" id="editSaleSearchContainer">
+                            <div style="display: flex; align-items: center; background: rgba(0,0,0,0.3); border: 2px solid rgba(255,255,255,0.1); border-radius: 0.5rem; padding: 0.25rem 0.5rem; transition: all 0.2s;" onfocusin="this.style.borderColor='var(--primary)'" onfocusout="this.style.borderColor='rgba(255,255,255,0.1)'">
+                                <span style="padding: 0 0.5rem; opacity: 0.7; font-size: 1.1rem;">🔍</span>
+                                <input type="text" id="editProductSearch" style="flex: 1; background: transparent; border: none; color: var(--text-color); font-weight: 600; padding: 0.75rem 0; outline: none; font-size: 1rem;" placeholder="Escanear código o buscar por nombre..." 
+                                       oninput="SalesView.searchEditProducts(this.value)" onkeydown="SalesView.handleEditProductSearchKeydown(event)" autocomplete="off">
                             </div>
-                            <div id="editProductResults" class="pos-search-results" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 100; margin-top: 0.25rem; background: var(--bg-color); border: 1px solid var(--border); border-radius: 0.5rem; box-shadow: 0 10px 25px rgba(0,0,0,0.5);"></div>
+                            <div id="editProductResults" style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 9999; margin-top: 0.5rem; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 0.75rem; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.4); max-height: 300px; overflow-y: auto;"></div>
                         </div>
                     </div>
 
@@ -1306,7 +1443,7 @@ const SalesView = {
                                 </div>
                                 <div style="position: relative;">
                                     <span style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--secondary);">$</span>
-                                    <input type="number" value="${s.paymentDetails.cash || 0}" min="0" onchange="SalesView.updateEditPayment('cash', this.value)" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: var(--success); font-weight: 700; font-size: 1.1rem; padding: 0.5rem 0.5rem 0.5rem 1.75rem; border-radius: 0.375rem; outline: none;">
+                                    <input type="number" value="${s.paymentDetails.cash || 0}" min="0" oninput="SalesView.updateEditPayment('cash', this.value, true)" onkeydown="if(event.key==='Enter') { event.preventDefault(); this.blur(); }" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: var(--success); font-weight: 700; font-size: 1.1rem; padding: 0.5rem 0.5rem 0.5rem 1.75rem; border-radius: 0.375rem; outline: none;">
                                 </div>
                             </div>
                             <!-- Tarjeta -->
@@ -1317,7 +1454,7 @@ const SalesView = {
                                 </div>
                                 <div style="position: relative;">
                                     <span style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--secondary);">$</span>
-                                    <input type="number" value="${s.paymentDetails.card || 0}" min="0" onchange="SalesView.updateEditPayment('card', this.value)" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: var(--success); font-weight: 700; font-size: 1.1rem; padding: 0.5rem 0.5rem 0.5rem 1.75rem; border-radius: 0.375rem; outline: none;">
+                                    <input type="number" value="${s.paymentDetails.card || 0}" min="0" oninput="SalesView.updateEditPayment('card', this.value, true)" onkeydown="if(event.key==='Enter') { event.preventDefault(); this.blur(); }" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: var(--success); font-weight: 700; font-size: 1.1rem; padding: 0.5rem 0.5rem 0.5rem 1.75rem; border-radius: 0.375rem; outline: none;">
                                 </div>
                             </div>
                             <!-- QR -->
@@ -1328,95 +1465,184 @@ const SalesView = {
                                 </div>
                                 <div style="position: relative;">
                                     <span style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--secondary);">$</span>
-                                    <input type="number" value="${s.paymentDetails.qr || 0}" min="0" onchange="SalesView.updateEditPayment('qr', this.value)" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: var(--success); font-weight: 700; font-size: 1.1rem; padding: 0.5rem 0.5rem 0.5rem 1.75rem; border-radius: 0.375rem; outline: none;">
+                                    <input type="number" value="${s.paymentDetails.qr || 0}" min="0" oninput="SalesView.updateEditPayment('qr', this.value, true)" onkeydown="if(event.key==='Enter') { event.preventDefault(); this.blur(); }" style="width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: var(--success); font-weight: 700; font-size: 1.1rem; padding: 0.5rem 0.5rem 0.5rem 1.75rem; border-radius: 0.375rem; outline: none;">
                                 </div>
                             </div>
                         </div>
                         
-                        ${Math.abs(pendingAmount) > 0.01 ? `
-                            <div style="margin-top: 1rem; padding: 0.75rem; background: ${pendingAmount > 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(239, 68, 68, 0.1)'}; border: 1px solid ${pendingAmount > 0 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(239, 68, 68, 0.3)'}; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
-                                <div style="color: ${pendingAmount > 0 ? '#f59e0b' : '#ef4444'}; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
-                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                                    ${pendingAmount > 0 ? 'Falta dinero por asignar' : 'Hay dinero sobrante en los pagos'}
+                        <div id="editSaleDifferenceBox">
+                            ${Math.abs(pendingAmount) > 0.01 ? `
+                                <div style="margin-top: 1rem; padding: 0.75rem; background: ${pendingAmount > 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(239, 68, 68, 0.1)'}; border: 1px solid ${pendingAmount > 0 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(239, 68, 68, 0.3)'}; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                                    <div style="color: ${pendingAmount > 0 ? '#f59e0b' : '#ef4444'}; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+                                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                        ${pendingAmount > 0 ? 'Falta dinero por asignar' : 'Hay dinero sobrante en los pagos'}
+                                    </div>
+                                    <div style="color: ${pendingAmount > 0 ? '#f59e0b' : '#ef4444'}; font-weight: 700; font-size: 1.1rem;">
+                                        Diferencia: ${formatCLP(Math.abs(pendingAmount))}
+                                    </div>
                                 </div>
-                                <div style="color: ${pendingAmount > 0 ? '#f59e0b' : '#ef4444'}; font-weight: 700; font-size: 1.1rem;">
-                                    Diferencia: ${formatCLP(Math.abs(pendingAmount))}
+                            ` : `
+                                <div style="margin-top: 1rem; padding: 0.75rem; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 0.5rem; display: flex; align-items: center; gap: 0.5rem; color: #10b981; font-weight: 600;">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                                    Pagos cuadrados correctamente
                                 </div>
-                            </div>
-                        ` : `
-                            <div style="margin-top: 1rem; padding: 0.75rem; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 0.5rem; display: flex; align-items: center; gap: 0.5rem; color: #10b981; font-weight: 600;">
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
-                                Pagos cuadrados correctamente
-                            </div>
-                        `}
+                            `}
+                        </div>
                     </div>
                 </div>
             `;
         };
 
         const footer = `
-            <button class="btn btn-secondary" onclick="SalesView.viewSale(${saleId})">Cancelar</button>
-            <button class="btn btn-primary" onclick="SalesView.saveEditSale()">💾 Guardar Cambios</button>
+                    <div style="display: flex; gap: 1rem; width: 100%; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 1rem;">
+                        <button class="btn" style="flex: 1; background: #64748b; color: white; border: none; padding: 0.75rem; border-radius: 0.75rem; font-weight: 600; cursor: pointer;" onclick="closeModal()">Cancelar</button>
+                        <button class="btn btn-primary" style="flex: 1; background: #4f46e5; color: white; border: none; padding: 0.75rem; border-radius: 0.75rem; font-weight: 600; cursor: pointer; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);" onclick="SalesView.saveEditSale()">💾 Guardar Cambios (F2)</button>
+                    </div>
         `;
 
         showModal(renderForm(), { title: `Refactorizando Venta #${sale.saleNumber}`, footer, width: '850px' });
-        
-        // Re-referenciar el objeto global para que las funciones de update lo encuentren
-        this._currentModalRefresh = () => {
-            const modalBody = document.querySelector('.modal-body');
-            if (modalBody) modalBody.innerHTML = renderForm();
-        };
+        this.validateEditSaleForm();
     },
 
     async searchEditProducts(query) {
+        const inputEl = document.getElementById('editProductSearch');
         const resultsEl = document.getElementById('editProductResults');
-        if (!query || query.length < 2) {
+        const term = query.trim();
+        
+        if (term.length >= 8 && !isNaN(term)) {
+            clearTimeout(this._editBarcodeTimeout);
+            this._editBarcodeTimeout = setTimeout(async () => {
+                const finalTerm = inputEl.value.trim();
+                if (finalTerm.length >= 8) {
+                    inputEl.value = '';
+                    inputEl.blur(); 
+                    const result = await posController.searchProduct(finalTerm);
+                    if (result && result.product) {
+                        if (result.weight) {
+                            this._addEditProductByObject(result.product, result.weight);
+                            resultsEl.style.display = 'none';
+                        } else {
+                            resultsEl.innerHTML = `<div id="search-res-${result.product.id}"></div>`;
+                            resultsEl.style.display = 'block';
+                            this.showInlineQuantity(result.product.id);
+                        }
+                    } else {
+                        showNotification('Producto no encontrado', 'warning');
+                        resultsEl.style.display = 'none';
+                    }
+                }
+            }, 60);
+            return;
+        }
+
+        if (term.length < 2) {
             resultsEl.style.display = 'none';
             return;
         }
 
-        const results = await Product.search(query);
+        const results = await Product.search(term);
         if (results.length === 0) {
-            resultsEl.style.display = 'none';
+            resultsEl.innerHTML = '<div style="padding: 1.5rem; text-align: center; color: #64748b; font-weight: 700;">No se encontraron productos</div>';
+            resultsEl.style.display = 'block';
             return;
         }
 
-        resultsEl.innerHTML = results.slice(0, 5).map(p => `
-            <div class="search-result-item" onclick="SalesView.addEditProduct(${p.id})">
-                <div class="result-info">
-                    <span class="result-name">${safeHTML(p.name)}</span>
-                    <span class="result-stock">Stock: ${p.stock}</span>
+        resultsEl.innerHTML = results.slice(0, 15).map(p => {
+            const isWeight = p.type === 'weight';
+            const stockColor = p.stock <= 0 ? '#ef4444' : (p.stock <= 5 ? '#f59e0b' : '#10b981');
+            return `
+            <div id="search-res-${p.id}" style="padding: 0.75rem 1rem; border-bottom: 1px solid #f1f5f9; cursor: pointer; display: flex; justify-content: space-between; align-items: center; transition: all 0.2s; border-left: 4px solid transparent;" onmouseover="this.style.background='#e0f2fe'; this.style.borderLeftColor='#3b82f6';" onmouseout="this.style.background='transparent'; this.style.borderLeftColor='transparent';" onclick="SalesView.showInlineQuantity(${p.id})">
+                <div>
+                    <div style="font-weight: 700; color: #1e293b; font-size: 1rem;">${safeHTML(p.name)}</div>
+                    <div style="font-size: 0.85rem; margin-top: 0.2rem; font-weight: 700; color: ${stockColor};">
+                        Stock: ${formatStock(p.stock)} ${isWeight ? 'kg' : 'un'}
+                    </div>
                 </div>
-                <span class="result-price">${formatCLP(p.price)}</span>
+                <div style="font-weight: 800; color: #3b82f6; font-size: 1.1rem;">
+                    ${formatCLP(p.price)}
+                </div>
             </div>
-        `).join('');
+        `}).join('');
         resultsEl.style.display = 'block';
     },
 
-    async addEditProduct(productId) {
+    handleEditProductSearchKeydown(event) {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            const resultsEl = document.getElementById('editProductResults');
+            if (resultsEl && resultsEl.style.display !== 'none') {
+                const firstResult = resultsEl.querySelector('div[id^="search-res-"]');
+                if (firstResult) {
+                    const productId = firstResult.id.replace('search-res-', '');
+                    this.showInlineQuantity(productId);
+                }
+            }
+        }
+    },
+
+    async showInlineQuantity(productId) {
         const product = await Product.getById(productId);
         if (!product) return;
+        const resEl = document.getElementById(`search-res-${productId}`);
+        if(!resEl) return;
+        
+        const isWeight = product.type === 'weight';
+        resEl.onclick = null;
+        resEl.onmouseover = null;
+        resEl.onmouseout = null;
+        resEl.style.background = '#eff6ff';
+        resEl.style.borderLeftColor = '#3b82f6';
+        
+        resEl.innerHTML = `
+            <div style="width: 100%; display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-weight: 700; color: #1e3a8a; flex: 1; font-size: 0.9rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${safeHTML(product.name)}</span>
+                <input type="number" id="inlineQty-${product.id}" value="${isWeight ? 1.0 : 1}" step="${isWeight ? 0.05 : 1}" style="width: 70px; padding: 0.4rem; border: 2px solid #93c5fd; border-radius: 0.375rem; text-align: center; font-weight: bold; outline: none; color: #1e3a8a;" onkeydown="if(event.key==='Enter') { event.preventDefault(); SalesView.confirmInlineQuantity(${product.id}); }">
+                <button onclick="event.stopPropagation(); SalesView.confirmInlineQuantity(${product.id})" style="background: #3b82f6; color: white; border: none; padding: 0.4rem 0.75rem; border-radius: 0.375rem; font-weight: bold; cursor: pointer; transition: background 0.2s;" onmouseover="this.style.background='#2563eb'" onmouseout="this.style.background='#3b82f6'">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                </button>
+            </div>
+        `;
+        setTimeout(() => {
+            const inp = document.getElementById(`inlineQty-${product.id}`);
+            if(inp) { inp.focus(); inp.select(); }
+        }, 50);
+    },
+    
+    async confirmInlineQuantity(productId) {
+        const inp = document.getElementById(`inlineQty-${productId}`);
+        if(!inp) return;
+        const qty = parseFloat(inp.value);
+        if(isNaN(qty) || qty <= 0) return;
+        const product = await Product.getById(productId);
+        if(product) {
+            this._addEditProductByObject(product, qty);
+            const resultsEl = document.getElementById('editProductResults');
+            const inputEl = document.getElementById('editProductSearch');
+            if (resultsEl) resultsEl.style.display = 'none';
+            if (inputEl) { inputEl.value = ''; inputEl.focus(); }
+        }
+    },
 
+    async promptEditProductQuantity(productId) {
+        this.showInlineQuantity(productId);
+    },
+
+    _addEditProductByObject(product, qty) {
         this._tempEditingSale.items.push({
             productId: product.id,
             name: product.name,
-            quantity: 1,
+            quantity: qty,
             unitPrice: product.price,
-            total: product.price,
+            total: product.price * qty,
             type: product.type || 'unit'
         });
-
-        document.getElementById('editProductResults').style.display = 'none';
         
-        // Asignar el nuevo total faltante a efectivo de manera predeterminada para que el usuario no tenga que hacerlo manualmente si no quiere
-        const newTotal = this._tempEditingSale.items.reduce((sum, i) => sum + (parseFloat(i.total) || 0), 0);
-        const currentPaid = Object.values(this._tempEditingSale.paymentDetails).reduce((sum, a) => sum + (parseFloat(a) || 0), 0);
-        if (newTotal > currentPaid) {
-             const diff = newTotal - currentPaid;
-             this._tempEditingSale.paymentDetails.cash = (this._tempEditingSale.paymentDetails.cash || 0) + diff;
-        }
-
         this._currentModalRefresh();
+    },
+
+    async addEditProduct(productId) {
+        // Redirigir a la nueva versión que pregunta cantidad
+        this.promptEditProductQuantity(productId);
     },
 
     adjustEditQuantity(index, delta) {
@@ -1475,9 +1701,52 @@ const SalesView = {
         this._currentModalRefresh();
     },
 
-    updateEditPayment(method, value) {
-        this._tempEditingSale.paymentDetails[method] = parseFloat(value) || 0;
-        this._currentModalRefresh();
+    updateEditPayment(method, value, silent = false) {
+        let parsed = parseFloat(value);
+        if (isNaN(parsed)) parsed = 0;
+        this._tempEditingSale.paymentDetails[method] = parsed;
+        
+        if (silent) {
+            const s = this._tempEditingSale;
+            
+            // Sumar solo los métodos válidos para evitar basuras
+            let currentPaid = 0;
+            ['cash', 'card', 'qr'].forEach(k => {
+                if (s.paymentDetails[k]) {
+                    currentPaid += (parseFloat(s.paymentDetails[k]) || 0);
+                }
+            });
+            
+            const total = parseFloat(s.total) || 0;
+            const pendingAmount = total - currentPaid;
+            
+            const diffBox = document.getElementById('editSaleDifferenceBox');
+            if (diffBox) {
+                if (Math.abs(pendingAmount) > 0.01) {
+                    diffBox.innerHTML = `
+                        <div style="margin-top: 1rem; padding: 0.75rem; background: ${pendingAmount > 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(239, 68, 68, 0.1)'}; border: 1px solid ${pendingAmount > 0 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(239, 68, 68, 0.3)'}; border-radius: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                            <div style="color: ${pendingAmount > 0 ? '#f59e0b' : '#ef4444'}; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                                ${pendingAmount > 0 ? 'Falta dinero por asignar' : 'Hay dinero sobrante en los pagos'}
+                            </div>
+                            <div style="color: ${pendingAmount > 0 ? '#f59e0b' : '#ef4444'}; font-weight: 700; font-size: 1.1rem;">
+                                Diferencia: ${formatCLP(Math.abs(pendingAmount))}
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    diffBox.innerHTML = `
+                        <div style="margin-top: 1rem; padding: 0.75rem; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 0.5rem; display: flex; align-items: center; gap: 0.5rem; color: #10b981; font-weight: 600;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+                            Pagos cuadrados correctamente
+                        </div>
+                    `;
+                }
+            }
+            this.validateEditSaleForm();
+        } else {
+            this._currentModalRefresh();
+        }
     },
 
     async saveEditSale() {

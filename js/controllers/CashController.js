@@ -251,6 +251,9 @@ class CashController {
         };
 
         allSales.forEach(sale => {
+            // No incluir ventas anuladas en el conteo de ventas del día para evitar inflar los números
+            if (sale.status === 'cancelled') return;
+
             const dateKey = toDateKey(sale.date);
             const day = ensureDay(dateKey);
             day.sales.push({

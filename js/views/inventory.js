@@ -1,7 +1,7 @@
 const InventoryView = {
     currentSection: 'inventory',
     stockFilter: null,
-    showCapitalDist: false, // Nueva variable para controlar visibilidad de capital
+    showCapitalDist: false,
     products: null,
     recentMovements: [],
     bulkAdjustmentItems: [],
@@ -14,6 +14,16 @@ const InventoryView = {
     selectedConsumptionDate: new Date().toLocaleDateString('sv-SE'), // YYYY-MM-DD local
     selectedLossDate: new Date().toLocaleDateString('sv-SE'), // YYYY-MM-DD local
 
+    // Variables para filtros del inventario principal
+    inventorySearchQuery: '',
+    inventorySelectedCategory: '',
+    inventorySelectedStockStatus: 'all',
+    inventorySelectedSupplier: '',
+
+    // Variables para la sección unificada de pérdidas/consumos
+    lossesSearchQuery: '',
+    selectedLossesProductData: null,
+
     async init() {
         // Siempre refrescamos para asegurar categorías y stock actualizado
         await this.refreshData();
@@ -24,6 +34,7 @@ const InventoryView = {
     async refreshData() {
         this.products = await Product.getAll();
         const suppliers = await Supplier.getAll();
+        this.suppliersList = suppliers || [];
         const suppliersMap = suppliers.reduce((acc, s) => {
             acc[s.id] = s.name;
             return acc;
@@ -198,7 +209,9 @@ const InventoryView = {
 
         return {
             totalCapital,
+            totalCapitalWithIva,
             totalProjected,
+            totalProjectedNet,
             profit,
             margin,
             activeItems: activeCount,
@@ -240,26 +253,20 @@ const InventoryView = {
                         <button class="btn ${this.currentSection === 'bulk-adjustment' ? 'btn-primary' : 'btn-secondary'}" 
                                 onclick="InventoryView.switchSection('bulk-adjustment')" 
                                 style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 0 auto; min-width: 110px;"
-                                title="Descontar múltiples productos por consumo o mermas">
-                            ➕ Ajuste Masivo
+                                title="Ajuste masivo de productos">
+                            ⚡ Ajustes Rápidos
                         </button>
                         <button class="btn ${this.currentSection === 'audit' ? 'btn-primary' : 'btn-secondary'}" 
                                 onclick="InventoryView.switchSection('audit')" 
                                 style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 0 auto; min-width: 150px;"
                                 title="Contar mercancía físicamente y corregir el sistema">
-                            📋 Control de Inventario
+                            📋 Auditoría/Toma Física
                         </button>
-                        <button class="btn ${this.currentSection === 'consumption-report' ? 'btn-primary' : 'btn-secondary'}" 
-                                onclick="InventoryView.switchSection('consumption-report')" 
-                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 0 auto; min-width: 130px;"
-                                title="Ver cuánto se ha consumido en el local">
-                            📉 Consumo Interno
-                        </button>
-                        <button class="btn ${this.currentSection === 'loss-report' ? 'btn-primary' : 'btn-secondary'}" 
-                                onclick="InventoryView.switchSection('loss-report')" 
-                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 0 auto; min-width: 110px;"
-                                title="Listado de productos perdidos o dañados">
-                            🚨 Pérdidas
+                        <button class="btn ${this.currentSection === 'losses' ? 'btn-primary' : 'btn-secondary'}" 
+                                onclick="InventoryView.switchSection('losses')" 
+                                style="padding: 0.5rem 0.8rem; font-size: 0.85rem; flex: 0 0 auto; min-width: 150px;"
+                                title="Listado de consumos o mermas">
+                            🗑️ Pérdidas y Consumos
                         </button>
                         <button class="btn ${this.currentSection === 'history' ? 'btn-primary' : 'btn-secondary'}" 
                                 onclick="InventoryView.switchSection('history')" 
@@ -294,10 +301,8 @@ const InventoryView = {
                 return this.renderBulkAdjustmentForm();
             case 'audit':
                 return this.renderAuditSection();
-            case 'consumption-report':
-                return this.renderConsumptionReport();
-            case 'loss-report':
-                return this.renderLossReport();
+            case 'losses':
+                return this.renderLossesTab(dashboard);
             case 'history':
                 return this.renderHistorySection(this.recentMovements);
             case 'suggestions':
@@ -308,99 +313,133 @@ const InventoryView = {
     },
 
     renderInventoryDashboard(dashboard) {
-        // Calcular productos con stock bajo
-        const lowStockProducts = this.products.filter(p => {
-            const minStock = p.minStock || 0;
-            const currentStock = p.stock || 0;
-            return currentStock <= minStock && minStock > 0;
-        });
+        // Generar categorías y proveedores para los selectores
+        const categories = this.categories || [];
+        const suppliers = this.suppliersList || [];
+        
+        // Obtener el valor de filtros actuales
+        const searchQuery = this.inventorySearchQuery || '';
+        const selectedCat = this.inventorySelectedCategory || '';
+        const selectedStatus = this.inventorySelectedStockStatus || 'all';
+        const selectedSupplier = this.inventorySelectedSupplier || '';
+
+        // Calcular costo bruto de capital proyectado
+        const totalCapitalBruto = dashboard.totalCapitalWithIva || (dashboard.totalCapital * 1.19);
+        const totalProjectedNet = dashboard.totalProjectedNet || (dashboard.totalProjected / 1.19);
 
         return `
-            <!-- Alertas de stock mínimo eliminadas de aquí — ver tab "💡 Sugerencias" -->
-
-            <!-- Grid de KPIs (Tarjetas Métricas) -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
+            <!-- Grid de KPIs (Tarjetas Métricas) con diseño ejecutivo y Netos/Brutos -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
                 <!-- 1. Capital Invertido -->
-                <div class="inventory-kpi-card card-blue-accent">
-                    <div style="font-size: 2rem; position: absolute; right: 1.5rem; top: 1.5rem; opacity: 0.6;">💼</div>
-                    <h3 style="padding-right: 2.5rem;">CAPITAL INVERTIDO</h3>
-                    <div class="value">${formatCLP(dashboard.totalCapital)}</div>
-                    <p class="kpi-extra-info">Costo neto del total de stock (${dashboard.activeItems} productos)</p>
+                <div class="inventory-kpi-card card-blue-accent" style="background: white; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); position: relative; overflow: hidden; border-left: 5px solid #3b82f6;">
+                    <div style="font-size: 2rem; position: absolute; right: 1rem; top: 1rem; opacity: 0.25;">💼</div>
+                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.75rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; font-weight: 800;">Capital Invertido</h4>
+                    <div style="font-size: 1.6rem; font-weight: 900; color: #1e293b; line-height: 1.2;">
+                        ${formatCLP(dashboard.totalCapital)} <span style="font-size: 0.75rem; color: #64748b; font-weight: 700;">Neto</span>
+                    </div>
+                    <div style="font-size: 1.1rem; font-weight: 700; color: #64748b; margin-top: 0.25rem;">
+                        ${formatCLP(totalCapitalBruto)} <span style="font-size: 0.7rem; color: #94a3b8; font-weight: 600;">Bruto</span>
+                    </div>
+                    <small style="color: #64748b; font-size: 0.75rem; margin-top: 0.5rem; display: block;">Total: ${dashboard.activeItems} productos activos</small>
                 </div>
 
-                <!-- 2. Valor Venta Total (Stock) -->
-                <div class="inventory-kpi-card card-purple-accent">
-                    <div style="font-size: 2rem; position: absolute; right: 1.5rem; top: 1.5rem; opacity: 0.6;">🏷️</div>
-                    <h3 style="padding-right: 2.5rem;">VALOR VENTA TOTAL (STOCK)</h3>
-                    <div class="value">${formatCLP(dashboard.totalProjected)}</div>
-                    <p class="kpi-extra-info">Recaudación estimada si vendes todo el stock</p>
+                <!-- 2. Valor Venta Proyectado (Stock) -->
+                <div class="inventory-kpi-card card-purple-accent" style="background: white; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); position: relative; overflow: hidden; border-left: 5px solid #8b5cf6;">
+                    <div style="font-size: 2rem; position: absolute; right: 1rem; top: 1rem; opacity: 0.25;">🏷️</div>
+                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.75rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; font-weight: 800;">Venta Proyectada</h4>
+                    <div style="font-size: 1.6rem; font-weight: 900; color: #1e293b; line-height: 1.2;">
+                        ${formatCLP(dashboard.totalProjected)} <span style="font-size: 0.75rem; color: #64748b; font-weight: 700;">Bruto</span>
+                    </div>
+                    <div style="font-size: 1.1rem; font-weight: 700; color: #64748b; margin-top: 0.25rem;">
+                        ${formatCLP(totalProjectedNet)} <span style="font-size: 0.7rem; color: #94a3b8; font-weight: 600;">Neto</span>
+                    </div>
+                    <small style="color: #64748b; font-size: 0.75rem; margin-top: 0.5rem; display: block;">Retorno estimado si vendes todo</small>
                 </div>
 
                 <!-- 3. Ganancia Bruta -->
-                <div class="inventory-kpi-card card-green-accent">
-                    <div style="font-size: 2rem; position: absolute; right: 1.5rem; top: 1.5rem; opacity: 0.6;">📈</div>
-                    <h3 style="padding-right: 2.5rem;">GANANCIA BRUTA (SIN IVA)</h3>
-                    <div class="value">${formatCLP(dashboard.profit)}</div>
-                    <div class="kpi-extra-info" style="border-top-color: rgba(0,0,0,0.08);">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 0.78rem; font-weight: 600;">Margen Global Estimado</span>
-                            <span style="background: #d1fae5; color: #065f46; padding: 0.1rem 0.5rem; border-radius: 1rem; font-size: 0.75rem; font-weight: 700; border: 1px solid #a7f3d0;">+${dashboard.margin.toFixed(1)}%</span>
+                <div class="inventory-kpi-card card-green-accent" style="background: white; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); position: relative; overflow: hidden; border-left: 5px solid #10b981;">
+                    <div style="font-size: 2rem; position: absolute; right: 1rem; top: 1rem; opacity: 0.25;">📈</div>
+                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.75rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; font-weight: 800;">Ganancia Proyectada</h4>
+                    <div style="font-size: 1.6rem; font-weight: 900; color: #10b981; line-height: 1.2;">
+                        +${formatCLP(dashboard.profit)}
+                    </div>
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem; font-size: 0.8rem; font-weight: 700; color: #047857;">
+                        <span>Margen Global:</span>
+                        <span style="background: #d1fae5; padding: 0.15rem 0.5rem; border-radius: 0.5rem; border: 1px solid #a7f3d0;">+${dashboard.margin.toFixed(1)}%</span>
+                    </div>
+                </div>
+
+                <!-- 4. Alerta de Stock Crítico -->
+                <div class="inventory-kpi-card card-red-accent" style="background: white; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); position: relative; overflow: hidden; border-left: 5px solid #ef4444;">
+                    <div style="font-size: 2rem; position: absolute; right: 1rem; top: 1rem; opacity: 0.25;">🚨</div>
+                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.75rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; font-weight: 800;">Stock Crítico</h4>
+                    <div style="display: flex; gap: 1rem; margin-top: 0.25rem;">
+                        <div>
+                            <div style="font-size: 1.4rem; font-weight: 900; color: #b91c1c;">${dashboard.outOfStock}</div>
+                            <small style="color: #64748b; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;">Agotados</small>
+                        </div>
+                        <div style="border-left: 1px solid #cbd5e1; padding-left: 1rem;">
+                            <div style="font-size: 1.4rem; font-weight: 900; color: #d97706;">${dashboard.lowStock}</div>
+                            <small style="color: #64748b; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;">Bajo stock</small>
                         </div>
                     </div>
                 </div>
-
-                <!-- 4. Consumo Interno -->
-                <div class="inventory-kpi-card card-blue-accent" style="cursor: pointer;" onclick="InventoryView.switchSection('consumption-report')">
-                    <div style="font-size: 2rem; position: absolute; right: 1.5rem; top: 1.5rem; opacity: 0.6;">🍴</div>
-                    <h3 style="padding-right: 2.5rem;">CONSUMO INTERNO (MES)</h3>
-                    <div class="value">${formatCLP(dashboard.monthlyConsumption)}</div>
-                    <p class="kpi-extra-info">Gasto acumulado por consumo de la casa</p>
-                </div>
-
-                <!-- 5. Pérdidas -->
-                <div class="inventory-kpi-card card-red-accent" style="cursor: pointer;" onclick="InventoryView.switchSection('loss-report')">
-                    <div style="font-size: 2rem; position: absolute; right: 1.5rem; top: 1.5rem; opacity: 0.6;">🗑️</div>
-                    <h3 style="padding-right: 2.5rem;">PÉRDIDAS (MES)</h3>
-                    <div class="value">${formatCLP(dashboard.monthlyLoss)}</div>
-                    <p class="kpi-extra-info">Valor de mercadería perdida o dañada</p>
-                </div>
-            </div>
             </div>
 
-            <!-- Fila Horizontal de Filtros de Stock (Alertas) -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-                <button class="stock-alert-card alert-low ${this.stockFilter === 'low' ? 'selected' : ''}"
-                        onclick="InventoryView.setStockFilter('low')">
-                    <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <span style="font-size: 1.25rem;">⚠️</span>
-                        <span style="font-size: 0.95rem; font-weight: 700; color: #374151;">Stock Bajo</span>
+            <!-- Fila de Búsqueda, Filtros y Acciones -->
+            <div style="display: flex; gap: 0.75rem; align-items: center; justify-content: space-between; flex-wrap: wrap; background: #f1f5f9; padding: 1rem; border-radius: 1rem; border: 1px solid #cbd5e1; margin-bottom: 1.5rem;">
+                <div style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; flex: 1; min-width: 300px;">
+                    <!-- Buscador -->
+                    <div style="position: relative; flex: 2; min-width: 200px;">
+                        <input type="text" 
+                               id="inventorySearchInput" 
+                               class="form-control" 
+                               placeholder="🔍 Buscar por nombre o código..." 
+                               value="${searchQuery}" 
+                               oninput="InventoryView.handleInventorySearch(this.value)" 
+                               style="padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; background: white; font-size: 0.9rem; width: 100%;">
                     </div>
-                    <span class="alert-badge">${dashboard.lowStock}</span>
-                </button>
+                    
+                    <!-- Categoría -->
+                    <select onchange="InventoryView.handleInventoryCategoryChange(this.value)" 
+                            style="padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; background: white; font-size: 0.9rem; flex: 1; min-width: 150px;">
+                        <option value="">📂 Todas las Categorías</option>
+                        ${categories.map(c => `<option value="${c}" ${c === selectedCat ? 'selected' : ''}>${c}</option>`).join('')}
+                    </select>
+                    
+                    <!-- Estado Stock -->
+                    <select onchange="InventoryView.handleInventoryStockChange(this.value)" 
+                            style="padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; background: white; font-size: 0.9rem; flex: 1; min-width: 150px;">
+                        <option value="all" ${selectedStatus === 'all' ? 'selected' : ''}>📈 Todos los Stocks</option>
+                        <option value="low" ${selectedStatus === 'low' ? 'selected' : ''}>⚠️ Stock Bajo</option>
+                        <option value="out" ${selectedStatus === 'out' ? 'selected' : ''}>🚨 Agotados</option>
+                        <option value="optimum" ${selectedStatus === 'optimum' ? 'selected' : ''}>✅ Stock Óptimo</option>
+                    </select>
+
+                    <!-- Proveedor -->
+                    <select onchange="InventoryView.handleInventorySupplierChange(this.value)" 
+                            style="padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; background: white; font-size: 0.9rem; flex: 1; min-width: 150px;">
+                        <option value="">👤 Todos los Proveedores</option>
+                        ${suppliers.map(s => `<option value="${s.id}" ${String(s.id) === selectedSupplier ? 'selected' : ''}>${s.name}</option>`).join('')}
+                    </select>
+                </div>
                 
-                <button class="stock-alert-card alert-out ${this.stockFilter === 'out' ? 'selected' : ''}"
-                        onclick="InventoryView.setStockFilter('out')">
-                    <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <span style="font-size: 1.25rem;">🛑</span>
-                        <span style="font-size: 0.95rem; font-weight: 700; color: #374151;">Sin Stock</span>
-                    </div>
-                    <span class="alert-badge">${dashboard.outOfStock}</span>
-                </button>
-                
-                <button class="stock-alert-card alert-expiring ${this.stockFilter === 'expiring' ? 'selected' : ''}"
-                        onclick="InventoryView.setStockFilter('expiring')">
-                    <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <span style="font-size: 1.25rem;">⏳</span>
-                        <span style="font-size: 0.95rem; font-weight: 700; color: #374151;">Próx. a vencer</span>
-                    </div>
-                    <span class="alert-badge">${dashboard.expiringSoon}</span>
-                </button>
+                <!-- Exportar -->
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn btn-secondary" onclick="InventoryView.exportInventoryCSV()" style="padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.85rem; background: white; border: 1px solid #cbd5e1; display: flex; align-items: center; gap: 0.25rem;">
+                        📊 Excel/CSV
+                    </button>
+                    <button class="btn btn-secondary" onclick="InventoryView.exportInventoryPDF()" style="padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.85rem; background: white; border: 1px solid #cbd5e1; display: flex; align-items: center; gap: 0.25rem;">
+                        📄 Imprimir PDF
+                    </button>
+                </div>
             </div>
 
             <!-- Distribución de Capital Colapsable -->
-            <div style="margin-bottom: 2rem;">
+            <div style="margin-bottom: 1.5rem;">
                 <button class="capital-toggle-btn" 
-                        onclick="InventoryView.toggleCapitalDistribution()">
+                        onclick="InventoryView.toggleCapitalDistribution()"
+                        style="width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 1.25rem; border-radius: 0.75rem; border: 1px solid #e2e8f0; background: #f8fafc; font-weight: 600; color: #475569; cursor: pointer; transition: all 0.2s;">
                     <span><span style="margin-right:0.5rem">🧩</span> Ver Distribución de Capital por Categoría</span>
                     <span>${this.showCapitalDist ? '▲ Ocultar' : '▼ Mostrar Detalles'}</span>
                 </button>
@@ -411,30 +450,29 @@ const InventoryView = {
                         ${dashboard.categoryDistribution.map(cat => {
                             const barColor = cat.percent > 15 ? '#3b82f6' : (cat.percent > 5 ? '#10b981' : '#64748b');
                             return `
-                            <div class="capital-dist-card">
+                            <div class="capital-dist-card" style="background: white; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
-                                    <h4 style="margin: 0; font-size: 1rem; color: #1e293b; text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65%; font-weight: 700;">${safeHTML(cat.name)}</h4>
+                                    <h4 style="margin: 0; font-size: 0.95rem; color: #1e293b; text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 65%; font-weight: 700;">${safeHTML(cat.name)}</h4>
                                     <div style="text-align: right;">
-                                        <div style="font-size: 0.85rem; font-weight: 800; color: ${barColor};">${cat.percent.toFixed(1)}% peso</div>
+                                        <div style="font-size: 0.8rem; font-weight: 800; color: ${barColor};">${cat.percent.toFixed(1)}% peso</div>
                                         <div style="font-size: 0.75rem; color: #059669; font-weight: 700;">+${cat.margin.toFixed(1)}% mg</div>
                                     </div>
                                 </div>
                                 
-                                <div style="display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 1rem; border-top: 1px solid #f1f5f9; padding-top: 0.75rem; margin-top: 0.75rem;">
+                                <div style="display: flex; flex-direction: column; gap: 0.35rem; margin-bottom: 0.75rem; border-top: 1px solid #f1f5f9; padding-top: 0.5rem; margin-top: 0.5rem;">
                                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                                        <span style="font-size: 0.8rem; color: #64748b; font-weight: 500;">Capital:</span>
-                                        <span style="font-size: 1.05rem; font-weight: 800; color: #1e293b;">${formatCLP(cat.capital)}</span>
+                                        <span style="font-size: 0.75rem; color: #64748b; font-weight: 500;">Capital:</span>
+                                        <span style="font-size: 0.95rem; font-weight: 800; color: #1e293b;">${formatCLP(cat.capital)}</span>
                                     </div>
                                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                                        <span style="font-size: 0.8rem; color: #059669; font-weight: 600;">G. Bruta:</span>
-                                        <span style="font-size: 1.05rem; font-weight: 800; color: #10b981;">+${formatCLP(cat.profit)}</span>
+                                        <span style="font-size: 0.75rem; color: #059669; font-weight: 600;">G. Bruta:</span>
+                                        <span style="font-size: 0.95rem; font-weight: 800; color: #10b981;">+${formatCLP(cat.profit)}</span>
                                     </div>
                                 </div>
 
-                                <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.75rem; font-weight: 500;">${cat.count} productos registrados</div>
+                                <div style="font-size: 0.7rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 500;">${cat.count} productos</div>
                                 
-                                <!-- Barra de progreso visual -->
-                                <div style="width: 100%; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
+                                <div style="width: 100%; height: 5px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
                                     <div style="width: ${cat.percent}%; height: 100%; background: linear-gradient(90deg, ${barColor}, ${barColor}dd); border-radius: 3px;"></div>
                                 </div>
                             </div>
@@ -444,13 +482,298 @@ const InventoryView = {
                 </div>` : ''}
             </div>
 
-            ${this.stockFilter ? this.renderStockAlerts() : this.renderRecentMovements()}
+            <!-- Tabla Principal del Inventario -->
+            <div class="table-container card glass-panel" style="padding: 1rem; border-radius: 1.25rem;">
+                <div id="inventory-table-wrapper">
+                    ${this.renderInventoryTableHTML(this.getFilteredProducts())}
+                </div>
+            </div>
         `;
     },
 
-    toggleCapitalDistribution() {
-        this.showCapitalDist = !this.showCapitalDist;
-        app.navigate('inventory');
+    // Métodos auxiliares para filtrado, visualización y exportación de stock
+    getFilteredProducts() {
+        const searchQuery = (this.inventorySearchQuery || '').toLowerCase().trim();
+        const catFilter = this.inventorySelectedCategory;
+        const statusFilter = this.inventorySelectedStockStatus;
+        const supplierFilter = this.inventorySelectedSupplier;
+
+        return this.products.filter(p => {
+            if (p.deleted) return false;
+            
+            // Búsqueda de texto
+            if (searchQuery) {
+                const nameMatch = (p.name || '').toLowerCase().includes(searchQuery);
+                const codeMatch = (p.barcode || '').toLowerCase().includes(searchQuery);
+                if (!nameMatch && !codeMatch) return false;
+            }
+            
+            // Filtro de categoría
+            if (catFilter && p.category !== catFilter) return false;
+            
+            // Filtro de proveedor
+            if (supplierFilter && String(p.supplierId) !== supplierFilter) return false;
+            
+            // Filtro de estado de stock
+            const stock = parseFloat(p.stock) || 0;
+            const minStock = parseFloat(p.minStock) || 0;
+            
+            if (statusFilter === 'low') {
+                if (stock <= 0 || stock > minStock || minStock === 0) return false;
+            } else if (statusFilter === 'out') {
+                if (stock > 0) return false;
+            } else if (statusFilter === 'optimum') {
+                if (stock <= minStock && minStock > 0) return false;
+            }
+            
+            return true;
+        });
+    },
+
+    renderInventoryTableHTML(filtered) {
+        if (filtered.length === 0) {
+            return `
+                <div style="text-align: center; padding: 3rem; color: #64748b;">
+                    <span style="font-size: 3rem; display: block; margin-bottom: 1rem;">🔍</span>
+                    No se encontraron productos con los filtros seleccionados.
+                </div>
+            `;
+        }
+
+        const rows = filtered.map(p => {
+            const stock = parseFloat(p.stock) || 0;
+            const minStock = parseFloat(p.minStock) || 0;
+            const cost = parseFloat(p.cost) || 0;
+            const price = parseFloat(p.price) || 0;
+            
+            const priceNet = price / 1.19;
+            const profit = priceNet - cost;
+            const margin = cost > 0 ? (profit / cost * 100) : 0;
+            
+            // Alertas de Vencimiento
+            let expiryHtml = '';
+            if (p.expiryDate) {
+                const thirtyDays = new Date();
+                thirtyDays.setDate(thirtyDays.getDate() + 30);
+                const expiry = new Date(p.expiryDate);
+                const today = new Date();
+                const isExpired = expiry <= today;
+                const isExpiringSoon = expiry <= thirtyDays && !isExpired;
+                
+                const expDateFormatted = p.expiryDate.split('-').reverse().join('-');
+                if (isExpired) {
+                    expiryHtml = `<div style="color: #ef4444; font-size: 0.75rem; font-weight: 800; margin-top: 0.25rem;">🚨 Expirado: ${expDateFormatted}</div>`;
+                } else if (isExpiringSoon) {
+                    expiryHtml = `<div style="color: #ca8a04; font-size: 0.75rem; font-weight: 800; margin-top: 0.25rem;">⚠️ Vence pronto: ${expDateFormatted}</div>`;
+                } else {
+                    expiryHtml = `<div style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem;">📅 Vence: ${expDateFormatted}</div>`;
+                }
+            }
+
+            // Colores y badges de stock
+            let rowStyle = '';
+            let stockBadge = '';
+            
+            if (stock <= 0) {
+                rowStyle = 'background-color: #fef2f2;';
+                stockBadge = `<span style="background: #fee2e2; color: #ef4444; padding: 0.15rem 0.4rem; border-radius: 0.375rem; font-size: 0.7rem; font-weight: 800; border: 1px solid rgba(239,68,68,0.2); margin-left: 0.5rem; white-space: nowrap;">🚨 AGOTADO</span>`;
+            } else if (stock <= minStock && minStock > 0) {
+                rowStyle = 'background-color: #fffbeb;';
+                stockBadge = `<span style="background: #fef9c3; color: #d97706; padding: 0.15rem 0.4rem; border-radius: 0.375rem; font-size: 0.7rem; font-weight: 800; border: 1px solid rgba(217,119,6,0.2); margin-left: 0.5rem; white-space: nowrap;">⚠️ STOCK BAJO</span>`;
+            }
+
+            const isWeight = p.type === 'weight';
+            const decimals = isWeight ? 3 : 0;
+            const unit = isWeight ? 'kg' : 'un';
+
+            return `
+                <tr style="border-bottom: 1px solid #e2e8f0; font-size: 0.875rem; color: #374151; ${rowStyle} transition: background 0.15s;" onmouseover="this.style.background='rgba(0,0,0,0.02)'" onmouseout="this.style.background='transparent'">
+                    <td style="padding: 0.85rem 0.75rem; font-family: monospace; font-size: 0.8rem; font-weight: bold; color: #64748b;">
+                        ${safeHTML(p.barcode || '—')}
+                    </td>
+                    <td style="padding: 0.85rem 0.75rem;">
+                        <strong style="color: #1e293b; font-size: 0.95rem;">${safeHTML(p.name)}</strong>
+                        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.15rem;">Categoría: ${safeHTML(p.category || 'General')}</div>
+                        ${expiryHtml}
+                    </td>
+                    <td style="padding: 0.85rem 0.75rem; color: #475569; font-weight: 500;">
+                        ${safeHTML(p.supplierName || '—')}
+                    </td>
+                    <td style="padding: 0.85rem 0.75rem; text-align: center;">
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                            <span style="font-weight: 800; font-size: 1rem; color: #1e293b;">
+                                ${formatStock(stock, decimals)} ${unit}
+                            </span>
+                            ${stockBadge}
+                            <button class="btn btn-sm btn-secondary" onclick="InventoryView.quickAdjustment(${p.id})" style="padding: 0.2rem 0.4rem; font-size: 0.75rem; border-radius: 0.375rem; border: 1px solid #cbd5e1; background: white;" title="Ajustar stock">
+                                ✏️
+                            </button>
+                        </div>
+                        <small style="color: #64748b; font-size: 0.7rem;">Mín: ${minStock} ${unit}</small>
+                    </td>
+                    <td style="padding: 0.85rem 0.75rem; text-align: right; font-weight: 700; color: #475569;">
+                        ${formatCLP(cost)}
+                    </td>
+                    <td style="padding: 0.85rem 0.75rem; text-align: right; font-weight: 700; color: #2563eb;">
+                        ${formatCLP(price)}
+                    </td>
+                    <td style="padding: 0.85rem 0.75rem; text-align: center;">
+                        <span style="background: ${margin >= 0 ? '#ecfdf5' : '#fef2f2'}; color: ${margin >= 0 ? '#047857' : '#b91c1c'}; padding: 0.25rem 0.5rem; border-radius: 0.5rem; font-weight: 800; font-size: 0.8rem; border: 1px solid ${margin >= 0 ? '#a7f3d0' : '#fecaca'};">
+                            ${margin >= 0 ? '+' : ''}${margin.toFixed(1)}%
+                        </span>
+                    </td>
+                    <td style="padding: 0.85rem 0.75rem; text-align: right; white-space: nowrap;">
+                        <button class="btn btn-sm btn-primary" onclick="InventoryView.showKardex(${p.id})" style="border-radius: 0.5rem; font-weight: 700; padding: 0.35rem 0.75rem;">
+                            📋 Kardex
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        return `
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="border-bottom: 2px solid #cbd5e1; text-align: left; font-size: 0.8rem; color: #475569; text-transform: uppercase; font-weight: 800; background: #f8fafc;">
+                        <th style="padding: 0.75rem; width: 140px;">Cód. Barra</th>
+                        <th style="padding: 0.75rem;">Producto</th>
+                        <th style="padding: 0.75rem;">Proveedor</th>
+                        <th style="padding: 0.75rem; text-align: center; width: 180px;">Stock Actual</th>
+                        <th style="padding: 0.75rem; text-align: right; width: 110px;">Costo Neto</th>
+                        <th style="padding: 0.75rem; text-align: right; width: 110px;">P. Venta (Bruto)</th>
+                        <th style="padding: 0.75rem; text-align: center; width: 90px;">Margen %</th>
+                        <th style="padding: 0.75rem; text-align: right; width: 110px;">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rows}
+                </tbody>
+            </table>
+        `;
+    },
+
+    handleInventorySearch(value) {
+        this.inventorySearchQuery = value;
+        this.updateInventoryTableFiltered();
+    },
+
+    handleInventoryCategoryChange(value) {
+        this.inventorySelectedCategory = value;
+        this.updateInventoryTableFiltered();
+    },
+
+    handleInventoryStockChange(value) {
+        this.inventorySelectedStockStatus = value;
+        this.updateInventoryTableFiltered();
+    },
+
+    handleInventorySupplierChange(value) {
+        this.inventorySelectedSupplier = value;
+        this.updateInventoryTableFiltered();
+    },
+
+    updateInventoryTableFiltered() {
+        const wrapper = document.getElementById('inventory-table-wrapper');
+        if (wrapper) {
+            wrapper.innerHTML = this.renderInventoryTableHTML(this.getFilteredProducts());
+        }
+    },
+
+    exportInventoryCSV() {
+        const filtered = this.getFilteredProducts();
+        if (filtered.length === 0) {
+            showNotification('No hay datos para exportar', 'warning');
+            return;
+        }
+        let csvContent = 'Código Barra;Producto;Categoría;Proveedor;Stock;Costo Neto;Precio Venta;Margen %\n';
+        filtered.forEach(p => {
+            const stock = parseFloat(p.stock) || 0;
+            const cost = parseFloat(p.cost) || 0;
+            const price = parseFloat(p.price) || 0;
+            const priceNet = price / 1.19;
+            const profit = priceNet - cost;
+            const margin = cost > 0 ? (profit / cost * 100) : 0;
+            
+            csvContent += `"${p.barcode || ''}";"${p.name.replace(/"/g, '""')}";"${(p.category || 'General').replace(/"/g, '""')}";"${(p.supplierName || 'Sin proveedor').replace(/"/g, '""')}";${stock};${cost};${price};${margin.toFixed(1)}%\n`;
+        });
+        
+        const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute('download', `inventario_${new Date().toLocaleDateString('sv-SE')}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showNotification('Excel/CSV exportado', 'success');
+    },
+
+    exportInventoryPDF() {
+        const filtered = this.getFilteredProducts();
+        if (filtered.length === 0) {
+            showNotification('No hay datos para exportar', 'warning');
+            return;
+        }
+        const printWindow = window.open('', '_blank');
+        let rowsHtml = '';
+        filtered.forEach(p => {
+            const stock = parseFloat(p.stock) || 0;
+            const cost = parseFloat(p.cost) || 0;
+            const price = parseFloat(p.price) || 0;
+            rowsHtml += `
+                <tr>
+                    <td>${p.barcode || '—'}</td>
+                    <td><strong>${p.name}</strong><br><small>${p.category || 'General'}</small></td>
+                    <td>${p.supplierName || '—'}</td>
+                    <td class="center">${stock} ${p.type === 'weight' ? 'kg' : 'un'}</td>
+                    <td class="right">${formatCLP(cost)}</td>
+                    <td class="right">${formatCLP(price)}</td>
+                </tr>
+            `;
+        });
+        
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Reporte de Inventario - ${new Date().toLocaleDateString()}</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+                    h1 { text-align: center; color: #111; margin-bottom: 5px; }
+                    p { text-align: center; color: #666; margin-top: 0; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                    th, td { border: 1px solid #ddd; padding: 8px; font-size: 11px; }
+                    th { background-color: #f2f2f2; text-align: left; }
+                    .center { text-align: center; }
+                    .right { text-align: right; }
+                </style>
+            </head>
+            <body>
+                <h1>REPORTE DE INVENTARIO</h1>
+                <p>Fecha de emisión: ${new Date().toLocaleString()}</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Cód. Barra</th>
+                            <th>Producto</th>
+                            <th>Proveedor</th>
+                            <th class="center">Stock</th>
+                            <th class="right">Costo Neto</th>
+                            <th class="right">Precio Venta</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rowsHtml}
+                    </tbody>
+                </table>
+                <script>
+                    window.onload = function() {
+                        window.print();
+                        window.close();
+                    };
+                </script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
     },
 
     renderBulkAdjustmentForm() {
@@ -535,23 +858,92 @@ const InventoryView = {
         app.navigate('inventory');
     },
 
-    renderConsumptionReport() {
+    renderLossesTab(dashboard) {
+        const lossesSearchQuery = this.lossesSearchQuery || '';
+        const selectedDateCons = this.selectedConsumptionDate || new Date().toLocaleDateString('sv-SE');
+        const selectedDateLoss = this.selectedLossDate || new Date().toLocaleDateString('sv-SE');
+
         return `
-            <div class="card">
-                <h3 style="margin-bottom: 1.5rem;">Reporte de Consumo Interno</h3>
-                <div id="consumptionReportContent">
-                    <div style="text-align: center; padding: 2rem;">Cargando...</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem; margin-bottom: 1.5rem;">
+                <!-- Tarjeta Pérdidas Mes -->
+                <div class="inventory-kpi-card card-red-accent" style="background: white; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); position: relative; overflow: hidden; border-left: 5px solid #ef4444;">
+                    <div style="font-size: 2rem; position: absolute; right: 1rem; top: 1rem; opacity: 0.25;">🗑️</div>
+                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.75rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; font-weight: 800;">Pérdidas / Mermas (Mes Actual)</h4>
+                    <div style="font-size: 1.8rem; font-weight: 900; color: #ef4444;">
+                        ${formatCLP(dashboard.monthlyLoss)}
+                    </div>
+                    <small style="color: #64748b; font-size: 0.75rem; margin-top: 0.5rem; display: block;">Costo total acumulado de mercadería perdida</small>
+                </div>
+
+                <!-- Tarjeta Consumos Mes -->
+                <div class="inventory-kpi-card card-blue-accent" style="background: white; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); position: relative; overflow: hidden; border-left: 5px solid #3b82f6;">
+                    <div style="font-size: 2rem; position: absolute; right: 1rem; top: 1rem; opacity: 0.25;">🍴</div>
+                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.75rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; font-weight: 800;">Consumo de la Casa (Mes Actual)</h4>
+                    <div style="font-size: 1.8rem; font-weight: 900; color: #3b82f6;">
+                        ${formatCLP(dashboard.monthlyConsumption)}
+                    </div>
+                    <small style="color: #64748b; font-size: 0.75rem; margin-top: 0.5rem; display: block;">Costo total acumulado de mercadería consumida</small>
                 </div>
             </div>
-        `;
-    },
 
-    renderLossReport() {
-        return `
-            <div class="card">
-                <h3 style="margin-bottom: 1.5rem;">Reporte de Pérdidas</h3>
-                <div id="lossReportContent">
-                    <div style="text-align: center; padding: 2rem;">Cargando...</div>
+            <!-- Formulario de Registro de Egreso de Stock -->
+            <div class="card" style="background: white; border: 1.5px solid #cbd5e1; border-radius: 1.25rem; padding: 1.5rem; margin-bottom: 2rem;">
+                <h3 style="margin-top: 0; margin-bottom: 1rem; color: #1e293b; font-size: 1.15rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
+                    <span>🚨</span> Registrar Egresos de Stock (Merma / Consumo)
+                </h3>
+                
+                <div style="display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap;">
+                    <!-- Buscador -->
+                    <div style="position: relative; flex: 2; min-width: 250px;">
+                        <label style="font-size: 0.8rem; font-weight: 700; color: #475569; display: block; margin-bottom: 0.35rem;">Buscar Producto:</label>
+                        <input type="text" 
+                               id="lossesSearchInput" 
+                               class="form-control" 
+                               placeholder="🔍 Escribe nombre o código de barras..." 
+                               value="${lossesSearchQuery}" 
+                               oninput="InventoryView.handleLossesSearch(event)" 
+                               style="padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; width: 100%; font-size: 0.9rem;">
+                        <div id="lossesSearchResults" class="search-results" style="display: none; position: absolute; left: 0; right: 0; background: white; border: 1px solid #cbd5e1; border-radius: 0.5rem; max-height: 250px; overflow-y: auto; z-index: 100; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);"></div>
+                    </div>
+
+                    <!-- Si hay producto seleccionado, mostramos sus detalles de forma compacta en línea -->
+                    <div id="lossesSelectedProductPanel" style="flex: 3; min-width: 300px; display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 0.75rem 1rem;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Grilla de Reportes Diarios Recientes (Lado a Lado) -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+                <!-- Panel Consumos -->
+                <div class="card" style="padding: 1.25rem; border-radius: 1.25rem; border: 1.5px solid #cbd5e1; background: white; margin-bottom: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+                        <h4 style="margin: 0; color: #1e3a8a; font-weight: 800; display: flex; align-items: center; gap: 0.35rem;">
+                            <span>🍴</span> Historial de Consumos
+                        </h4>
+                        <!-- Input fecha -->
+                        <input type="date" value="${selectedDateCons}" 
+                               onchange="InventoryView.setConsumptionDate(this.value)"
+                               style="background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-size: 0.85rem; font-weight: 700; outline: none; cursor: pointer;">
+                    </div>
+                    <div id="consumptionReportContent">
+                        <div style="text-align: center; padding: 2rem; color: #64748b;">Cargando consumos...</div>
+                    </div>
+                </div>
+
+                <!-- Panel Pérdidas -->
+                <div class="card" style="padding: 1.25rem; border-radius: 1.25rem; border: 1.5px solid #cbd5e1; background: white; margin-bottom: 0;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+                        <h4 style="margin: 0; color: #991b1b; font-weight: 800; display: flex; align-items: center; gap: 0.35rem;">
+                            <span>🗑️</span> Historial de Pérdidas
+                        </h4>
+                        <!-- Input fecha -->
+                        <input type="date" value="${selectedDateLoss}" 
+                               onchange="InventoryView.setLossDate(this.value)"
+                               style="background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-size: 0.85rem; font-weight: 700; outline: none; cursor: pointer;">
+                    </div>
+                    <div id="lossReportContent">
+                        <div style="text-align: center; padding: 2rem; color: #64748b;">Cargando pérdidas...</div>
+                    </div>
                 </div>
             </div>
         `;
@@ -828,9 +1220,9 @@ const InventoryView = {
             }
         }
 
-        if (this.currentSection === 'consumption-report') {
+        if (this.currentSection === 'losses') {
+            this.setupLossesSearchListeners();
             await this.loadConsumptionReport();
-        } else if (this.currentSection === 'loss-report') {
             await this.loadLossReport();
         } else if (this.currentSection === 'bulk-adjustment') {
             this.setupBulkSearchListeners();
@@ -884,6 +1276,239 @@ const InventoryView = {
         document.removeEventListener('click', document._bulkCloseDropdown);
         document._bulkCloseDropdown = closeDropdown;
         document.addEventListener('click', closeDropdown);
+    },
+
+    setupLossesSearchListeners() {
+        const searchInput = document.getElementById('lossesSearchInput');
+        const resultsContainer = document.getElementById('lossesSearchResults');
+        if (!searchInput || !resultsContainer) return;
+        
+        const onKeydown = async (e) => {
+            const items = resultsContainer.querySelectorAll('.search-result-item');
+            const visible = resultsContainer.style.display !== 'none' && items.length > 0;
+            let idx = -1;
+            items.forEach((it, i) => { if (it.classList.contains('selected')) idx = i; });
+            if (e.key === 'Escape') {
+                resultsContainer.innerHTML = '';
+                resultsContainer.style.display = 'none';
+                searchInput.value = '';
+                return;
+            }
+            if (e.key === 'ArrowDown' && visible) {
+                e.preventDefault();
+                const next = (idx + 1) % items.length;
+                this.highlightLossesResult(next);
+                return;
+            }
+            if (e.key === 'ArrowUp' && visible) {
+                e.preventDefault();
+                const prev = (idx <= 0 ? items.length - 1 : idx - 1);
+                this.highlightLossesResult(prev);
+                return;
+            }
+            if (e.key === 'Enter' && visible) {
+                e.preventDefault();
+                const sel = idx >= 0 ? items[idx] : items[0];
+                const id = sel && (sel.dataset.productId || sel.getAttribute('data-product-id'));
+                if (id) this.selectLossesProduct(parseInt(id, 10));
+                return;
+            }
+        };
+        searchInput.removeEventListener('keydown', searchInput._lossesKeydown);
+        searchInput._lossesKeydown = onKeydown;
+        searchInput.addEventListener('keydown', onKeydown);
+        
+        const closeDropdown = (e) => {
+            if (resultsContainer && searchInput && !searchInput.contains(e.target) && !resultsContainer.contains(e.target)) {
+                resultsContainer.style.display = 'none';
+            }
+        };
+        document.removeEventListener('click', document._lossesCloseDropdown);
+        document._lossesCloseDropdown = closeDropdown;
+        document.addEventListener('click', closeDropdown);
+    },
+
+    highlightLossesResult(index, isMouse = false) {
+        if (isMouse && document.body.classList.contains('keyboard-nav')) return;
+        const resultsContainer = document.getElementById('lossesSearchResults');
+        if (!resultsContainer) return;
+        const items = resultsContainer.querySelectorAll('.search-result-item');
+        items.forEach((item, i) => item.classList.toggle('selected', i === index));
+        const target = resultsContainer.querySelector(`.search-result-item[data-index="${index}"]`);
+        if (target) target.scrollIntoView({ block: 'nearest' });
+    },
+
+    async handleLossesSearch(event) {
+        const term = event.target.value.trim();
+        const resultsContainer = document.getElementById('lossesSearchResults');
+        const searchInput = document.getElementById('lossesSearchInput');
+        if (!resultsContainer || !searchInput) return;
+
+        const isBarcode = term.length >= 8 && !isNaN(term);
+        if (isBarcode) {
+            const product = await Product.getByBarcode(term);
+            if (product) {
+                searchInput.value = '';
+                resultsContainer.style.display = 'none';
+                this.selectLossesProduct(product.id);
+                return;
+            }
+        }
+
+        if (term.length < 2) {
+            resultsContainer.innerHTML = '';
+            resultsContainer.style.display = 'none';
+            return;
+        }
+
+        if (this.lossesSearchTimeout) clearTimeout(this.lossesSearchTimeout);
+        this.lossesSearchTimeout = setTimeout(async () => {
+            const products = await Product.search(term);
+            this.showLossesSearchDropdown(products);
+        }, 280);
+    },
+
+    showLossesSearchDropdown(products) {
+        const resultsContainer = document.getElementById('lossesSearchResults');
+        if (!resultsContainer) return;
+        if (!products || products.length === 0) {
+            resultsContainer.innerHTML = '<div style="padding: 1rem; color: #991b1b; background: #fef2f2; font-weight: 700; text-align: center;">❌ No se encontraron productos</div>';
+            resultsContainer.style.display = 'block';
+            return;
+        }
+        resultsContainer.innerHTML = products.map((p, index) => {
+            const isWeight = p.type === 'weight';
+            const stockIcon = p.stock <= 0 ? '❌' : (p.stock <= (isWeight ? 1 : 5) ? '⚠️' : '✅');
+            return `
+                <div class="search-result-item ${index === 0 ? 'selected' : ''}" 
+                     data-index="${index}"
+                     data-product-id="${p.id}"
+                     onmouseover="InventoryView.highlightLossesResult(${index}, true)"
+                     onclick="InventoryView.selectLossesProduct(${p.id})">
+                    <div style="flex: 1; padding: 0.5rem 0.75rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #f1f5f9;">
+                        <div>
+                            <div style="font-weight: 700; color: #1e293b;">${safeHTML(p.name)}</div>
+                            <small style="color: #64748b;">CÓD: ${safeHTML(p.barcode || 'S/N')}</small>
+                        </div>
+                        <div style="font-size: 0.85rem; font-weight: bold; color: #475569;">
+                            ${stockIcon} ${formatStock(p.stock)} ${isWeight ? 'kg' : 'un'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        resultsContainer.style.display = 'block';
+        if (products.length > 0) this.highlightLossesResult(0);
+    },
+
+    async selectLossesProduct(productId) {
+        const resultsContainer = document.getElementById('lossesSearchResults');
+        const searchInput = document.getElementById('lossesSearchInput');
+        if (resultsContainer) { resultsContainer.innerHTML = ''; resultsContainer.style.display = 'none'; }
+        if (searchInput) searchInput.value = '';
+        
+        const product = await Product.getById(productId);
+        if (!product) return;
+        
+        this.selectedLossesProductData = product;
+        
+        const panel = document.getElementById('lossesSelectedProductPanel');
+        if (!panel) return;
+        
+        const isWeight = product.type === 'weight';
+        const unit = isWeight ? 'kg' : 'un';
+        
+        panel.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; width: 100%;">
+                <div>
+                    <strong style="color: #1e293b; font-size: 1.05rem;">${safeHTML(product.name)}</strong>
+                    <div style="font-size: 0.75rem; color: #64748b;">Stock: ${product.stock} ${unit} | Costo: ${formatCLP(product.cost)}</div>
+                </div>
+                
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <div style="width: 90px;">
+                        <input type="number" id="lossesQtyInput" class="form-control" placeholder="Cant." min="0.001" step="any" style="padding: 0.4rem; font-size: 0.9rem; text-align: center;" required>
+                    </div>
+                    
+                    <div style="display: flex; gap: 0.25rem; background: #e2e8f0; padding: 0.2rem; border-radius: 0.5rem;">
+                        <label style="padding: 0.35rem 0.6rem; font-size: 0.8rem; font-weight: 700; color: #475569; display: flex; align-items: center; gap: 0.2rem; cursor: pointer; border-radius: 0.375rem;" id="lblTypeLoss">
+                            <input type="radio" name="lossesType" value="loss" checked style="display: none;" onchange="document.getElementById('lblTypeLoss').style.background='white'; document.getElementById('lblTypeLoss').style.color='#ef4444'; document.getElementById('lblTypeCons').style.background='transparent'; document.getElementById('lblTypeCons').style.color='#475569';">
+                            🗑️ Merma
+                        </label>
+                        <label style="padding: 0.35rem 0.6rem; font-size: 0.8rem; font-weight: 700; color: #475569; display: flex; align-items: center; gap: 0.2rem; cursor: pointer; border-radius: 0.375rem;" id="lblTypeCons">
+                            <input type="radio" name="lossesType" value="consumption" style="display: none;" onchange="document.getElementById('lblTypeCons').style.background='white'; document.getElementById('lblTypeCons').style.color='#3b82f6'; document.getElementById('lblTypeLoss').style.background='transparent'; document.getElementById('lblTypeLoss').style.color='#475569';">
+                            🍴 Consumo
+                        </label>
+                    </div>
+
+                    <div>
+                        <input type="text" id="lossesReasonInput" class="form-control" placeholder="Motivo (ej: Vencido)" style="padding: 0.4rem; font-size: 0.9rem; width: 140px;">
+                    </div>
+
+                    <button class="btn btn-primary" onclick="InventoryView.saveQuickLossOrConsumption()" style="padding: 0.45rem 1rem; font-weight: 800; font-size: 0.85rem; background: #10b981; border: none; border-radius: 0.5rem;">
+                        Registrar
+                    </button>
+                    
+                    <button class="btn btn-secondary" onclick="InventoryView.cancelLossesSelection()" style="padding: 0.45rem; font-size: 0.85rem; border-radius: 0.5rem; background: white; border: 1px solid #cbd5e1; color: #475569;">
+                        ✖
+                    </button>
+                </div>
+            </div>
+        `;
+        panel.style.display = 'block';
+        
+        document.getElementById('lblTypeLoss').style.background = 'white';
+        document.getElementById('lblTypeLoss').style.color = '#ef4444';
+        
+        const qtyInp = document.getElementById('lossesQtyInput');
+        if (qtyInp) {
+            qtyInp.focus();
+            qtyInp.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.saveQuickLossOrConsumption();
+                }
+            });
+        }
+    },
+    
+    cancelLossesSelection() {
+        this.selectedLossesProductData = null;
+        const panel = document.getElementById('lossesSelectedProductPanel');
+        if (panel) panel.style.display = 'none';
+    },
+
+    async saveQuickLossOrConsumption() {
+        if (!this.selectedLossesProductData) return;
+        const p = this.selectedLossesProductData;
+        const qtyInput = document.getElementById('lossesQtyInput');
+        const reasonInput = document.getElementById('lossesReasonInput');
+        
+        if (!qtyInput) return;
+        const qty = parseFloat(qtyInput.value);
+        if (isNaN(qty) || qty <= 0) {
+            showNotification('Ingresa una cantidad mayor a 0', 'warning');
+            return;
+        }
+        
+        const selectedType = document.querySelector('input[name="lossesType"]:checked')?.value || 'loss';
+        const reason = (reasonInput?.value || '').trim() || (selectedType === 'loss' ? 'Pérdida registrada manualmente' : 'Consumo registrado manualmente');
+        
+        try {
+            if (selectedType === 'loss') {
+                await StockService.createLoss(p.id, qty, reason);
+            } else {
+                await StockService.createConsumption(p.id, qty, reason);
+            }
+            
+            showNotification('Egreso registrado correctamente', 'success');
+            this.selectedLossesProductData = null;
+            
+            await this.refreshData();
+            app.navigate('inventory');
+        } catch (err) {
+            showNotification(err.message, 'error');
+        }
     },
 
     selectedProducts: [],
@@ -2559,20 +3184,20 @@ const InventoryView = {
             (p.stock || 0) <= (p.minStock || 0)
         );
 
-        // Group by category
+        // Group by supplier
         const grouped = lowStockProducts.reduce((acc, p) => {
-            const cat = p.category || 'General';
-            if (!acc[cat]) acc[cat] = [];
-            acc[cat].push(p);
+            const supplier = p.supplierName || 'Sin proveedor';
+            if (!acc[supplier]) acc[supplier] = [];
+            acc[supplier].push(p);
             return acc;
         }, {});
 
-        const categories = Object.keys(grouped).sort();
+        const suppliers = Object.keys(grouped).sort();
 
-        let categoriesHtml = '';
+        let suppliersHtml = '';
 
-        if (categories.length === 0) {
-            categoriesHtml = `
+        if (suppliers.length === 0) {
+            suppliersHtml = `
                 <div class="card" style="text-align: center; padding: 3rem; background: #f0fdf4; border: 1.5px solid #bbf7d0; border-radius: 1rem;">
                     <span style="font-size: 3rem; display: block; margin-bottom: 1rem;">🎉</span>
                     <h3 style="color: #166534; margin: 0 0 0.5rem 0; font-weight: 800;">¡Todo al día!</h3>
@@ -2580,9 +3205,9 @@ const InventoryView = {
                 </div>
             `;
         } else {
-            categoriesHtml = categories.map(catName => {
-                const items = grouped[catName];
-                const isCollapsed = this.collapsedSuggestions[catName] === true;
+            suppliersHtml = suppliers.map(supplierName => {
+                const items = grouped[supplierName];
+                const isCollapsed = this.collapsedSuggestions[supplierName] === true;
                 const chevron = isCollapsed ? '▼' : '▲';
                 const listHtml = isCollapsed ? '' : `
                     <div style="padding: 0; border-top: 1px solid #e2e8f0; overflow-x: auto;">
@@ -2590,11 +3215,10 @@ const InventoryView = {
                             <thead style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
                                 <tr>
                                     <th style="text-align: left; padding: 0.75rem 1rem; color: #475569; font-weight: 700; font-size: 0.85rem;">Producto</th>
-                                    <th style="text-align: left; padding: 0.75rem 1rem; color: #475569; font-weight: 700; font-size: 0.85rem;">Proveedor</th>
+                                    <th style="text-align: left; padding: 0.75rem 1rem; color: #475569; font-weight: 700; font-size: 0.85rem;">Categoría</th>
                                     <th style="text-align: center; padding: 0.75rem 1rem; color: #475569; font-weight: 700; font-size: 0.85rem;">Stock Actual</th>
                                     <th style="text-align: center; padding: 0.75rem 1rem; color: #475569; font-weight: 700; font-size: 0.85rem;">Stock Mínimo</th>
                                     <th style="text-align: center; padding: 0.75rem 1rem; color: #475569; font-weight: 700; font-size: 0.85rem;">Sugerencia Compra</th>
-                                    <th style="text-align: right; padding: 0.75rem 1rem; color: #475569; font-weight: 700; font-size: 0.85rem;">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -2617,7 +3241,7 @@ const InventoryView = {
                                                 <small style="color: #64748b; font-family: monospace; font-size: 0.8rem;">${safeHTML(p.barcode || 'Sin código')}</small>
                                             </td>
                                             <td style="padding: 0.75rem 1rem; vertical-align: middle; color: #475569; font-weight: 500;">
-                                                ${safeHTML(p.supplierName || '—')}
+                                                ${safeHTML(p.category || 'General')}
                                             </td>
                                             <td style="padding: 0.75rem 1rem; text-align: center; vertical-align: middle;">
                                                 <span style="background: ${stockBg}; color: ${stockColor}; padding: 0.25rem 0.6rem; border-radius: 0.5rem; font-weight: 800; font-size: 0.95rem; border: 1px solid ${stockColor}44;">
@@ -2632,10 +3256,6 @@ const InventoryView = {
                                                     Comprar +${formatStock(toBuy, p.type === 'weight' ? 3 : 0)}
                                                 </span>
                                             </td>
-                                            <td style="padding: 0.75rem 1rem; text-align: right; vertical-align: middle;">
-                                                <button class="btn btn-primary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; font-weight: 700; background: #3b82f6; border-color: #3b82f6;" onclick="InventoryView.quickAdjustment(${p.id})" title="Corregir el stock de este producto">Ajustar</button>
-                                                <button class="btn btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.85rem; font-weight: 700; border: 1.5px solid #e2e8f0; color: #475569;" onclick="InventoryView.showKardex(${p.id})" title="Ver todos los movimientos que afectaron a este producto">Kardex</button>
-                                            </td>
                                         </tr>
                                     `;
                                 }).join('')}
@@ -2647,12 +3267,12 @@ const InventoryView = {
                 return `
                     <div class="card" style="padding: 0; overflow: hidden; margin-bottom: 1.25rem; border: 1.5px solid #e2e8f0; border-radius: 1rem; box-shadow: var(--shadow-sm);">
                         <div style="padding: 1.25rem 1.5rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; background: #ffffff; user-select: none; transition: background 0.15s;" 
-                             onclick="InventoryView.toggleSuggestionCategory('${catName.replace(/'/g, "\\'")}')"
+                             onclick="InventoryView.toggleSuggestionSupplier('${supplierName.replace(/'/g, "\\'")}')"
                              onmouseover="this.style.background='#f8fafc'"
                              onmouseout="this.style.background='#ffffff'">
                             <div style="display: flex; align-items: center; gap: 0.75rem;">
-                                <span style="font-size: 1.2rem;">📂</span>
-                                <strong style="font-size: 1.1rem; color: #1e293b; text-transform: capitalize;">${safeHTML(catName)}</strong>
+                                <span style="font-size: 1.2rem;">🚚</span>
+                                <strong style="font-size: 1.1rem; color: #1e293b; text-transform: capitalize;">${safeHTML(supplierName)}</strong>
                                 <span style="background: #fef3c7; color: #b45309; font-weight: 800; font-size: 0.8rem; padding: 0.15rem 0.5rem; border-radius: 99px; border: 1px solid #fde047;">
                                     ${items.length} sugeridos
                                 </span>
@@ -2668,14 +3288,24 @@ const InventoryView = {
         return `
             <div class="suggestions-section animate-fade-in">
                 <!-- Banner de Sugerencias Suaves -->
-                <div style="background: #eff6ff; border: 1.5px solid #bfdbfe; border-left: 5px solid #3b82f6; border-radius: 1.25rem; padding: 1.5rem; margin-bottom: 2rem; display: flex; gap: 1rem; align-items: flex-start;">
+                <div style="background: #eff6ff; border: 1.5px solid #bfdbfe; border-left: 5px solid #3b82f6; border-radius: 1.25rem; padding: 1.5rem; margin-bottom: 2rem; display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap;">
                     <div style="font-size: 2.2rem; line-height: 1;">💡</div>
-                    <div style="flex: 1;">
+                    <div style="flex: 1; min-width: 250px;">
                         <h3 style="color: #1e3a8a; margin: 0 0 0.25rem 0; font-size: 1.2rem; font-weight: 800;">Sugerencias de Reposición de Stock</h3>
                         <p style="color: #1e40af; margin: 0; font-size: 0.95rem; font-weight: 600; line-height: 1.4;">
                             Los siguientes productos se encuentran en o por debajo de su stock mínimo configurado.
-                            Esta lista es una <strong>sugerencia</strong> para planificar tus compras y mantener tu negocio abastecido, no una alerta crítica.
+                            Esta lista está agrupada por <strong>Proveedor</strong> para planificar tus compras y mantener tu negocio abastecido.
                         </p>
+                        
+                        <!-- Acciones rápidas de exportación -->
+                        <div style="display: flex; gap: 0.5rem; margin-top: 1rem; flex-wrap: wrap;">
+                            <button class="btn btn-secondary" onclick="InventoryView.copySuggestionsToClipboard()" style="padding: 0.45rem 0.85rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.82rem; background: white; border: 1px solid #cbd5e1; display: flex; align-items: center; gap: 0.35rem; color: #475569;">
+                                💬 WhatsApp
+                            </button>
+                            <button class="btn btn-secondary" onclick="InventoryView.exportSuggestionsPDF()" style="padding: 0.45rem 0.85rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.82rem; background: white; border: 1px solid #cbd5e1; display: flex; align-items: center; gap: 0.35rem; color: #475569;">
+                                📄 Orden de Compra PDF
+                            </button>
+                        </div>
                     </div>
                     <div style="text-align: right; min-width: 140px;">
                         <div style="font-size: 0.75rem; font-weight: 800; color: #1e40af; text-transform: uppercase; letter-spacing: 0.5px;">Total sugeridos</div>
@@ -2683,18 +3313,137 @@ const InventoryView = {
                     </div>
                 </div>
 
-                <!-- Lista de categorías colapsables -->
+                <!-- Lista de proveedores colapsables -->
                 <div>
-                    ${categoriesHtml}
+                    ${suppliersHtml}
                 </div>
             </div>
         `;
     },
 
-    toggleSuggestionCategory(catName) {
+    toggleSuggestionSupplier(supplierName) {
         this.collapsedSuggestions = this.collapsedSuggestions || {};
-        this.collapsedSuggestions[catName] = !this.collapsedSuggestions[catName];
+        this.collapsedSuggestions[supplierName] = !this.collapsedSuggestions[supplierName];
         app.navigate('inventory');
+    },
+
+    copySuggestionsToClipboard() {
+        const lowStockProducts = this.products.filter(p => 
+            !p.deleted && 
+            (p.minStock || 0) > 0 && 
+            (p.stock || 0) <= (p.minStock || 0)
+        );
+        
+        if (lowStockProducts.length === 0) {
+            showNotification('No hay productos sugeridos para reponer', 'warning');
+            return;
+        }
+        
+        // Group by supplier
+        const grouped = lowStockProducts.reduce((acc, p) => {
+            const supplier = p.supplierName || 'Sin proveedor';
+            if (!acc[supplier]) acc[supplier] = [];
+            acc[supplier].push(p);
+            return acc;
+        }, {});
+
+        const suppliers = Object.keys(grouped).sort();
+
+        let text = '*SUGERENCIAS DE REPOSICIÓN POR PROVEEDOR - CONTROL DE STOCK*\n\n';
+        suppliers.forEach(supplier => {
+            text += `*📦 PROVEEDOR: ${supplier.toUpperCase()}*\n`;
+            grouped[supplier].forEach(p => {
+                const toBuy = Math.max(0, (p.minStock || 0) - (p.stock || 0));
+                text += `• *${p.name}* (Cód: ${p.barcode || 'S/N'})\n  Stock actual: ${p.stock} | Mínimo: ${p.minStock}\n  *Sugerido comprar: +${toBuy}*\n`;
+            });
+            text += '\n';
+        });
+        
+        navigator.clipboard.writeText(text.trim())
+            .then(() => showNotification('Listado copiado al portapapeles', 'success'))
+            .catch(() => showNotification('Error al copiar el listado', 'error'));
+    },
+
+    exportSuggestionsPDF() {
+        const lowStockProducts = this.products.filter(p => 
+            !p.deleted && 
+            (p.minStock || 0) > 0 && 
+            (p.stock || 0) <= (p.minStock || 0)
+        );
+        
+        if (lowStockProducts.length === 0) {
+            showNotification('No hay productos sugeridos para reponer', 'warning');
+            return;
+        }
+        
+        // Sort by supplier name, then product name
+        const sortedProducts = [...lowStockProducts].sort((a, b) => {
+            const sA = a.supplierName || 'Sin proveedor';
+            const sB = b.supplierName || 'Sin proveedor';
+            if (sA !== sB) return sA.localeCompare(sB);
+            return (a.name || '').localeCompare(b.name || '');
+        });
+
+        const printWindow = window.open('', '_blank');
+        let rowsHtml = '';
+        sortedProducts.forEach(p => {
+            const stock = parseFloat(p.stock) || 0;
+            const minStock = parseFloat(p.minStock) || 0;
+            const toBuy = Math.max(0, minStock - stock);
+            rowsHtml += `
+                <tr>
+                    <td>${p.barcode || '—'}</td>
+                    <td><strong>${p.name}</strong><br><small>${p.category || 'General'}</small></td>
+                    <td>${p.supplierName || 'Sin proveedor'}</td>
+                    <td class="center">${stock} ${p.type === 'weight' ? 'kg' : 'un'}</td>
+                    <td class="center">${minStock}</td>
+                    <td class="center" style="color: #1d4ed8; font-weight: bold;">+${toBuy}</td>
+                </tr>
+            `;
+        });
+        
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Orden de Reposición - ${new Date().toLocaleDateString()}</title>
+                <style>
+                    body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+                    h1 { text-align: center; color: #111; margin-bottom: 5px; }
+                    p { text-align: center; color: #666; margin-top: 0; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                    th, td { border: 1px solid #ddd; padding: 8px; font-size: 11px; }
+                    th { background-color: #f2f2f2; text-align: left; }
+                    .center { text-align: center; }
+                </style>
+            </head>
+            <body>
+                <h1>ORDEN DE COMPRA / REPOSICIÓN</h1>
+                <p>Fecha de emisión: ${new Date().toLocaleString()}</p>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Cód. Barra</th>
+                            <th>Producto</th>
+                            <th>Proveedor</th>
+                            <th class="center">Stock Act.</th>
+                            <th class="center">Stock Mín.</th>
+                            <th class="center">Sugerido Comprar</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rowsHtml}
+                    </tbody>
+                </table>
+                <script>
+                    window.onload = function() {
+                        window.print();
+                        window.close();
+                    };
+                </script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
     }
 };
 

@@ -47,10 +47,28 @@ const ReportsView = {
                             onclick="ReportsView.showReport('costAlerts')">
                         ⚠️ Cambios de Costos
                     </button>
+                    <button class="btn ${this.currentReport === 'cierres' ? 'btn-primary' : 'btn-secondary'}" 
+                            onclick="ReportsView.showReport('cierres')">
+                        🔒 Historial de Cierres
+                    </button>
                 </div>
                 
                 <div id="reportContent">
-                    ${await this.renderDailyReport()}
+                    ${await (async () => {
+                        switch (this.currentReport) {
+                            case 'daily': return await this.renderDailyReport();
+                            case 'weekly': return await this.renderWeeklyReport();
+                            case 'monthly': return await this.renderMonthlyReport();
+                            case 'products': return await this.renderProductsReport();
+                            case 'profitability': return await this.renderProfitabilityReport();
+                            case 'stock': return await this.renderStockReport();
+                            case 'stagnant': return await this.renderStagnantReport();
+                            case 'iva': return await this.renderIVAReport();
+                            case 'costAlerts': return await this.renderCostAlertsReport();
+                            case 'cierres': return await this.renderCierresReport();
+                            default: return await this.renderDailyReport();
+                        }
+                    })()}
                 </div>
             </div>
         `;
@@ -93,9 +111,24 @@ const ReportsView = {
             case 'costAlerts':
                 content = await this.renderCostAlertsReport();
                 break;
+            case 'cierres':
+                content = await this.renderCierresReport();
+                break;
         }
 
         document.getElementById('reportContent').innerHTML = content;
+
+        // ponytail: Vincular eventos clic de ayuda didáctica e informativa
+        document.querySelectorAll('.info-help-btn').forEach(btn => {
+            btn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const helpKey = btn.getAttribute('data-help');
+                if (window.ReportsExplanations) {
+                    window.ReportsExplanations.showModal(helpKey);
+                }
+            };
+        });
 
         // Renderizar gráficos si corresponde
         if (['daily', 'weekly', 'monthly', 'products', 'profitability'].includes(type)) {
@@ -161,29 +194,41 @@ const ReportsView = {
                     <h3>Ventas</h3>
                     <div class="value">${report.totalSales}</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card" title="Total de ventas del DÍA CALENDARIO completo, sumando todos los turnos.">
                     <h3>Total Vendido</h3>
                     <div class="value">${formatCLP(report.totalAmount)}</div>
                 </div>
                 <div class="stat-card card-tax-accent">
-                    <h3>📉 Dinero para Impuestos (IVA)</h3>
+                    <h3 style="display: flex; align-items: center; justify-content: center; gap: 0.35rem;">
+                        📉 Dinero para Impuestos (IVA)
+                        <span class="info-help-btn" data-help="ivaDebito" style="cursor: pointer; font-size: 0.95rem; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">ℹ️</span>
+                    </h3>
                     <div class="value">${formatCLP(report.ivaDebito)}</div>
                     <small class="small-muted-text">Dinero que debes guardar para el SII.</small>
                 </div>
                 <div class="stat-card card-credit-accent">
-                    <h3>📈 IVA a mi favor (Compras)</h3>
+                    <h3 style="display: flex; align-items: center; justify-content: center; gap: 0.35rem;">
+                        📈 IVA a mi favor (Compras)
+                        <span class="info-help-btn" data-help="ivaCredito" style="cursor: pointer; font-size: 0.95rem; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">ℹ️</span>
+                    </h3>
                     <div class="value">${formatCLP(report.ivaCredito)}</div>
                     <small class="small-muted-text">Descuento por tus facturas de compra.</small>
                 </div>
                 <div class="stat-card card-net-accent">
-                    <h3>💰 Venta Limpia (Sin IVA)</h3>
+                    <h3 style="display: flex; align-items: center; justify-content: center; gap: 0.35rem;">
+                        💰 Venta Limpia (Sin IVA)
+                        <span class="info-help-btn" data-help="ventaLimpia" style="cursor: pointer; font-size: 0.95rem; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">ℹ️</span>
+                    </h3>
                     <div class="value" style="font-weight: 800;">
                         ${formatCLP(report.totalAmount - report.ivaDebito)}
                     </div>
                     <small class="small-muted-text">Total vendido quitando los impuestos.</small>
                 </div>
                 <div class="stat-card card-pocket-accent">
-                    <h3 style="font-weight: bold;">💎 Mi Ganancia Real (Bolsillo)</h3>
+                    <h3 style="font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 0.35rem;">
+                        💎 Mi Ganancia Real (Bolsillo)
+                        <span class="info-help-btn" data-help="realProfit" style="cursor: pointer; font-size: 0.95rem; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">ℹ️</span>
+                    </h3>
                     <div class="value" style="font-weight: 900;">
                         ${formatCLP(report.realProfit)}
                     </div>
@@ -559,8 +604,8 @@ const ReportsView = {
 
         const report = await ReportController.getMonthlySales(year, month);
 
-        // Separar compras con factura para el detalle
-        const purchasesWithInvoice = (report.purchases || []).filter(p => p.documentType === 'factura');
+        // Separar compras con factura para el detalle (incluyendo factura_neto y factura_bruto)
+        const purchasesWithInvoice = (report.purchases || []).filter(p => p.documentType && p.documentType.includes('factura'));
         const netDifference = report.ivaDebito - report.ivaCredito;
 
         return `
@@ -642,25 +687,40 @@ const ReportsView = {
                 <div class="table-container">
                     <table>
                         <thead>
-                            <tr>
+                            <tr style="font-weight: 800;">
                                 <th>Producto</th>
-                                <th>Cantidad Vendida</th>
-                                <th>Total Vendido</th>
+                                <th style="text-align: right;">Cantidad</th>
+                                <th style="text-align: right;">Total Vendido</th>
+                                <th style="text-align: right; color: #94a3b8; white-space: nowrap;">
+                                    Costo Total
+                                    <span class="info-help-btn" data-help="costTotal" style="cursor: pointer; font-size: 0.85rem; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">ℹ️</span>
+                                </th>
+                                <th style="text-align: right; color: #10b981; white-space: nowrap;">
+                                    Ganancia
+                                    <span class="info-help-btn" data-help="realProfit" style="cursor: pointer; font-size: 0.85rem; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">ℹ️</span>
+                                </th>
+                                <th style="text-align: right; color: #10b981; white-space: nowrap;">
+                                    Margen
+                                    <span class="info-help-btn" data-help="margen" style="cursor: pointer; font-size: 0.85rem; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">ℹ️</span>
+                                </th>
                                 <th>% del Total</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${products.map(p => {
-            const totalSum = products.reduce((sum, item) => sum + item.total, 0);
-            const percentage = totalSum > 0 ? (p.total / totalSum * 100).toFixed(1) : 0;
-            return `
+                                const totalSum = products.reduce((sum, item) => sum + item.total, 0);
+                                const percentage = totalSum > 0 ? (p.total / totalSum * 100).toFixed(1) : 0;
+                                return `
                                     <tr>
                                         <td><strong>${p.name}</strong></td>
-                                        <td>${formatNumber(p.quantity)}</td>
-                                        <td><strong>${formatCLP(p.total)}</strong></td>
+                                        <td style="text-align: right;">${formatNumber(p.quantity)}</td>
+                                        <td style="text-align: right;"><strong>${formatCLP(p.total)}</strong></td>
+                                        <td style="text-align: right; color: #94a3b8;">${formatCLP(p.costTotal)}</td>
+                                        <td style="text-align: right; color: #10b981; font-weight: bold;">${formatCLP(p.grossProfit)}</td>
+                                        <td style="text-align: right; color: #10b981; font-weight: bold;">${p.marginPercent}%</td>
                                         <td>
                                             <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                                <div style="width: 100px; height: 10px; background: var(--light); border-radius: 5px; overflow: hidden;">
+                                                <div style="width: 80px; height: 10px; background: var(--light); border-radius: 5px; overflow: hidden;">
                                                     <div style="width: ${percentage}%; height: 100%; background: var(--primary);"></div>
                                                 </div>
                                                 <span>${percentage}%</span>
@@ -668,7 +728,7 @@ const ReportsView = {
                                         </td>
                                     </tr>
                                 `;
-        }).join('')}
+                            }).join('')}
                         </tbody>
                     </table>
                 </div>
@@ -1417,5 +1477,196 @@ const ReportsView = {
             });
             this.activeCharts = [];
         }
+    },
+
+    handleCierresMonthChange(value) {
+        if (!value) return;
+        const [y, m] = value.split('-').map(Number);
+        ReportsView.cierresSelectedYear = y;
+        ReportsView.cierresSelectedMonth = m - 1;
+        ReportsView.showReport('cierres');
+    },
+
+    async renderCierresReport() {
+        // Obtener todos los registros de caja históricos
+        const allRegisters = await CashRegister.getAll();
+        
+        const now = new Date();
+        let year = ReportsView.cierresSelectedYear !== undefined ? ReportsView.cierresSelectedYear : now.getFullYear();
+        let month = ReportsView.cierresSelectedMonth !== undefined ? ReportsView.cierresSelectedMonth : now.getMonth();
+        
+        // Si es la primera vez que se carga y no hay filtros, usar el mes del registro más reciente
+        if (ReportsView.cierresSelectedYear === undefined) {
+            const closedRegistersOnly = allRegisters.filter(r => r.status === 'closed');
+            if (closedRegistersOnly.length > 0) {
+                const refDate = new Date(closedRegistersOnly[0].closeDate);
+                year = refDate.getFullYear();
+                month = refDate.getMonth();
+            }
+            ReportsView.cierresSelectedYear = year;
+            ReportsView.cierresSelectedMonth = month;
+        }
+
+        // Filtrar cajas cerradas por año y mes de la fecha de cierre
+        const closedRegisters = allRegisters.filter(r => {
+            if (r.status !== 'closed') return false;
+            const closeDate = new Date(r.closeDate);
+            return closeDate.getFullYear() === year && closeDate.getMonth() === month;
+        });
+
+        // Ordenar cierres por fecha de cierre descendente
+        closedRegisters.sort((a, b) => new Date(b.closeDate) - new Date(a.closeDate));
+
+        if (closedRegisters.length === 0) {
+            return `
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <h3 style="color: #111827; margin: 0 0 0.25rem 0;">Historial de Cierres de Caja</h3>
+                        <p style="color: #4b5563; margin: 0; font-size: 0.9rem;">Consulta la utilidad de los turnos cerrados filtrando por mes.</p>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 0.5rem; background: #f3f4f6; padding: 0.5rem 1rem; border-radius: 0.5rem; border: 1px solid #e5e7eb;">
+                        <label for="cierresMonthPicker" style="font-size: 0.85rem; font-weight: 700; color: #4b5563;">Seleccionar Mes:</label>
+                        <input type="month" id="cierresMonthPicker" 
+                               value="${year}-${String(month + 1).padStart(2, '0')}" 
+                               onchange="ReportsView.handleCierresMonthChange(this.value)"
+                               style="background: transparent; border: none; font-weight: bold; color: #10b981; font-size: 0.95rem; cursor: pointer;">
+                    </div>
+                </div>
+                <div class="empty-state" style="padding: 3rem; text-align: center; background: white; border-radius: 1rem; border: 1.5px solid #d1d5db;">
+                    <div class="empty-state-icon" style="font-size: 3rem; margin-bottom: 1rem;">🔒</div>
+                    <h3 style="color: #4b5563; font-weight: 700;">Sin cierres de caja en este mes</h3>
+                    <p style="color: #6b7280; font-size: 0.9rem; margin-top: 0.5rem;">Prueba seleccionando otro mes en el calendario de arriba.</p>
+                </div>
+            `;
+        }
+
+        // Obtener resúmenes de cada caja y calcular acumulados
+        let totalSalesAccum = 0;
+        let totalExpensesAccum = 0;
+        let grossProfitAccum = 0;
+        let netProfitAccum = 0;
+
+        const enriched = [];
+        for (const reg of closedRegisters) {
+            try {
+                const summary = await CashRegister.getSummary(reg.id);
+                enriched.push(summary);
+                
+                totalSalesAccum += summary.totalSalesAmount || 0;
+                totalExpensesAccum += summary.totalExpenses || 0;
+                grossProfitAccum += summary.grossProfit || 0;
+                netProfitAccum += summary.netProfit || 0;
+            } catch (err) {
+                console.error(`Error al cargar resumen de caja #${reg.id}:`, err);
+                enriched.push({
+                    ...reg,
+                    totalSalesAmount: 0,
+                    totalExpenses: 0,
+                    grossProfit: 0,
+                    netProfit: 0
+                });
+            }
+        }
+
+        const rows = enriched.map(summary => {
+            const totalVentas = summary.totalSalesAmount || 0;
+            const gastos = summary.totalExpenses || 0;
+            const gBruta = summary.grossProfit || 0;
+            const gNeta = summary.netProfit || 0;
+
+            const netColor = gNeta >= 0 ? '#10b981' : '#ef4444';
+
+            return `
+                <tr style="border-bottom: 1px solid #e5e7eb; font-size: 0.875rem; color: #374151;">
+                    <td style="padding: 1rem 0.75rem;">
+                        <strong style="color: #111827;">#${summary.id}</strong>
+                    </td>
+                    <td style="padding: 1rem 0.75rem; line-height: 1.6;">
+                        <div style="font-size: 0.95rem; color: #1e293b; font-weight: 700; display: flex; align-items: center; gap: 0.35rem;">
+                            <span style="background: rgba(16, 185, 129, 0.12); color: #065f46; padding: 0.25rem 0.6rem; border-radius: 0.5rem; font-size: 0.7rem; font-weight: 800; border: 1px solid rgba(16, 185, 129, 0.2); letter-spacing: 0.5px;">🟢 APERTURA</span>
+                            ${formatDateTime(summary.openDate)}
+                        </div>
+                        <div style="font-size: 0.95rem; color: #1e293b; font-weight: 700; margin-top: 0.5rem; display: flex; align-items: center; gap: 0.35rem;">
+                            <span style="background: rgba(239, 68, 68, 0.12); color: #991b1b; padding: 0.25rem 0.6rem; border-radius: 0.5rem; font-size: 0.7rem; font-weight: 800; border: 1px solid rgba(239, 68, 68, 0.2); letter-spacing: 0.5px;">🔴 CIERRE</span>
+                            ${formatDateTime(summary.closeDate)}
+                        </div>
+                    </td>
+                    <td style="padding: 1rem 0.75rem; font-weight: 600; text-transform: capitalize;">${summary.username || 'Admin'}</td>
+                    <td style="padding: 1rem 0.75rem; font-weight: 700; color: #2563eb;">${formatCLP(totalVentas)}</td>
+                    <td style="padding: 1rem 0.75rem; font-weight: 700; color: #dc2626;">-${formatCLP(gastos)}</td>
+                    <td style="padding: 1rem 0.75rem; font-weight: 700; color: #10b981;">${formatCLP(gBruta)}</td>
+                    <td style="padding: 1rem 0.75rem; font-weight: 900; color: ${netColor}; font-size: 0.95rem;">${formatCLP(gNeta)}</td>
+                    <td style="padding: 1rem 0.75rem; text-align: right;">
+                        <button class="btn btn-sm btn-primary" onclick="CashView.showCashHistory(${summary.id})" style="border-radius: 0.5rem; font-weight: 700; padding: 0.4rem 0.75rem;">
+                            📋 Detalle Ventas
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        return `
+            <!-- Filtro y Calendarios -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+                <div>
+                    <h3 style="color: #111827; margin: 0 0 0.25rem 0;">Historial de Cierres de Caja</h3>
+                    <p style="color: #4b5563; margin: 0; font-size: 0.9rem;">Consulta la utilidad de los turnos cerrados filtrando por mes.</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 0.5rem; background: #f3f4f6; padding: 0.5rem 1rem; border-radius: 0.5rem; border: 1px solid #e5e7eb;">
+                    <label for="cierresMonthPicker" style="font-size: 0.85rem; font-weight: 700; color: #4b5563;">Seleccionar Mes:</label>
+                    <input type="month" id="cierresMonthPicker" 
+                           value="${year}-${String(month + 1).padStart(2, '0')}" 
+                           onchange="ReportsView.handleCierresMonthChange(this.value)"
+                           style="background: transparent; border: none; font-weight: bold; color: #10b981; font-size: 0.95rem; cursor: pointer;">
+                </div>
+            </div>
+
+            <!-- Tarjetas de Resumen Acumulado -->
+            <div class="grid grid-4" style="margin-bottom: 2rem; gap: 1rem;">
+                <div class="stat-card" style="background: white; border: 1.5px solid #d1d5db; padding: 1.25rem; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.75rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; font-weight: 800;">💰 Total Vendido (Bruto)</h4>
+                    <div style="font-size: 1.5rem; font-weight: 900; color: #1e293b;">${formatCLP(totalSalesAccum)}</div>
+                    <small style="color: #64748b; font-size: 0.75rem;">Suma total del periodo</small>
+                </div>
+                <div class="stat-card" style="background: white; border: 1.5px solid #d1d5db; padding: 1.25rem; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.75rem; text-transform: uppercase; color: #10b981; letter-spacing: 0.5px; font-weight: 800;">📈 Ganancia Bruta Acumulada</h4>
+                    <div style="font-size: 1.5rem; font-weight: 900; color: #10b981;">${formatCLP(grossProfitAccum)}</div>
+                    <small style="color: #64748b; font-size: 0.75rem;">Sin restar gastos operativos</small>
+                </div>
+                <div class="stat-card" style="background: white; border: 1.5px solid #d1d5db; padding: 1.25rem; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.75rem; text-transform: uppercase; color: #ef4444; letter-spacing: 0.5px; font-weight: 800;">💸 Gastos Operacionales Totales</h4>
+                    <div style="font-size: 1.5rem; font-weight: 900; color: #ef4444;">-${formatCLP(totalExpensesAccum)}</div>
+                    <small style="color: #64748b; font-size: 0.75rem;">Suma de egresos/gastos de cajas</small>
+                </div>
+                <div class="stat-card" style="background: white; border: 1.5px solid #d1d5db; padding: 1.25rem; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border-left: 4px solid #6366f1;">
+                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.75rem; text-transform: uppercase; color: #6366f1; letter-spacing: 0.5px; font-weight: 900;">💎 Utilidad Real Final</h4>
+                    <div style="font-size: 1.5rem; font-weight: 900; color: #6366f1;">${formatCLP(netProfitAccum)}</div>
+                    <small style="color: #64748b; font-size: 0.75rem;">Ganancia bruta menos gastos</small>
+                </div>
+            </div>
+
+            <div class="table-container card glass-panel" style="padding: 1rem; border-radius: 1.25rem;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid #e5e7eb; text-align: left; font-size: 0.8rem; color: #4b5563; text-transform: uppercase; font-weight: 800;">
+                            <th style="padding: 0.75rem;">Turno</th>
+                            <th style="padding: 0.75rem;">Fecha y Horario</th>
+                            <th style="padding: 0.75rem;">Cajero</th>
+                            <th style="padding: 0.75rem;">Ventas (Bruto)</th>
+                            <th style="padding: 0.75rem;">Gastos</th>
+                            <th style="padding: 0.75rem;">Ganancia Bruta</th>
+                            <th style="padding: 0.75rem; white-space: nowrap;">
+                                Ganancia Neta
+                                <span class="info-help-btn" data-help="cierres" style="cursor: pointer; font-size: 0.85rem; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">ℹ️</span>
+                            </th>
+                            <th style="padding: 0.75rem; text-align: right;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            </div>
+        `;
     }
 };

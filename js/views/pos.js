@@ -41,7 +41,7 @@ const POSView = {
                     <div class="pos-header-actions">
                         <div id="customerInfo" class="pos-customer-selector">
                         <button type="button" class="btn btn-outline-primary btn-customer-select" onclick="POSView.selectCustomer()">
-                                [F3] 👤 SELECCIONAR CLIENTE
+                                (F3) 👤 SELECCIONAR CLIENTE
                         </button>
                         </div>
                     </div>
@@ -60,7 +60,7 @@ const POSView = {
                                 <input type="text" id="productSearch" class="form-control pos-search-input" placeholder="Escanear código o buscar por nombre..." autofocus autocomplete="off">
                                 <div id="searchResults" class="pos-search-results"></div>
                             </div>
-                            <button type="button" class="btn btn-primary btn-scanner-open" onclick="POSView.openScanner()" title="[F4] Escáner">[F4] 📷</button>
+                            <button type="button" class="btn btn-primary btn-scanner-open" onclick="POSView.openScanner()" title="Escáner">📷</button>
                         </div>
                         
                         <!-- Teclado numérico -->
@@ -422,7 +422,7 @@ const POSView = {
             // F3: Seleccionar cliente
             if (e.key === 'F3') { e.preventDefault(); POSView.selectCustomer(); return; }
             // F4: Escáner
-            if (e.key === 'F4') { e.preventDefault(); POSView.openScanner(); return; }
+
             // F6: Pausar venta
             if (e.key === 'F6') { e.preventDefault(); POSView.holdCurrentSale(); return; }
             // F2: Finalizar / Confirmar Venta
@@ -827,7 +827,7 @@ const POSView = {
             if (!customer) {
                 infoEl.innerHTML = `
                     <button type="button" class="btn btn-outline-primary btn-customer-select" onclick="POSView.selectCustomer()">
-                        [F3] 👤 SELECCIONAR CLIENTE
+                        (F3) 👤 SELECCIONAR CLIENTE
                     </button>
                 `;
             }
@@ -1086,7 +1086,7 @@ const POSView = {
                         <div class="payment-method-body">
                             <div class="payment-method-header">
                                 <div class="payment-method-label" style="color: var(--danger-text);">ANOTAR DEUDA</div>
-                                <button class="btn-fill-diff" onclick="POSView.fillAmount('pay_debt')">DIFERENCIA</button>
+                                <button class="btn-fill-diff" onclick="POSView.fillAmount('pay_debt')" id="btn_fill_debt">[F4] DIFERENCIA</button>
                             </div>
                             <input type="number" id="pay_debt" class="pay-input-pro pay-input" style="color: var(--danger) !important;" placeholder="0" value="${initialMethod === 'debt' ? total : ''}">
                         </div>
@@ -1852,7 +1852,7 @@ const POSView = {
         if (infoEl) {
             infoEl.innerHTML = `
                 <button class="btn btn-outline-primary" style="height: 48px; min-width: 240px; font-size: 0.9rem; font-weight: 800; border-radius: 0.75rem; border-width: 2px;" onclick="POSView.selectCustomer()">
-                    👤 SELECCIONAR CLIENTE
+                    (F3) 👤 SELECCIONAR CLIENTE
                 </button>
             `;
         }

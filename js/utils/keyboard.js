@@ -35,12 +35,27 @@ const KeyboardManager = {
                 this.handleGlobalEnter(e);
                 return;
             }
-        });
-        
-        document.addEventListener('keypress', (e) => {
+            // Handle F2 shortcut: guardar venta en edición, guardar producto, o ir al POS
             if (e.key === 'F2') {
                 e.preventDefault();
+                const modal = document.querySelector('.modal');
+                if (modal) {
+                    // Prioridad 1: guardar edición de venta
+                    const saveEditSaleBtn = modal.querySelector('.btn-primary[onclick*="saveEditSale"]');
+                    if (saveEditSaleBtn) { saveEditSaleBtn.click(); return; }
+                    // Prioridad 2: guardar producto (nuevo o edición)
+                    const saveProductBtn = modal.querySelector('.btn-primary[onclick*="saveProduct"]');
+                    if (saveProductBtn) { saveProductBtn.click(); return; }
+                }
                 app.navigate('pos');
+                return;
+            }
+            // Handle F4 shortcut: pasar la diferencia a deuda del cliente en la pantalla de cobro
+            if (e.key === 'F4') {
+                e.preventDefault();
+                const fillDebtBtn = document.getElementById('btn_fill_debt');
+                if (fillDebtBtn) { fillDebtBtn.click(); return; }
+                return;
             }
         });
     },

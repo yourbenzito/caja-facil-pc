@@ -17,574 +17,801 @@ const SettingsView = {
             this.initMultiDeviceSection();
         }, 100);
 
+        const activeTab = localStorage.getItem('active_settings_tab') || 'menu';
+
         return `
+            <style>
+                .settings-dashboard-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+                    gap: 1.5rem;
+                    margin-top: 1.5rem;
+                }
+                .settings-category-card {
+                    background: #ffffff;
+                    border: 1.5px solid #cbd5e1;
+                    border-radius: 1.25rem;
+                    padding: 1.75rem;
+                    box-shadow: 0 10px 25px -5px rgba(0,0,0,0.06);
+                    cursor: pointer;
+                    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                    display: flex;
+                    flex-direction: column;
+                    gap: 0.75rem;
+                    position: relative;
+                    overflow: hidden;
+                    border-top: 6px solid #e2e8f0;
+                }
+                .settings-category-card:hover {
+                    transform: translateY(-5px);
+                    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);
+                    border-color: var(--card-hover-border);
+                }
+                .settings-category-card .card-icon {
+                    font-size: 2.25rem;
+                    margin-bottom: 0.25rem;
+                }
+                .settings-category-card h3 {
+                    margin: 0;
+                    font-size: 1.15rem;
+                    font-weight: 850;
+                    color: #1e293b;
+                }
+                .settings-category-card p {
+                    margin: 0;
+                    font-size: 0.85rem;
+                    color: #64748b;
+                    line-height: 1.4;
+                    font-weight: 500;
+                }
+                .settings-category-card .card-action {
+                    margin-top: auto;
+                    font-size: 0.825rem;
+                    font-weight: 800;
+                    color: var(--card-accent-color);
+                    display: flex;
+                    align-items: center;
+                    gap: 0.25rem;
+                }
+                .settings-content-wrapper {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 1.5rem;
+                    margin-top: 1.5rem;
+                }
+                .settings-section-panel {
+                    display: none;
+                    flex-direction: column;
+                    gap: 1.5rem;
+                    animation: settingsFadeIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+                }
+                .settings-section-panel.active {
+                    display: flex;
+                }
+                .btn-back-settings {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                    background: #f1f5f9;
+                    color: #334155;
+                    border: 1.5px solid #cbd5e1;
+                    padding: 0.6rem 1.25rem;
+                    border-radius: 0.75rem;
+                    font-weight: 750;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                    font-size: 0.9rem;
+                    align-self: flex-start;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+                }
+                .btn-back-settings:hover {
+                    background: #e2e8f0;
+                    color: #0f172a;
+                    transform: translateX(-3px);
+                }
+                .settings-panel-header {
+                    padding: 1.25rem 1.5rem;
+                    border-radius: 1rem;
+                    border-left: 5px solid;
+                    margin-bottom: 0.5rem;
+                    background: #ffffff;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+                }
+                .settings-panel-header h2 {
+                    margin: 0 0 0.35rem 0;
+                    font-size: 1.2rem;
+                    font-weight: 850;
+                    display: flex;
+                    align-items: center;
+                    gap: 0.5rem;
+                }
+                .settings-panel-header p {
+                    margin: 0;
+                    font-size: 0.825rem;
+                    color: #6b7280;
+                    font-weight: 500;
+                }
+                @keyframes settingsFadeIn {
+                    from { opacity: 0; transform: translateY(8px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+            </style>
+
             <div class="view-header">
                 <h1 style="color: #111827;">Configuración Premium</h1>
                 <p style="color: #4b5563;">Personalización de interfaz y gestión de datos</p>
             </div>
 
-            <!-- SECCIÓN: APARIENCIA Y TEMAS -->
-            <div class="card" style="margin-bottom: 1.5rem; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
-                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🎨 Personalización Visual</h3>
-                
-                <div class="grid grid-2" style="gap: 2rem;">
-                    <div>
-                        <h4 style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-muted);">ELEGIR PALETA DE COLORES</h4>
-                        <div id="theme-options-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 0.75rem;">
-                            ${this.renderThemeOptions()}
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <h4 style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-muted);">CONTROL DE LUMINOSIDAD</h4>
-                        <div style="background: #f8fafc; padding: 1.5rem; border-radius: 1rem; border: 1px solid #e2e8f0;">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                                <span>Brillo de la App</span>
-                                <strong id="brightness-value">100%</strong>
-                            </div>
-                            <input type="range" id="brightness-slider" min="0.3" max="1" step="0.05" value="1" 
-                                   style="width: 100%; cursor: pointer;" 
-                                   oninput="SettingsView.updateBrightness(this.value)">
-                            <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 1rem;">
-                                Ajusta la luz de la pantalla para reducir la fatiga visual en ambientes oscuros.
-                            </p>
-                        </div>
-                    </div>
+            <!-- MENU PRINCIPAL: DASHBOARD DE TARJETAS EN RELIEVE -->
+            <div id="settings-dashboard" class="settings-dashboard-grid" style="display: ${activeTab === 'menu' ? 'grid' : 'none'};">
+                <div class="settings-category-card" style="--card-hover-border: #6366f1; --card-accent-color: #4f46e5; border-top-color: #6366f1;" onclick="SettingsView.switchTab('settings-tab-visual')">
+                    <div class="card-icon">🎨</div>
+                    <h3>Aspecto Visual</h3>
+                    <p>Personaliza la paleta de colores de la aplicación, controla el brillo y visualiza estadísticas generales.</p>
+                    <div class="card-action">Configurar Aspecto ➔</div>
+                </div>
+                <div class="settings-category-card" style="--card-hover-border: #10b981; --card-accent-color: #059669; border-top-color: #10b981;" onclick="SettingsView.switchTab('settings-tab-pos')">
+                    <div class="card-icon">🛒</div>
+                    <h3>Ventas y Caja (POS)</h3>
+                    <p>Controla stock negativo, semáforo de deudas de clientes y la apertura de múltiples cajas.</p>
+                    <div class="card-action">Configurar POS y Caja ➔</div>
+                </div>
+                <div class="settings-category-card" style="--card-hover-border: #06b6d4; --card-accent-color: #0891b2; border-top-color: #06b6d4;" onclick="SettingsView.switchTab('settings-tab-hardware')">
+                    <div class="card-icon">🔌</div>
+                    <h3>Impresoras y Lectores</h3>
+                    <p>Configura impresoras térmicas, balanzas electrónicas, lectores de barras y personaliza tickets.</p>
+                    <div class="card-action">Configurar Hardware ➔</div>
+                </div>
+                <div class="settings-category-card" style="--card-hover-border: #f59e0b; --card-accent-color: #d97706; border-top-color: #f59e0b;" onclick="SettingsView.switchTab('settings-tab-security')">
+                    <div class="card-icon">🔐</div>
+                    <h3>Seguridad y Personal</h3>
+                    <p>Administra las cuentas de cajeros, gestiona roles, define permisos y configura el PIN global.</p>
+                    <div class="card-action">Configurar Accesos ➔</div>
+                </div>
+                <div class="settings-category-card" style="--card-hover-border: #f43f5e; --card-accent-color: #e11d48; border-top-color: #f43f5e;" onclick="SettingsView.switchTab('settings-tab-system')">
+                    <div class="card-icon">💾</div>
+                    <h3>Respaldos y Sistema</h3>
+                    <p>Descarga copias de seguridad de datos, exporta informes a Excel y limpia la memoria caché.</p>
+                    <div class="card-action">Gestionar Sistema ➔</div>
                 </div>
             </div>
-            
-            <div class="grid grid-2">
-                <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
-                    <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">📊 Estadísticas del Sistema</h3>
-                    
-                    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.875rem 1rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; transition: background 0.2s;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'">
-                            <span style="color: #374151; font-weight: 500;">📦 Productos registrados:</span>
-                            <strong id="stat-products" style="color: #4f46e5; font-size: 1.1rem;">Cargando...</strong>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.875rem 1rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; transition: background 0.2s;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'">
-                            <span style="color: #374151; font-weight: 500;">💵 Ventas totales:</span>
-                            <strong id="stat-sales" style="color: #059669; font-size: 1.1rem;">Cargando...</strong>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.875rem 1rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; transition: background 0.2s;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'">
-                            <span style="color: #374151; font-weight: 500;">👥 Clientes registrados:</span>
-                            <strong id="stat-customers" style="color: #db2777; font-size: 1.1rem;">Cargando...</strong>
-                        </div>
-                    </div>
-                    
-                    <button class="btn btn-secondary" style="width: 100%; margin-top: 1.5rem; background: #f9fafb; color: #374151; border: 1.5px solid #d1d5db; font-weight: 600;" onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f9fafb'"
-                            onclick="SettingsView.checkStorage()">
-                        Ver Uso de Almacenamiento
+
+            <!-- CONTENEDOR DE OPCIONES INTERNAS -->
+            <div class="settings-content-wrapper" style="display: ${activeTab === 'menu' ? 'none' : 'block'};">
+
+                <!-- PANE 1: VISUAL -->
+                <div id="settings-tab-visual" class="settings-section-panel ${activeTab === 'settings-tab-visual' ? 'active' : ''}">
+                    <button class="btn-back-settings" onclick="SettingsView.showCategoriesMenu()">
+                        ⬅️ Regresar a Ajustes
                     </button>
-                </div>
-
-                <!-- SECCIÓN: MULTIDISPOSITIVO -->
-                <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); display: flex; flex-direction: column; justify-content: space-between;">
-                    <div>
-                        <h3 style="margin-bottom: 1rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">📱 Conexión Multidispositivo</h3>
-                        <div id="multi-device-content" style="display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 1rem; min-height: 200px;">
-                            <p style="font-size: 0.85rem; color: #4b5563; margin: 0;">
-                                Cargando información de red...
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
-                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem;">⚙️ Opciones del Sistema</h3>
-                
-                <div class="grid grid-3">
-                    <div>
-                        <h4 style="margin-bottom: 0.75rem;">Información</h4>
-                        <p style="font-size: 0.875rem; color: var(--text); opacity: 0.8; margin-bottom: 0.75rem;">
-                            Versión: 1.0.0<br>
-                            Base de datos: ${db.mode === 'sqlite' ? 'SQLite (Servidor)' : 'IndexedDB (Local)'}<br>
-                            Estado: ${db.mode === 'sqlite' ? 'Online' : 'Offline'}
-                        </p>
-                        <button class="btn btn-secondary btn-sm" onclick="SettingsView.runSetupWizardAgain()" style="border: 1px dashed var(--primary); color: var(--primary); font-weight: 600;">
-                            🔧 Asistente de Configuración
-                        </button>
+                    
+                    <div class="settings-panel-header" style="border-left-color: #6366f1; background: #faf5ff;">
+                        <h2 style="color: #4f46e5;">🎨 Aspecto e Interfaz Visual</h2>
+                        <p>Ajusta el tema visual de la aplicación, colores generales y luminosidad para tu local.</p>
                     </div>
                     
-                    <div>
-                        <h4 style="margin-bottom: 0.75rem;">Cache</h4>
-                        <button class="btn btn-secondary btn-sm" onclick="SettingsView.clearCache()">
-                            Limpiar Cache
-                        </button>
-                        <p style="font-size: 0.75rem; margin-top: 0.5rem; color: var(--text); opacity: 0.7;">
-                            Limpia archivos en cache
-                        </p>
-                    </div>
-                    
-                    <div>
-                        <h4 style="margin-bottom: 0.75rem;">Reinstalar</h4>
-                        <button class="btn btn-secondary btn-sm" onclick="SettingsView.reinstallApp()">
-                            Reinstalar PWA
-                        </button>
-                        <p style="font-size: 0.75rem; margin-top: 0.5rem; color: var(--text); opacity: 0.7;">
-                            Actualiza la aplicación
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- SECCIÓN: REGLAS OPERATIVAS DEL POS (STOCK) -->
-            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🛒 Reglas Operativas de Venta</h3>
-                
-                <div style="display: flex; flex-direction: column; gap: 1rem;">
-                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
-                        <input type="checkbox" id="posAllowNegativeStock" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.savePOSSettings()">
-                        <span>Permitir ventas con stock negativo (sin stock disponible)</span>
-                    </label>
-                    <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
-                        Si se desactiva, el sistema impedirá agregar productos al carrito o finalizar la venta si la cantidad solicitada excede el stock actual del inventario.
-                    </p>
-                </div>
-            </div>
-
-            <!-- SECCIÓN: MÚLTIPLES CAJAS -->
-            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">💰 Gestión de Múltiples Cajas</h3>
-                
-                <div style="display: flex; flex-direction: column; gap: 1rem;">
-                    <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
-                        <input type="checkbox" id="allowMultipleCashRegisters" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.saveMultipleCashSettings()">
-                        <span>Permitir múltiples cajas simultáneas</span>
-                    </label>
-                    <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
-                        Si se activa, permite abrir múltiples cajas al mismo tiempo (útil para locales con varios cajeros). Si se desactiva, solo se permite una caja abierta a la vez.
-                    </p>
-                </div>
-
-                <div style="margin-top: 1.5rem;">
-                    <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Cajas Activas</h4>
-                    <div id="activeCashRegistersList" style="display: flex; flex-direction: column; gap: 0.5rem;">
-                        <p style="color: #6b7280; font-size: 0.85rem;">Cargando cajas...</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Reseteo de fábrica removido -->
-            ${PermissionService.can('settings.backup') ? `
-            <!-- SECCIÓN: MANTENIMIENTO Y RESPALDOS -->
-            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">💾 Copias de Seguridad y Mantenimiento</h3>
-                
-                <div class="grid grid-2" style="gap: 2rem;">
-                    <div>
-                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Gestión de Base de Datos</h4>
-                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1.5rem;">
-                            Descarga una copia completa de tu negocio para respaldar en la nube o en un pendrive. También puedes restaurar una copia previa.
-                        </p>
-                        
-                        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                            <button class="btn btn-primary" style="width: 100%; justify-content: center; background: #4f46e5;" onclick="BackupManager.exportAllData()">
-                                📤 Generar Backup Completo (.JSON)
-                            </button>
-                            
-                            <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #8b5cf6; color: #5b21b6; background: #f5f3ff;" onclick="SettingsView.exportBusinessData()">
-                                🏢 Exportar Negocio Completo (Sin Usuarios)
-                            </button>
-                            
-                            <div style="position: relative;">
-                                <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #d1d5db;" onclick="document.getElementById('importFile').click()">
-                                    📥 Restaurar desde Backup
-                                </button>
-                                <input type="file" id="importFile" style="display: none;" accept=".json" onchange="SettingsView.handleImport(event)">
-                            </div>
-
-                            <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #fbbf24; color: #92400e; background: #fffbeb;" onclick="SettingsView.deduplicateSuppliers()">
-                                🧹 Limpiar Proveedores Duplicados
-                            </button>
-
-                            <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #10b981; color: #065f46; background: #ecfdf5;" onclick="SettingsView.deduplicateCustomers()">
-                                👥 Fusión Maestra de Clientes
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Exportar a Excel (Contabilidad)</h4>
-                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
-                            Descarga reportes específicos en formato Excel para tu contador o para revisar en tu celular.
-                        </p>
-                        
-                        <div style="max-height: 150px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 0.5rem; background: #f9fafb;">
-                            <table style="width: 100%; font-size: 0.8rem;">
-                                <tbody>
-                                    ${(window.BACKUP_ENTITY_CONFIG || []).map(entity => `
-                                        <tr>
-                                            <td style="padding: 0.4rem 0; color: #374151;">${entity.label}</td>
-                                            <td style="text-align: right; padding: 0.4rem 0;">
-                                                <a href="javascript:void(0)" onclick="SettingsView.exportEntityData('${entity.key}')" style="color: #4f46e5; font-weight: 600; text-decoration: none;">Excel</a>
-                                            </td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            ` : ''}
-
-            ${PermissionService.can('settings.users') ? `
-
-            <div class="card" id="userManagementCard" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                    <h3 style="margin: 0; color: #111827; font-size: 1.05rem;">👥 Gestión de Usuarios y Roles</h3>
-                    <button class="btn btn-primary btn-sm" onclick="SettingsView.showCreateUserModal()">
-                        + Nuevo Usuario
-                    </button>
-                </div>
-                <p style="font-size: 0.875rem; color: var(--text); opacity: 0.8; margin-bottom: 1rem;">
-                    Asigna roles a los usuarios del sistema. Los roles controlan el acceso a las diferentes secciones y acciones.
-                </p>
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; padding: 0.75rem; background: var(--light); border-radius: 0.5rem; font-size: 0.85rem;">
-                    <div><strong>Propietario:</strong> Acceso total</div>
-                    <div><strong>Administrador:</strong> Gestión operativa</div>
-                    <div><strong>Cajero:</strong> Solo POS y consultas</div>
-                </div>
-                <div id="userRolesList" style="display: flex; flex-direction: column; gap: 0.5rem;">
-                    <p style="color: var(--secondary);">Cargando usuarios...</p>
-                </div>
-            </div>
-            ` : ''}
-
-            ${PermissionService.can('settings.security') ? `
-            <div class="card">
-                <h3 style="margin-bottom: 1.5rem;">🔐 Seguridad y Recuperación de Contraseña</h3>
-                
-                <div style="display: flex; flex-direction: column; gap: 1.5rem;">
-                    <div>
-                        <h4 style="margin-bottom: 0.75rem;">PIN de Administrador Global</h4>
-                        <p style="font-size: 0.875rem; color: var(--text); opacity: 0.8; margin-bottom: 1rem;">
-                            Establece un PIN de 4-8 dígitos para restablecer la contraseña de <strong>cualquier usuario</strong> del sistema. Este PIN es global y funciona para todos los usuarios.
-                        </p>
-                        <div id="adminPINStatus" style="margin-bottom: 0.75rem; padding: 0.75rem; background: var(--light); border-radius: 0.375rem; font-size: 0.875rem;">
-                            <span id="pinStatusText">Cargando...</span>
-                        </div>
-                        <button class="btn btn-primary" id="adminPINBtn" onclick="SettingsView.showSetAdminPINForm()">
-                            Configurar PIN
-                        </button>
-                    </div>
-                    
-                    <div style="border-top: 1px solid var(--border); padding-top: 1.5rem;">
-                        <h4 style="margin-bottom: 0.75rem;">Código de Recuperación</h4>
-                        <p style="font-size: 0.875rem; color: var(--text); opacity: 0.8; margin-bottom: 1rem;">
-                            Genera un código de recuperación para restablecer tu contraseña. 
-                            <strong>Guarda este código en un lugar seguro</strong> - solo se mostrará una vez.
-                        </p>
-                        <div id="recoveryCodeStatus" style="margin-bottom: 0.75rem; padding: 0.75rem; background: var(--light); border-radius: 0.375rem; font-size: 0.875rem;">
-                            <span id="codeStatusText">Cargando...</span>
-                        </div>
-                        <button class="btn btn-primary" onclick="SettingsView.generateRecoveryCode()">
-                            Generar Código de Recuperación
-                        </button>
-                    </div>
-                </div>
-            </div>
-            ` : ''}
-
-            <!-- SECCIÓN: ROLES Y PERMISOS GRANULARES -->
-            ${PermissionService.can('settings.security') ? `
-            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">👥 Roles y Permisos Granulares</h3>
-                
-                <div style="display: flex; flex-direction: column; gap: 1rem;">
-                    <div>
-                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Permisos por Rol</h4>
-                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
-                            Configura qué acciones puede realizar cada rol en el sistema.
-                        </p>
-                        
-                        <div id="rolesPermissionsList" style="display: flex; flex-direction: column; gap: 0.75rem;">
-                            <p style="color: #6b7280; font-size: 0.85rem;">Cargando roles...</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            ` : ''}
-
-            <!-- SECCIÓN: IMPRESORAS TÉRMICAS -->
-            ${PermissionService.can('settings.security') ? `
-            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🖨️ Configuración de Impresoras Térmicas</h3>
-                
-                <div style="display: flex; flex-direction: column; gap: 1rem;">
-                    <div>
-                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Impresora de Tickets</h4>
-                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
-                            Configura la impresora térmica para imprimir tickets de venta.
-                        </p>
-                        
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    <!-- SECCIÓN: APARIENCIA Y TEMAS -->
+                    <div class="card" style="margin-bottom: 1.5rem; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #6366f1;">
+                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🎨 Personalización Visual</h3>
+                        <div class="grid grid-2" style="gap: 2rem;">
                             <div>
-                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Puerto de Impresión</label>
-                                <select id="printerPort" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;" onchange="SettingsView.handlePrinterPortChange()">
-                                    <option value="USB">USB</option>
-                                    <option value="COM1">COM1</option>
-                                    <option value="COM2">COM2</option>
-                                    <option value="COM3">COM3</option>
-                                    <option value="LPT1">LPT1</option>
-                                    <option value="network">Red (IP)</option>
-                                    <option value="bluetooth">Bluetooth (Inalámbrico)</option>
-                                </select>
+                                <h4 style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-muted);">ELEGIR PALETA DE COLORES</h4>
+                                <div id="theme-options-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 0.75rem;">
+                                    ${this.renderThemeOptions()}
+                                </div>
                             </div>
-
-                            <!-- Configuración específica de Bluetooth -->
-                            <div id="bluetoothPrinterConfig" style="display: none; margin-top: 1.25rem; padding: 1.25rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 1rem;">
-                                <h5 style="margin-bottom: 0.5rem; font-size: 0.95rem; color: #1e293b; font-weight: 700;">Dispositivo Bluetooth Vinculado</h5>
-                                <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
-                                    <div>
-                                        <span id="bluetoothDeviceStatus" style="font-size: 0.85rem; font-weight: 700; color: #94a3b8;">Verificando adaptador...</span>
-                                        <div id="bluetoothSavedName" style="font-size: 1.05rem; font-weight: 800; color: #0f172a; margin-top: 0.25rem;">-</div>
+                            <div>
+                                <h4 style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-muted);">CONTROL DE LUMINOSIDAD</h4>
+                                <div style="background: #f8fafc; padding: 1.5rem; border-radius: 1rem; border: 1px solid #e2e8f0;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                        <span>Brillo de la App</span>
+                                        <strong id="brightness-value">100%</strong>
                                     </div>
-                                    <div style="display: flex; gap: 0.5rem;">
-                                        <button class="btn btn-secondary" onclick="SettingsView.pairBluetoothPrinter()" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
-                                            🔍 Buscar y Vincular
-                                        </button>
-                                        <button class="btn btn-outline-danger" id="btnForgetBluetooth" onclick="SettingsView.forgetBluetoothPrinter()" style="padding: 0.5rem 1rem; font-size: 0.85rem; display: none;">
-                                            🗑️ Olvidar
-                                        </button>
+                                    <input type="range" id="brightness-slider" min="0.3" max="1" step="0.05" value="1" 
+                                           style="width: 100%; cursor: pointer;" 
+                                           oninput="SettingsView.updateBrightness(this.value)">
+                                    <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 1rem;">
+                                        Ajusta la luz de la pantalla para reducir la fatiga visual en ambientes oscuros.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SECCIÓN: ESTADÍSTICAS -->
+                    <div class="card" style="margin-bottom: 0; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #6366f1;">
+                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">📊 Estadísticas del Sistema</h3>
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.875rem 1rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; transition: background 0.2s;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'">
+                                <span style="color: #374151; font-weight: 500;">📦 Productos registrados:</span>
+                                <strong id="stat-products" style="color: #4f46e5; font-size: 1.1rem;">Cargando...</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.875rem 1rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; transition: background 0.2s;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'">
+                                <span style="color: #374151; font-weight: 500;">💵 Ventas totales:</span>
+                                <strong id="stat-sales" style="color: #059669; font-size: 1.1rem;">Cargando...</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.875rem 1rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; transition: background 0.2s;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'">
+                                <span style="color: #374151; font-weight: 500;">👥 Clientes registrados:</span>
+                                <strong id="stat-customers" style="color: #db2777; font-size: 1.1rem;">Cargando...</strong>
+                            </div>
+                        </div>
+                        <button class="btn btn-secondary" style="width: 100%; margin-top: 1.5rem; background: #f9fafb; color: #374151; border: 1.5px solid #d1d5db; font-weight: 600;" onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f9fafb'"
+                                onclick="SettingsView.checkStorage()">
+                            Ver Uso de Almacenamiento
+                        </button>
+                    </div>
+                </div>
+
+                <!-- PANE 2: POS Y CAJA -->
+                <div id="settings-tab-pos" class="settings-section-panel ${activeTab === 'settings-tab-pos' ? 'active' : ''}">
+                    <button class="btn-back-settings" onclick="SettingsView.showCategoriesMenu()">
+                        ⬅️ Regresar a Ajustes
+                    </button>
+                    
+                    <div class="settings-panel-header" style="border-left-color: #10b981; background: #f0fdf4;">
+                        <h2 style="color: #059669;">🛒 Configuración de Venta y Flujo de Caja</h2>
+                        <p>Controla las políticas de venta, los límites de alerta para clientes fiados y la gestión operativa de cajas.</p>
+                    </div>
+
+                    <!-- SECCIÓN: REGLAS OPERATIVAS DEL POS (STOCK) -->
+                    <div class="card" style="margin-bottom: 1.5rem; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #10b981;">
+                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🛒 Reglas Operativas de Venta</h3>
+                        <div style="display: flex; flex-direction: column; gap: 1rem;">
+                            <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
+                                <input type="checkbox" id="posAllowNegativeStock" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.savePOSSettings()">
+                                <span>Permitir ventas con stock negativo (sin stock disponible)</span>
+                            </label>
+                            <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
+                                Si se desactiva, el sistema impedirá agregar productos al carrito o finalizar la venta si la cantidad solicitada excede el stock actual del inventario.
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- SECCIÓN: ALERTA DE DEUDAS DE CLIENTES -->
+                    <div class="card" style="margin-bottom: 1.5rem; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #10b981;">
+                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🚦 Semáforo de Alerta de Deudas</h3>
+                        <div class="grid grid-2" style="gap: 1.5rem; margin-bottom: 1rem;">
+                            <div class="form-group">
+                                <label style="font-weight: 700; color: #374151; display: block; margin-bottom: 0.5rem;">Límite para Deuda Leve (Amarillo) - CLP</label>
+                                <input type="number" id="debtLimitMild" class="form-control" min="0" step="1" onchange="SettingsView.saveDebtSettings()" style="height: 2.75rem; font-size: 1rem;">
+                                <small style="color: #6b7280;">Deudas menores a este monto serán clasificadas como Leves (🟢 es $0).</small>
+                            </div>
+                            <div class="form-group">
+                                <label style="font-weight: 700; color: #374151; display: block; margin-bottom: 0.5rem;">Límite para Deuda Alta (Rojo) - CLP</label>
+                                <input type="number" id="debtLimitHigh" class="form-control" min="0" step="1" onchange="SettingsView.saveDebtSettings()" style="height: 2.75rem; font-size: 1rem;">
+                                <small style="color: #6b7280;">Deudas entre el límite leve y este monto serán Altas. Sobre este monto serán Críticas (🟣).</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SECCIÓN: MÚLTIPLES CAJAS -->
+                    <div class="card" style="margin-bottom: 0; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #10b981;">
+                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">💰 Gestión de Múltiples Cajas</h3>
+                        <div style="display: flex; flex-direction: column; gap: 1rem;">
+                            <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
+                                <input type="checkbox" id="allowMultipleCashRegisters" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.saveMultipleCashSettings()">
+                                <span>Permitir múltiples cajas simultáneas</span>
+                            </label>
+                            <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
+                                Si se activa, permite abrir múltiples cajas al mismo tiempo (útil para locales con varios cajeros). Si se desactiva, solo se permite una caja abierta a la vez.
+                            </p>
+                        </div>
+                        <div style="margin-top: 1.5rem;">
+                            <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Cajas Activas</h4>
+                            <div id="activeCashRegistersList" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                                <p style="color: #6b7280; font-size: 0.85rem;">Cargando cajas...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PANE 3: HARDWARE Y DISPOSITIVOS -->
+                <div id="settings-tab-hardware" class="settings-section-panel ${activeTab === 'settings-tab-hardware' ? 'active' : ''}">
+                    <button class="btn-back-settings" onclick="SettingsView.showCategoriesMenu()">
+                        ⬅️ Regresar a Ajustes
+                    </button>
+                    
+                    <div class="settings-panel-header" style="border-left-color: #06b6d4; background: #ecfeff;">
+                        <h2 style="color: #0891b2;">🔌 Impresión, Escáneres y Conexiones</h2>
+                        <p>Vincula tus periféricos de mostrador como impresoras de boletas, básculas de pesaje o lectores e integra tu red.</p>
+                    </div>
+
+                    <!-- SECCIÓN: IMPRESORAS TÉRMICAS -->
+                    ${PermissionService.can('settings.security') ? `
+                    <div class="card" style="margin-bottom: 1.5rem; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #06b6d4;">
+                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🖨️ Configuración de Impresoras Térmicas</h3>
+                        <div style="display: flex; flex-direction: column; gap: 1rem;">
+                            <div>
+                                <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Impresora de Tickets</h4>
+                                <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                                    Configura la impresora térmica para imprimir tickets de venta.
+                                </p>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                                    <div>
+                                        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Puerto de Impresión</label>
+                                        <select id="printerPort" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;" onchange="SettingsView.handlePrinterPortChange()">
+                                            <option value="USB">USB</option>
+                                            <option value="COM1">COM1</option>
+                                            <option value="COM2">COM2</option>
+                                            <option value="COM3">COM3</option>
+                                            <option value="LPT1">LPT1</option>
+                                            <option value="network">Red (IP)</option>
+                                            <option value="bluetooth">Bluetooth (Inalámbrico)</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Ancho del Papel</label>
+                                        <select id="paperWidth" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
+                                            <option value="58mm">58mm (Estándar)</option>
+                                            <option value="80mm">80mm (Grande)</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                
+                                <!-- Configuración específica de Bluetooth -->
+                                <div id="bluetoothPrinterConfig" style="display: none; margin-top: 1.25rem; padding: 1.25rem; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 1rem;">
+                                    <h5 style="margin-bottom: 0.5rem; font-size: 0.95rem; color: #1e293b; font-weight: 700;">Dispositivo Bluetooth Vinculado</h5>
+                                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;">
+                                        <div>
+                                            <span id="bluetoothDeviceStatus" style="font-size: 0.85rem; font-weight: 700; color: #94a3b8;">Verificando adaptador...</span>
+                                            <div id="bluetoothSavedName" style="font-size: 1.05rem; font-weight: 800; color: #0f172a; margin-top: 0.25rem;">-</div>
+                                        </div>
+                                        <div style="display: flex; gap: 0.5rem;">
+                                            <button class="btn btn-secondary" onclick="SettingsView.pairBluetoothPrinter()" style="padding: 0.5rem 1rem; font-size: 0.85rem;">
+                                                🔍 Buscar y Vincular
+                                            </button>
+                                            <button class="btn btn-outline-danger" id="btnForgetBluetooth" onclick="SettingsView.forgetBluetoothPrinter()" style="padding: 0.5rem 1rem; font-size: 0.85rem; display: none;">
+                                                🗑️ Olvidar
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                            
-                            <div>
-                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Ancho del Papel</label>
-                                <select id="paperWidth" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
-                                    <option value="58mm">58mm (Estándar)</option>
-                                    <option value="80mm">80mm (Grande)</option>
-                                </select>
+                            <div style="margin-top: 1rem;">
+                                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
+                                    <input type="checkbox" id="autoPrintTicket" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.savePrinterSettings()">
+                                    <span>Imprimir ticket automáticamente al finalizar venta</span>
+                                </label>
+                                <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
+                                    Si se activa, el sistema imprimirá automáticamente el ticket después de cada venta.
+                                </p>
+                            </div>
+                            <div style="margin-top: 1rem;">
+                                <button class="btn btn-primary" onclick="SettingsView.testPrinter()">
+                                    🧪 Probar Impresión
+                                </button>
+                                <button class="btn btn-secondary" onclick="SettingsView.savePrinterSettings()">
+                                    💾 Guardar Configuración
+                                </button>
                             </div>
                         </div>
                     </div>
+                    ` : ''}
 
-                    <div style="margin-top: 1rem;">
-                        <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
-                            <input type="checkbox" id="autoPrintTicket" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.savePrinterSettings()">
-                            <span>Imprimir ticket automáticamente al finalizar venta</span>
-                        </label>
-                        <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
-                            Si se activa, el sistema imprimirá automáticamente el ticket después de cada venta.
-                        </p>
-                    </div>
-
-                    <div style="margin-top: 1rem;">
-                        <button class="btn btn-primary" onclick="SettingsView.testPrinter()">
-                            🧪 Probar Impresión
-                        </button>
-                        <button class="btn btn-secondary" onclick="SettingsView.savePrinterSettings()">
-                            💾 Guardar Configuración
-                        </button>
-                    </div>
-                </div>
-            </div>
-            ` : ''}
-
-            <!-- SECCIÓN: INTEGRACIÓN POS -->
-            ${PermissionService.can('settings.security') ? `
-            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🔌 Integración POS (Lectores y Balanzas)</h3>
-                
-                <div style="display: flex; flex-direction: column; gap: 1rem;">
-                    <div>
-                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Lector de Código de Barras</h4>
-                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
-                            Configura el lector de código de barras para escanear productos automáticamente.
-                        </p>
-                        
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    <!-- SECCIÓN: PERSONALIZACIÓN DE TICKETS -->
+                    ${PermissionService.can('settings.backup') ? `
+                    <div class="card" style="margin-bottom: 1.5rem; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #06b6d4;">
+                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🎫 Personalización de Tickets</h3>
+                        <div style="display: flex; flex-direction: column; gap: 1rem;">
                             <div>
-                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Tipo de Lector</label>
-                                <select id="barcodeReaderType" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
-                                    <option value="usb">USB (HID)</option>
-                                    <option value="serial">Serial (COM)</option>
-                                    <option value="bluetooth">Bluetooth</option>
-                                </select>
+                                <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Encabezado del Ticket</h4>
+                                <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                                    Personaliza el encabezado que aparece en todos los tickets de venta.
+                                </p>
+                                <div>
+                                    <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Nombre del Negocio</label>
+                                    <input type="text" id="ticketBusinessName" class="form-control" placeholder="Ej: Mi Tienda" style="font-size: 0.9rem; padding: 0.5rem;">
+                                </div>
+                                <div style="margin-top: 0.75rem;">
+                                    <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Dirección</label>
+                                    <input type="text" id="ticketAddress" class="form-control" placeholder="Ej: Calle Principal #123" style="font-size: 0.9rem; padding: 0.5rem;">
+                                </div>
+                                <div style="margin-top: 0.75rem;">
+                                    <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Teléfono</label>
+                                    <input type="text" id="ticketPhone" class="form-control" placeholder="Ej: +56 9 1234 5678" style="font-size: 0.9rem; padding: 0.5rem;">
+                                </div>
                             </div>
-                            <div>
-                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Sufijo de Escaneo</label>
-                                <select id="barcodeSuffix" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
-                                    <option value="enter">Enter (CR)</option>
-                                    <option value="tab">Tab</option>
-                                    <option value="none">Ninguno</option>
-                                </select>
+                            <div style="margin-top: 1rem;">
+                                <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Pie de Página</h4>
+                                <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                                    Mensaje que aparece al final del ticket.
+                                </p>
+                                <textarea id="ticketFooter" class="form-control" placeholder="Ej: ¡Gracias por su compra!" rows="2" style="font-size: 0.9rem; padding: 0.5rem;"></textarea>
+                            </div>
+                            <div style="margin-top: 1rem;">
+                                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
+                                    <input type="checkbox" id="showLogoOnTicket" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.saveTicketSettings()">
+                                    <span>Mostrar logo en el ticket</span>
+                                </label>
+                                <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
+                                    Si se activa, el logo del negocio aparecerá en el encabezado del ticket.
+                                </p>
+                            </div>
+                            <div style="margin-top: 1rem;">
+                                <button class="btn btn-primary" onclick="SettingsView.saveTicketSettings()">
+                                    💾 Guardar Configuración
+                                </button>
+                                <button class="btn btn-secondary" onclick="SettingsView.previewTicket()">
+                                    👁️ Vista Previa
+                                </button>
                             </div>
                         </div>
                     </div>
+                    ` : ''}
 
-                    <div style="margin-top: 1rem;">
-                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Balanza Electrónica</h4>
-                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
-                            Configura la balanza para pesar productos vendidos por peso.
-                        </p>
-                        
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                    <!-- SECCIÓN: INTEGRACIÓN POS -->
+                    ${PermissionService.can('settings.security') ? `
+                    <div class="card" style="margin-bottom: 1.5rem; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #06b6d4;">
+                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🔌 Integración POS (Lectores y Balanzas)</h3>
+                        <div style="display: flex; flex-direction: column; gap: 1rem;">
                             <div>
-                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Puerto de Balanza</label>
-                                <select id="scalePort" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
-                                    <option value="COM1">COM1</option>
-                                    <option value="COM2">COM2</option>
-                                    <option value="COM3">COM3</option>
-                                    <option value="USB">USB</option>
-                                </select>
+                                <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Lector de Código de Barras</h4>
+                                <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                                    Configura el lector de código de barras para escanear productos automáticamente.
+                                </p>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                                    <div>
+                                        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Tipo de Lector</label>
+                                        <select id="barcodeReaderType" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
+                                            <option value="usb">USB (HID)</option>
+                                            <option value="serial">Serial (COM)</option>
+                                            <option value="bluetooth">Bluetooth</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Sufijo de Escaneo</label>
+                                        <select id="barcodeSuffix" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
+                                            <option value="enter">Enter (CR)</option>
+                                            <option value="tab">Tab</option>
+                                            <option value="none">Ninguno</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
-                            <div>
-                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Unidad de Peso</label>
-                                <select id="weightUnit" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
-                                    <option value="kg">Kilogramos (kg)</option>
-                                    <option value="g">Gramos (g)</option>
-                                    <option value="lb">Libras (lb)</option>
-                                </select>
+                            <div style="margin-top: 1rem;">
+                                <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Balanza Electrónica</h4>
+                                <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                                    Configura la balanza para pesar productos vendidos por peso.
+                                </p>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                                    <div>
+                                        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Puerto de Balanza</label>
+                                        <select id="scalePort" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
+                                            <option value="COM1">COM1</option>
+                                            <option value="COM2">COM2</option>
+                                            <option value="COM3">COM3</option>
+                                            <option value="USB">USB</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Unidad de Peso</label>
+                                        <select id="weightUnit" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
+                                            <option value="kg">Kilogramos (kg)</option>
+                                            <option value="g">Gramos (g)</option>
+                                            <option value="lb">Libras (lb)</option>
+                                        </select>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-
-                    <div style="margin-top: 1rem;">
-                        <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
-                            <input type="checkbox" id="autoWeighProducts" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.savePOSSettings()">
-                            <span>Pesar productos automáticamente al escanear</span>
-                        </label>
-                        <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
-                            Si se activa, el sistema leerá automáticamente el peso de la balanza al escanear productos vendidos por peso.
-                        </p>
-                    </div>
-
-                    <div style="margin-top: 1rem;">
-                        <button class="btn btn-primary" onclick="SettingsView.testBarcodeReader()">
-                            🧪 Probar Lector
-                        </button>
-                        <button class="btn btn-secondary" onclick="SettingsView.testScale()">
-                            ⚖️ Probar Balanza
-                        </button>
-                        <button class="btn btn-secondary" onclick="SettingsView.savePOSSettings()">
-                            💾 Guardar Configuración
-                        </button>
-                    </div>
-                </div>
-            </div>
-            ` : ''}
-
-            <!-- SECCIÓN: BACKUP AUTOMÁTICO EN LA NUBE -->
-            ${PermissionService.can('settings.backup') ? `
-            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">☁️ Backup Automático en la Nube</h3>
-                
-                <div style="display: flex; flex-direction: column; gap: 1rem;">
-                    <div>
-                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Configuración de Backup</h4>
-                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
-                            Configura el backup automático de tus datos en la nube para mayor seguridad.
-                        </p>
-                        
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-                            <div>
-                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Proveedor de Nube</label>
-                                <select id="cloudProvider" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
-                                    <option value="none">Sin configurar</option>
-                                    <option value="google">Google Drive</option>
-                                    <option value="dropbox">Dropbox</option>
-                                    <option value="onedrive">OneDrive</option>
-                                    <option value="s3">Amazon S3</option>
-                                </select>
+                            <div style="margin-top: 1rem;">
+                                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
+                                    <input type="checkbox" id="autoWeighProducts" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.savePOSSettings()">
+                                    <span>Pesar productos automáticamente al escanear</span>
+                                </label>
+                                <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
+                                    Si se activa, el sistema leerá automáticamente el peso de la balanza al escanear productos vendidos por peso.
+                                </p>
                             </div>
-                            <div>
-                                <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Frecuencia de Backup</label>
-                                <select id="backupFrequency" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
-                                    <option value="daily">Diario</option>
-                                    <option value="weekly">Semanal</option>
-                                    <option value="monthly">Mensual</option>
-                                </select>
+                            <div style="margin-top: 1rem;">
+                                <button class="btn btn-primary" onclick="SettingsView.testBarcodeReader()">
+                                    🧪 Probar Lector
+                                </button>
+                                <button class="btn btn-secondary" onclick="SettingsView.testScale()">
+                                    ⚖️ Probar Balanza
+                                </button>
+                                <button class="btn btn-secondary" onclick="SettingsView.savePOSSettings()">
+                                    💾 Guardar Configuración
+                                </button>
                             </div>
                         </div>
                     </div>
+                    ` : ''}
 
-                    <div style="margin-top: 1rem;">
-                        <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
-                            <input type="checkbox" id="autoBackupEnabled" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.saveCloudBackupSettings()">
-                            <span>Activar backup automático</span>
-                        </label>
-                        <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
-                            Si se activa, el sistema realizará backups automáticos según la frecuencia configurada.
-                        </p>
-                    </div>
-
-                    <div style="margin-top: 1rem;">
-                        <button class="btn btn-primary" onclick="SettingsView.testCloudConnection()">
-                            🧪 Probar Conexión
-                        </button>
-                        <button class="btn btn-secondary" onclick="SettingsView.saveCloudBackupSettings()">
-                            💾 Guardar Configuración
-                        </button>
-                    </div>
-                </div>
-            </div>
-            ` : ''}
-
-            <!-- SECCIÓN: PERSONALIZACIÓN DE TICKETS -->
-            ${PermissionService.can('settings.backup') ? `
-            <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🎫 Personalización de Tickets</h3>
-                
-                <div style="display: flex; flex-direction: column; gap: 1rem;">
-                    <div>
-                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Encabezado del Ticket</h4>
-                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
-                            Personaliza el encabezado que aparece en todos los tickets de venta.
-                        </p>
-                        
+                    <!-- SECCIÓN: MULTIDISPOSITIVO -->
+                    <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); display: flex; flex-direction: column; justify-content: space-between; border-top: 4px solid #06b6d4;">
                         <div>
-                            <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Nombre del Negocio</label>
-                            <input type="text" id="ticketBusinessName" class="form-control" placeholder="Ej: Mi Tienda" style="font-size: 0.9rem; padding: 0.5rem;">
+                            <h3 style="margin-bottom: 1rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">📱 Conexión Multidispositivo</h3>
+                            <div id="multi-device-content" style="display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 1rem; min-height: 120px;">
+                                <p style="font-size: 0.85rem; color: #4b5563; margin: 0;">
+                                    Cargando información de red...
+                                </p>
+                            </div>
                         </div>
-                        
-                        <div style="margin-top: 0.75rem;">
-                            <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Dirección</label>
-                            <input type="text" id="ticketAddress" class="form-control" placeholder="Ej: Calle Principal #123" style="font-size: 0.9rem; padding: 0.5rem;">
-                        </div>
-                        
-                        <div style="margin-top: 0.75rem;">
-                            <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Teléfono</label>
-                            <input type="text" id="ticketPhone" class="form-control" placeholder="Ej: +56 9 1234 5678" style="font-size: 0.9rem; padding: 0.5rem;">
-                        </div>
-                    </div>
-
-                    <div style="margin-top: 1rem;">
-                        <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Pie de Página</h4>
-                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
-                            Mensaje que aparece al final del ticket.
-                        </p>
-                        
-                        <textarea id="ticketFooter" class="form-control" placeholder="Ej: ¡Gracias por su compra!" rows="2" style="font-size: 0.9rem; padding: 0.5rem;"></textarea>
-                    </div>
-
-                    <div style="margin-top: 1rem;">
-                        <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
-                            <input type="checkbox" id="showLogoOnTicket" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.saveTicketSettings()">
-                            <span>Mostrar logo en el ticket</span>
-                        </label>
-                        <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
-                            Si se activa, el logo del negocio aparecerá en el encabezado del ticket.
-                        </p>
-                    </div>
-
-                    <div style="margin-top: 1rem;">
-                        <button class="btn btn-primary" onclick="SettingsView.saveTicketSettings()">
-                            💾 Guardar Configuración
-                        </button>
-                        <button class="btn btn-secondary" onclick="SettingsView.previewTicket()">
-                            👁️ Vista Previa
-                        </button>
                     </div>
                 </div>
+
+                <!-- PANE 4: SEGURIDAD Y PERSONAL -->
+                <div id="settings-tab-security" class="settings-section-panel ${activeTab === 'settings-tab-security' ? 'active' : ''}">
+                    <button class="btn-back-settings" onclick="SettingsView.showCategoriesMenu()">
+                        ⬅️ Regresar a Ajustes
+                    </button>
+                    
+                    <div class="settings-panel-header" style="border-left-color: #f59e0b; background: #fffbeb;">
+                        <h2 style="color: #d97706;">🔐 Usuarios, Seguridad y Permisos</h2>
+                        <p>Administra los accesos de tus empleados, asigna roles de cajero o administrador y resguarda claves con PIN.</p>
+                    </div>
+
+                    <!-- SECCIÓN: GESTIÓN DE USUARIOS Y ROLES -->
+                    ${PermissionService.can('settings.users') ? `
+                    <div class="card" id="userManagementCard" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #f59e0b;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+                            <h3 style="margin: 0; color: #111827; font-size: 1.05rem;">👥 Gestión de Usuarios y Roles</h3>
+                            <button class="btn btn-primary btn-sm" onclick="SettingsView.showCreateUserModal()">
+                                + Nuevo Usuario
+                            </button>
+                        </div>
+                        <p style="font-size: 0.875rem; color: var(--text); opacity: 0.8; margin-bottom: 1rem;">
+                            Asigna roles a los usuarios del sistema. Los roles controlan el acceso a las diferentes secciones y acciones.
+                        </p>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; padding: 0.75rem; background: var(--light); border-radius: 0.5rem; font-size: 0.85rem;">
+                            <div><strong>Propietario:</strong> Acceso total</div>
+                            <div><strong>Administrador:</strong> Gestión operativa</div>
+                            <div><strong>Cajero:</strong> Solo POS y deudas</div>
+                        </div>
+                        <div id="userRolesList" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <p style="color: var(--secondary);">Cargando usuarios...</p>
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <!-- SECCIÓN: SEGURIDAD Y PIN -->
+                    ${PermissionService.can('settings.security') ? `
+                    <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #f59e0b;">
+                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem;">🔐 Seguridad y Recuperación de Contraseña</h3>
+                        <div style="display: flex; flex-direction: column; gap: 1.5rem;">
+                            <div>
+                                <h4 style="margin-bottom: 0.75rem;">PIN de Administrador Global</h4>
+                                <p style="font-size: 0.875rem; color: var(--text); opacity: 0.8; margin-bottom: 1rem;">
+                                    Establece un PIN de 4-8 dígitos para restablecer la contraseña de <strong>cualquier usuario</strong> del sistema. Este PIN es global y funciona para todos los usuarios.
+                                </p>
+                                <div id="adminPINStatus" style="margin-bottom: 0.75rem; padding: 0.75rem; background: var(--light); border-radius: 0.375rem; font-size: 0.875rem;">
+                                    <span id="pinStatusText">Cargando...</span>
+                                </div>
+                                <button class="btn btn-primary" id="adminPINBtn" onclick="SettingsView.showSetAdminPINForm()">
+                                    Configurar PIN
+                                </button>
+                            </div>
+                            <div style="border-top: 1px solid var(--border); padding-top: 1.5rem;">
+                                <h4 style="margin-bottom: 0.75rem;">Código de Recuperación</h4>
+                                <p style="font-size: 0.875rem; color: var(--text); opacity: 0.8; margin-bottom: 1rem;">
+                                    Genera un código de recuperación para restablecer tu contraseña. 
+                                    <strong>Guarda este código en un lugar seguro</strong> - solo se mostrará una vez.
+                                </p>
+                                <div id="recoveryCodeStatus" style="margin-bottom: 0.75rem; padding: 0.75rem; background: var(--light); border-radius: 0.375rem; font-size: 0.875rem;">
+                                    <span id="codeStatusText">Cargando...</span>
+                                </div>
+                                <button class="btn btn-primary" onclick="SettingsView.generateRecoveryCode()">
+                                    Generar Código de Recuperación
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <!-- SECCIÓN: ROLES Y PERMISOS GRANULARES -->
+                    ${PermissionService.can('settings.security') ? `
+                    <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #f59e0b;">
+                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">👥 Roles y Permisos Granulares</h3>
+                        <div style="display: flex; flex-direction: column; gap: 1rem;">
+                            <div>
+                                <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Permisos por Rol</h4>
+                                <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                                    Configura qué acciones puede realizar cada rol en el sistema.
+                                </p>
+                                <div id="rolesPermissionsList" style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                    <p style="color: #6b7280; font-size: 0.85rem;">Cargando roles...</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+
+                <!-- PANE 5: RESPALDOS Y SISTEMA -->
+                <div id="settings-tab-system" class="settings-section-panel ${activeTab === 'settings-tab-system' ? 'active' : ''}">
+                    <button class="btn-back-settings" onclick="SettingsView.showCategoriesMenu()">
+                        ⬅️ Regresar a Ajustes
+                    </button>
+                    
+                    <div class="settings-panel-header" style="border-left-color: #f43f5e; background: #fff1f2;">
+                        <h2 style="color: #e11d48;">💾 Base de Datos, Respaldos y Utilitarios</h2>
+                        <p>Realiza copias de seguridad de tu negocio, exporta bases contables a Excel y administra la salud del software.</p>
+                    </div>
+
+                    <!-- SECCIÓN: MANTENIMIENTO Y RESPALDOS -->
+                    ${PermissionService.can('settings.backup') ? `
+                    <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #f43f5e;">
+                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">💾 Copias de Seguridad y Mantenimiento</h3>
+                        <div class="grid grid-2" style="gap: 2rem;">
+                            <div>
+                                <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Gestión de Base de Datos</h4>
+                                <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1.5rem;">
+                                    Descarga una copia completa de tu negocio para respaldar en la nube o en un pendrive. También puedes restaurar una copia previa.
+                                </p>
+                                <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                                    <button class="btn btn-primary" style="width: 100%; justify-content: center; background: #4f46e5;" onclick="BackupManager.exportAllData()">
+                                        📤 Generar Backup Completo (.JSON)
+                                    </button>
+                                    <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #8b5cf6; color: #5b21b6; background: #f5f3ff;" onclick="SettingsView.exportBusinessData()">
+                                        🏢 Exportar Negocio Completo (Sin Usuarios)
+                                    </button>
+                                    <div style="position: relative;">
+                                        <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #d1d5db;" onclick="document.getElementById('importFile').click()">
+                                            📥 Restaurar desde Backup
+                                        </button>
+                                        <input type="file" id="importFile" style="display: none;" accept=".json" onchange="SettingsView.handleImport(event)">
+                                    </div>
+                                    <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #fbbf24; color: #92400e; background: #fffbeb;" onclick="SettingsView.deduplicateSuppliers()">
+                                        🧹 Limpiar Proveedores Duplicados
+                                    </button>
+                                    <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #10b981; color: #065f46; background: #ecfdf5;" onclick="SettingsView.deduplicateCustomers()">
+                                        👥 Fusión Maestra de Clientes
+                                    </button>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Exportar a Excel (Contabilidad)</h4>
+                                <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                                    Descarga reportes específicos en formato Excel para tu contador o para revisar en tu celular.
+                                </p>
+                                <div style="max-height: 150px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 0.5rem; padding: 0.5rem; background: #f9fafb;">
+                                    <table style="width: 100%; font-size: 0.8rem;">
+                                        <tbody>
+                                            ${(window.BACKUP_ENTITY_CONFIG || []).map(entity => `
+                                                <tr>
+                                                    <td style="padding: 0.4rem 0; color: #374151;">${entity.label}</td>
+                                                    <td style="text-align: right; padding: 0.4rem 0;">
+                                                        <a href="javascript:void(0)" onclick="SettingsView.exportEntityData('${entity.key}')" style="color: #4f46e5; font-weight: 600; text-decoration: none;">Excel</a>
+                                                    </td>
+                                                </tr>
+                                            `).join('')}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <!-- SECCIÓN: BACKUP AUTOMÁTICO EN LA NUBE -->
+                    ${PermissionService.can('settings.backup') ? `
+                    <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #f43f5e;">
+                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">☁️ Backup Automático en la Nube</h3>
+                        <div style="display: flex; flex-direction: column; gap: 1rem;">
+                            <div>
+                                <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Configuración de Backup</h4>
+                                <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                                    Configura el backup automático de tus datos en la nube para mayor seguridad.
+                                </p>
+                                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+                                    <div>
+                                        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Proveedor de Nube</label>
+                                        <select id="cloudProvider" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
+                                            <option value="none">Sin configurar</option>
+                                            <option value="google">Google Drive</option>
+                                            <option value="dropbox">Dropbox</option>
+                                            <option value="onedrive">OneDrive</option>
+                                            <option value="s3">Amazon S3</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Frecuencia de Backup</label>
+                                        <select id="backupFrequency" class="form-control" style="font-size: 0.9rem; padding: 0.5rem;">
+                                            <option value="daily">Diario</option>
+                                            <option value="weekly">Semanal</option>
+                                            <option value="monthly">Mensual</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="margin-top: 1rem;">
+                                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
+                                    <input type="checkbox" id="autoBackupEnabled" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.saveCloudBackupSettings()">
+                                    <span>Activar backup automático</span>
+                                </label>
+                                <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
+                                    Si se activa, el sistema realizará backups automáticos según la frecuencia configurada.
+                                </p>
+                            </div>
+                            <div style="margin-top: 1rem;">
+                                <button class="btn btn-primary" onclick="SettingsView.testCloudConnection()">
+                                    🧪 Probar Conexión
+                                </button>
+                                <button class="btn btn-secondary" onclick="SettingsView.saveCloudBackupSettings()">
+                                    💾 Guardar Configuración
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+
+                    <!-- SECCIÓN: GENERAL Y CACHE -->
+                    <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #f43f5e;">
+                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem;">⚙️ Opciones del Sistema</h3>
+                        <div class="grid grid-3">
+                            <div>
+                                <h4 style="margin-bottom: 0.75rem;">Información</h4>
+                                <p style="font-size: 0.875rem; color: var(--text); opacity: 0.8; margin-bottom: 0.75rem;">
+                                    Versión: 1.0.0<br>
+                                    Base de datos: ${db.mode === 'sqlite' ? 'SQLite (Servidor)' : 'IndexedDB (Local)'}<br>
+                                    Estado: ${db.mode === 'sqlite' ? 'Online' : 'Offline'}
+                                </p>
+                                <button class="btn btn-secondary btn-sm" onclick="SettingsView.runSetupWizardAgain()" style="border: 1px dashed var(--primary); color: var(--primary); font-weight: 600;">
+                                    🔧 Asistente de Configuración
+                                </button>
+                            </div>
+                            <div>
+                                <h4 style="margin-bottom: 0.75rem;">Cache</h4>
+                                <button class="btn btn-secondary btn-sm" onclick="SettingsView.clearCache()">
+                                    Limpiar Cache
+                                </button>
+                                <p style="font-size: 0.75rem; margin-top: 0.5rem; color: var(--text); opacity: 0.7;">
+                                    Limpia archivos en cache
+                                </p>
+                            </div>
+                            <div>
+                                <h4 style="margin-bottom: 0.75rem;">Reinstalar</h4>
+                                <button class="btn btn-secondary btn-sm" onclick="SettingsView.reinstallApp()">
+                                    Reinstalar PWA
+                                </button>
+                                <p style="font-size: 0.75rem; margin-top: 0.5rem; color: var(--text); opacity: 0.7;">
+                                    Actualiza la aplicación
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
-            ` : ''}
-            
         `;
+    },
+
+    switchTab(tabId) {
+        localStorage.setItem('active_settings_tab', tabId);
+        
+        // Ocultar el Dashboard principal
+        const dashboard = document.getElementById('settings-dashboard');
+        if (dashboard) dashboard.style.display = 'none';
+        
+        // Mostrar el wrapper del contenido
+        const contentWrapper = document.querySelector('.settings-content-wrapper');
+        if (contentWrapper) contentWrapper.style.display = 'block';
+        
+        // Desactivar todos los paneles
+        document.querySelectorAll('.settings-section-panel').forEach(panel => {
+            panel.classList.remove('active');
+        });
+        
+        // Activar el panel seleccionado
+        const activePanel = document.getElementById(tabId);
+        if (activePanel) activePanel.classList.add('active');
+    },
+
+    showCategoriesMenu() {
+        localStorage.setItem('active_settings_tab', 'menu');
+        
+        // Ocultar todos los paneles internos
+        document.querySelectorAll('.settings-section-panel').forEach(panel => {
+            panel.classList.remove('active');
+        });
+        
+        // Ocultar el wrapper del contenido
+        const contentWrapper = document.querySelector('.settings-content-wrapper');
+        if (contentWrapper) contentWrapper.style.display = 'none';
+        
+        // Mostrar el Dashboard principal
+        const dashboard = document.getElementById('settings-dashboard');
+        if (dashboard) dashboard.style.display = 'grid';
     },
 
     // --- APARIENCIA ---

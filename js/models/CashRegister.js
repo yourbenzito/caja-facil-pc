@@ -278,6 +278,99 @@ class CashRegister {
             return sum + recalc;
         }, 0);
 
+        // 1) Calcular Gastos del Turno
+        let totalExpenses = 0;
+        movements.forEach(m => {
+            const isOut = m.type === 'out';
+            const isGasto = (m.description || '').includes('[GASTO]') ||
+                            (m.category && m.category !== '' &&
+                             !['sale','payment','withdraw','add'].includes(m.category));
+            if (isOut && isGasto) {
+                totalExpenses += parseFloat(m.amount) || 0;
+            }
+        });
+
+        // 2) Calcular Costo Neto de Ventas del Turno
+        let totalSalesCostNet = 0;
+        let productMap = {};
+        try {
+            const products = await Product.getAll();
+            products.forEach(p => productMap[p.id] = p);
+        } catch (e) {
+            console.error('Error al cargar productos en getSummary:', e);
+        }
+
+        sales.forEach(s => {
+            if (s.status === 'cancelled') return;
+            const isBoleta = (s.documentType || 'boleta') === 'boleta';
+            const items = typeof s.items === 'string' ? JSON.parse(s.items || '[]') : (s.items || []);
+            
+            items.forEach(item => {
+                const pid = item.productId || item.id;
+                let itemCostGross = 0;
+                if (item.costAtSale !== undefined && item.costAtSale !== null) {
+                    itemCostGross = parseFloat(item.costAtSale) * (parseFloat(item.quantity) || 0);
+                } else {
+                    const product = productMap[pid];
+                    itemCostGross = product ? (parseFloat(product.cost) || 0) * (parseFloat(item.quantity) || 0) : 0;
+                }
+                const itemCostNet = isBoleta ? Math.round(itemCostGross / 1.19) : itemCostGross;
+                totalSalesCostNet += itemCostNet;
+            });
+        });
+
+        // Descontar devoluciones del turno en el costo
+        let totalReturnedCostNet = 0;
+        try {
+            const returns = await SaleReturn.getByDateRange(startTime, endTime);
+            if (Array.isArray(returns)) {
+                returns.forEach(ret => {
+                    const retItems = typeof ret.items === 'string' ? JSON.parse(ret.items || '[]') : (ret.items || []);
+                    retItems.forEach(item => {
+                        const pid = item.productId;
+                        let itemCostGross = 0;
+                        if (item.costAtSale !== undefined && item.costAtSale !== null) {
+                            itemCostGross = parseFloat(item.costAtSale) * (parseFloat(item.quantity) || 0);
+                        } else {
+                            const product = productMap[pid];
+                            itemCostGross = product ? (parseFloat(product.cost) || 0) * (parseFloat(item.quantity) || 0) : 0;
+                        }
+                        const isBoleta = true;
+                        const itemCostNet = isBoleta ? Math.round(itemCostGross / 1.19) : itemCostGross;
+                        totalReturnedCostNet += itemCostNet;
+                    });
+                });
+            }
+        } catch (_) {}
+
+        totalSalesCostNet = Math.max(0, totalSalesCostNet - totalReturnedCostNet);
+
+        // Calcular el ingreso neto total de las ventas (sin IVA)
+        let totalSalesRevenueNet = 0;
+        sales.forEach(s => {
+            if (s.status === 'cancelled') return;
+            const isBoleta = (s.documentType || 'boleta') === 'boleta';
+            const saleNeto = Math.round(s.total / 1.19);
+            const saleRevenue = isBoleta ? saleNeto : s.total;
+            totalSalesRevenueNet += saleRevenue;
+        });
+
+        // Restar devoluciones del ingreso neto
+        let totalReturnedRevenueNet = 0;
+        try {
+            const returns = await SaleReturn.getByDateRange(startTime, endTime);
+            if (Array.isArray(returns)) {
+                returns.forEach(ret => {
+                    const returnedAmount = parseFloat(ret.totalReturned) || 0;
+                    totalReturnedRevenueNet += Math.round(returnedAmount / 1.19);
+                });
+            }
+        } catch (_) {}
+        totalSalesRevenueNet = Math.max(0, totalSalesRevenueNet - totalReturnedRevenueNet);
+
+        const grossProfit = Math.max(0, totalSalesRevenueNet - totalSalesCostNet);
+        const netProfit = grossProfit - totalExpenses;
+
         return {
             ...cashRegister,
             totalSales: totalSalesCount,
@@ -292,7 +385,10 @@ class CashRegister {
             cashForDisplay: cashForDisplay,
             expectedCash: expectedCash,
             ivaDebito: ivaDebito,
-            ivaCredito: ivaCredito
+            ivaCredito: ivaCredito,
+            totalExpenses: totalExpenses,
+            grossProfit: grossProfit,
+            netProfit: netProfit
         };
     }
 }

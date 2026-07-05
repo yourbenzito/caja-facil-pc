@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="CajaFácil - El Punto de Venta (POS) definitivo para Minimarkets. 100% Offline con respaldos en la nube.">
+  <title>CajaFácil - Sistema POS para Minimarkets</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- --- BARRA DE PROGRESO DE LECTURA --- -->
+  <div class="scroll-progress-container">
+    <div id="scroll-progress-bar"></div>
+  </div>
+
+  <!-- --- CANVAS PARA GRILLA MAGNÉTICA INTERACTIVA --- -->
+  <canvas id="magnetic-grid-canvas"></canvas>
+
+  <!-- --- HEADER / NAVBAR --- -->
+  <header>
+    <div class="container nav-container">
+      <a href="#" class="logo">Caja<span>Fácil</span></a>
+      <ul class="nav-links">
+        <li><a href="#soluciones">Soluciones</a></li>
+        <li><a href="#cajafacil-engine">El Motor</a></li>
+        <li><a href="#calculadora-roi">Simulador de Ahorro</a></li>
+        <li><a href="#suscripcion-offline">Suscripción Offline</a></li>
+        <li><a href="#precios">Precios</a></li>
+        <li><a href="#" class="btn btn-primary" id="download-btn-nav">Descargar App</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <!-- --- HERO SECTION CON CARRUSEL --- -->
+  <section class="container hero reveal">
+    <div class="carousel-container">
+      <div class="carousel-track" id="hero-carousel-track">
+        <!-- Slide 1: Offline -->
+        <div class="carousel-slide active">
+          <div class="hero-content">
+            <h2>El Punto de Venta definitivo que <span>nunca se cae</span></h2>
+            <p>Diseñado especialmente para Minimarkets y Almacenes en Chile. Administra tus ventas y controla tu stock con o sin conexión a internet.</p>
+            <div class="hero-buttons">
+              <a href="#" class="btn btn-primary download-btn-trigger" id="download-btn-hero">🛒 Descargar CajaFácil (.exe)</a>
+              <a href="#soluciones" class="btn">Ver soluciones</a>
+            </div>
+          </div>
+        </div>
+        <!-- Slide 2: Caja Ciega -->
+        <div class="carousel-slide">
+          <div class="hero-content">
+            <h2>Evita pérdidas con <span>Arqueo Ciego de Caja</span></h2>
+            <p>Tus cajeros no sabrán cuánto dinero debe haber en caja hasta ingresarlo físicamente. Protege tu efectivo contra descuadres y robos.</p>
+            <div class="hero-buttons">
+              <a href="#" class="btn btn-primary download-btn-trigger">🔒 Descargar CajaFácil (.exe)</a>
+              <a href="#calculadora-roi" class="btn">Simular Ahorro</a>
+            </div>
+          </div>
+        </div>
+        <!-- Slide 3: Balanzas -->
+        <div class="carousel-slide">
+          <div class="hero-content">
+            <h2>Conectividad con <span>Balanzas e Impresoras</span></h2>
+            <p>Lectores de códigos de barra, pesajes eficientes de balanzas e impresoras térmicas de tickets. Todo integrado nativamente.</p>
+            <div class="hero-buttons">
+              <a href="#" class="btn btn-primary download-btn-trigger">🧾 Descargar CajaFácil (.exe)</a>
+              <a href="#soluciones" class="btn">Ver Hardware</a>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Carousel controls -->
+      <div class="carousel-controls">
+        <span class="carousel-dot active" data-slide="0"></span>
+        <span class="carousel-dot" data-slide="1"></span>
+        <span class="carousel-dot" data-slide="2"></span>
+      </div>
+    </div>
+    
+    <div class="hero-image wrapper-3d">
+      <div class="dashboard-frame card-3d" id="hero-dashboard">
+        <img src="images/dashboard_preview.png" alt="CajaFácil Dashboard Preview">
+      </div>
+    </div>
+  </section>
+
+  <!-- --- SECCIÓN SOLUCIONES EN BLOQUES ALTERNADOS --- -->
+  <section id="soluciones" class="section reveal">
+    <div class="container">
+      <div class="section-header">
+        <h3>Nuestras Soluciones Integradas</h3>
+        <p>Tecnología intuitiva diseñada para simplificar y blindar la venta de tu minimarket.</p>
+      </div>
+    </div>
+
+    <!-- Bloque 1: POS & Ventas -->
+    <div class="service-block">
+      <div class="container block-grid">
+        <div class="block-image wrapper-3d">
+          <div class="levitate-slow" style="width: 100%; display: flex; justify-content: center;">
+            <div class="frame-neumorphic card-3d">
+              <img src="images/dashboard_preview.png" alt="Punto de Venta CajaFácil">
+            </div>
+          </div>
+        </div>
+        <div class="block-content">
+          <div class="block-category">Punto de Venta</div>
+          <h4>POS de Venta Rápida e Intuitivo</h4>
+          <p>Un sistema de caja diseñado para ser operado con pantalla táctil, teclado o lector de barra. Escanea artículos a la velocidad de la luz y emite tickets térmicos.</p>
+          <ul class="block-checklist">
+            <li>Carga instantánea de productos en carrito</li>
+            <li>Aplicación automática de descuentos y ofertas</li>
+            <li>Cierre blindado de caja con reporte de auditoría</li>
+            <li>Integración rápida a lectores USB</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bloque 2: Autoatención / Balanzas (Reverse Layout) -->
+    <div class="service-block reverse">
+      <div class="container block-grid">
+        <div class="block-content">
+          <div class="block-category">Hardware POS</div>
+          <h4>Pesaje Eficiente y Conectividad</h4>
+          <p>Conecta tus balanzas directamente a CajaFácil. Imprime vales de pesaje, tickets o realiza check-out directo en caja. Se adapta a la forma en la que vendes.</p>
+          <ul class="block-checklist">
+            <li>Integración a balanzas comerciales chilenas</li>
+            <li>Soporte nativo para lectores omnidireccionales</li>
+            <li>Apertura automática de cajón con pulso RJ11</li>
+            <li>Impresión térmica configurable (58mm o 80mm)</li>
+          </ul>
+        </div>
+        <div class="block-image wrapper-3d">
+          <div class="levitate-mid" style="width: 100%; display: flex; justify-content: center;">
+            <div class="frame-neumorphic card-3d">
+              <img src="images/dashboard_preview.png" style="filter: hue-rotate(45deg);" alt="Hardware CajaFácil">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bloque 3: Control de Stock -->
+    <div class="service-block">
+      <div class="container block-grid">
+        <div class="block-image wrapper-3d">
+          <div class="levitate-slow" style="width: 100%; display: flex; justify-content: center;">
+            <div class="frame-neumorphic card-3d">
+              <img src="images/dashboard_preview.png" style="filter: hue-rotate(90deg);" alt="Inventario CajaFácil">
+            </div>
+          </div>
+        </div>
+        <div class="block-content">
+          <div class="block-category">Control de Inventario</div>
+          <h4>Gestión de Stock y Mermas</h4>
+          <p>Mantén un registro exacto de cada producto que entra y sale. Recibe alertas de stock crítico para evitar quedarte sin tus productos más vendidos.</p>
+          <ul class="block-checklist">
+            <li>Descuento automático de stock con cada boleta</li>
+            <li>Alertas visuales de productos por agotarse</li>
+            <li>Registro histórico inmutable de movimientos de stock</li>
+            <li>Importación masiva de productos desde planillas Excel</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- --- SECCIÓN CONSOLA INTERACTIVA (ENGINE) --- -->
+  <section id="cajafacil-engine" class="container section reveal">
+    <div class="section-header">
+      <h3>El Motor en Acción</h3>
+      <p>Mira en tiempo real cómo CajaFácil procesa tus ventas locales de forma robusta e inalterable.</p>
+    </div>
+    <div class="levitate-slow" style="max-width: 800px; margin: 0 auto;">
+      <div class="terminal-container">
+        <div class="terminal-header">
+          <span class="terminal-dot red"></span>
+          <span class="terminal-dot yellow"></span>
+          <span class="terminal-dot green"></span>
+          <span class="terminal-title">CajaFácil POS Engine v2.0 - Core Terminal</span>
+        </div>
+        <div class="terminal-body" id="terminal-logs">
+          <!-- Los logs se insertarán aquí dinámicamente -->
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- --- SECCIÓN CALCULADORA DE AHORRO (ROI) --- -->
+  <section id="calculadora-roi" class="container section reveal">
+    <div class="section-header">
+      <h3>Simula tu Ahorro con Caja Ciega</h3>
+      <p>Ajusta las ventas de tu negocio para estimar las mermas que ocurren por descuidos o robos y mira cuánto ahorrarás.</p>
+    </div>
+    <div class="levitate-mid" style="max-width: 900px; margin: 0 auto;">
+      <div class="calculator-box">
+        <div class="calculator-inputs">
+          <div class="input-group">
+            <label for="slider-ventas">Ventas Mensuales Promedio: <span id="val-ventas">$5.000.000</span></label>
+            <input type="range" id="slider-ventas" min="1000000" max="25000000" step="500000" value="5000000">
+          </div>
+          <div class="input-group">
+            <label for="slider-mermas">Mermas y Pérdidas estimadas (%): <span id="val-mermas">2.0%</span></label>
+            <input type="range" id="slider-mermas" min="0.5" max="5.0" step="0.1" value="2.0">
+          </div>
+        </div>
+        <div class="calculator-outputs">
+          <div class="output-card">
+            <p>Pérdidas Mensuales Actuales</p>
+            <h4 id="loss-monthly" class="amount-loss">$100.000</h4>
+          </div>
+          <div class="output-card highlighted">
+            <p>Ahorro Anual Proyectado</p>
+            <h4 id="save-yearly" class="amount-save">$1.020.000</h4>
+            <span style="font-size: 0.8rem; opacity: 0.8;">Basado en un 85% de efectividad de la Caja Ciega</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- --- SECCIÓN SUSCRIPCIÓN OFFLINE --- -->
+  <section id="suscripcion-offline" class="container section reveal">
+    <div class="section-header">
+      <h3>¿Cómo funciona tu suscripción sin Internet?</h3>
+      <p>CajaFácil está diseñado para proteger tu negocio. Tu suscripción se valida de forma local, segura e inalterable.</p>
+    </div>
+    <div class="subscription-flow">
+      <div class="flow-cards">
+        <div class="flow-step">
+          <div class="step-num"><span>1</span></div>
+          <div class="step-content">
+            <h5>Sincronización Inicial (Online)</h5>
+            <p>Al estar conectado, la aplicación localiza tu servidor en la nube y descarga de forma segura tus datos de suscripción firmados digitalmente.</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="step-num"><span>2</span></div>
+          <div class="step-content">
+            <h5>Vigilancia Local (Offline)</h5>
+            <p>La aplicación local calcula los días vigentes de tu licencia usando relojes de sistema blindados. Aunque estés offline, la app sabe exactamente cuántos días te quedan.</p>
+          </div>
+        </div>
+        <div class="flow-step">
+          <div class="step-num"><span>3</span></div>
+          <div class="step-content">
+            <h5>Reconciliación y Respaldo</h5>
+            <p>Al volver a conectarte, la app sube todos tus datos de ventas y sincroniza tu licencia de forma automática y transparente.</p>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Widget interactivo neumórfico -->
+      <div class="levitate-slow wrapper-3d" style="display: flex; flex-direction: column;">
+        <div class="offline-widget card-3d">
+          <div class="widget-screen">
+            <span class="status-badge status-online" id="widget-status">Estado: Online</span>
+            <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Suscripción CajaFácil Activa</p>
+            <div class="countdown-ring">
+              <span id="days-count">30</span>
+            </div>
+            <p id="widget-msg" style="font-weight: 600; font-size: 0.95rem;">Días de respaldo local garantizado</p>
+          </div>
+          <div class="widget-controls">
+            <button class="btn" id="btn-toggle-connection">Simular Corte de Red</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- --- SECCIÓN DE SOPORTE PERSONALIZADO --- -->
+  <section id="soporte" class="container section reveal">
+    <div class="levitate-mid" style="width: 100%;">
+      <div class="support-banner">
+        <div class="support-content">
+          <div class="support-badge">Soporte Humano</div>
+          <h3>Nos importa lo que te pase</h3>
+          <p>Olvídate de los engorrosos tickets de soporte y de esperar días por una respuesta. En CajaFácil te atendemos de forma directa y personalizada por WhatsApp en el momento.</p>
+          <a href="https://api.whatsapp.com/send?phone=%2B56939047467&text=Hola%21+Necesito+informacion+y+soporte+sobre+CajaFacil+POS" class="btn btn-primary" target="_blank" id="support-whatsapp-btn">
+            💬 Escríbenos por WhatsApp
+          </a>
+        </div>
+        <div class="support-visual">
+          <div class="support-avatar-box">
+            <div class="avatar">👨‍💻</div>
+            <div class="avatar-info">
+              <h6>Atención Directa</h6>
+              <p>Online y listos para ayudar</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- --- SECCIÓN PRECIOS --- -->
+  <section id="precios" class="container section reveal">
+    <div class="section-header">
+      <h3>Planes Simples e Híbridos</h3>
+      <p>Elige el plan que mejor se adapte al tamaño de tu negocio. Sin contratos forzosos ni sorpresas.</p>
+    </div>
+    
+    <div class="pricing-toggle">
+      <span class="toggle-label">Mensual</span>
+      <div class="switch" id="price-switch"></div>
+      <span class="toggle-label">Anual (Ahorra 20%)</span>
+    </div>
+
+    <div class="pricing-grid">
+      <!-- Plan Local -->
+      <div class="levitate-slow wrapper-3d">
+        <div class="price-card card-3d">
+          <h5>Licencia Local</h5>
+          <p class="price-desc">Perfecto para negocios que solo necesitan operar de forma local y no requieren reportes remotos.</p>
+          <div class="price-amount">$79.990<span>/ Pago único</span></div>
+          <ul class="price-features">
+            <li>Punto de venta 100% Offline</li>
+            <li>Licencia de por vida para 1 PC</li>
+            <li>Control de inventario local</li>
+            <li>Conectividad a lector e impresora</li>
+            <li>Cierre ciego de caja</li>
+            <li class="na">Copias de seguridad automáticas en la nube</li>
+            <li class="na">Reportes y estadísticas web remotas</li>
+            <li class="na">Soporte prioritario 24/7</li>
+          </ul>
+          <a href="#" class="btn" id="buy-local-btn">Obtener Licencia</a>
+        </div>
+      </div>
+
+      <!-- Plan Híbrido / Nube (Cobrado en UF) -->
+      <div class="levitate-mid wrapper-3d">
+        <div class="price-card featured card-3d">
+          <div class="badge-featured"><span>Recomendado</span></div>
+          <h5>Plan Híbrido</h5>
+          <p class="price-desc">Ideal para dueños que quieren ver el estado de su negocio desde cualquier lugar y respaldar sus datos.</p>
+          <div class="price-amount" id="sub-price"><sup>UF</sup>0,5<span>/ mes</span></div>
+          <ul class="price-features">
+            <li>Todo lo del Plan Local</li>
+            <li>Licencia de por vida para 1 PC</li>
+            <li>Control de inventario local</li>
+            <li>Conectividad a lector e impresora</li>
+            <li>Cierre ciego de caja</li>
+            <li>Copias de seguridad automáticas en la nube</li>
+            <li>Reportes y estadísticas web remotas</li>
+            <li>Soporte prioritario 24/7</li>
+          </ul>
+          <a href="#" class="btn btn-primary" id="buy-hybrid-btn">Comenzar Plan Nube</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- --- FOOTER --- -->
+  <footer>
+    <div class="container">
+      <p>© 2026 CajaFácil POS. Todos los derechos reservados. Diseñado bajo estándares de la Ley Chilena.</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -142,6 +142,19 @@ const ProductsView = {
             const btnContainer = document.getElementById('productsReturnBtnContainer');
             if (btnContainer) btnContainer.innerHTML = this.renderReturnButton();
         } else {
+            // Si el buscador está vacío y no hay categoría seleccionada, volver a mostrar la grilla de categorías
+            if (!this.selectedCategory) {
+                const stats = await Product.getCategoryStats();
+                if (productsTable) {
+                    productsTable.innerHTML = this.renderCategoriesGrid(stats);
+                }
+                const alertContainer = document.getElementById('productsAlertContainer');
+                if (alertContainer) alertContainer.innerHTML = '';
+                const btnContainer = document.getElementById('productsReturnBtnContainer');
+                if (btnContainer) btnContainer.innerHTML = '';
+                return;
+            }
+            
             // MODO CATEGORÍA (MÁS PESADO PERO CACHEADO)
             products = await Product.getAll();
             
@@ -448,7 +461,10 @@ const ProductsView = {
     async showProductForm(id = null) {
         const product = id ? await Product.getById(id) : null;
         const products = await Product.getAll();
-        const categories = [...new Set(products.map(p => p.category || 'General'))].sort();
+        // ponytail: normalizar categorías al cargar para que el dropdown no muestre duplicados por espacios/mayúsculas
+        const categories = [...new Set(
+            products.map(p => (p.category || 'General').trim()).filter(Boolean)
+        )].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
 
         const content = `
     <form id="productForm">
@@ -587,52 +603,144 @@ const ProductsView = {
                 </div>
             </form>
     `;
-        const footer = `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button> <button class="btn btn-primary" onclick="ProductsView.saveProduct(${id})">Guardar</button>`;
+        const footer = `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button> <button class="btn btn-primary" onclick="ProductsView.saveProduct(${id})">[F2] Guardar</button>`;
         window._focusSearchAfterClose = () => ProductsView.focusSearch();
         showModal(content, { title: id ? 'Editar Producto' : 'Nuevo Producto', footer, width: '600px' });
 
         // Setup form interactions
         setTimeout(() => {
             const form = document.getElementById('productForm');
+            const input = document.getElementById('productCategoryInput');
+            const dropdown = document.getElementById('productCategoryDropdown');
+
+            // ponytail: algoritmo de distancia Levenshtein para búsqueda difusa sin librerías
+            function levenshtein(a, b) {
+                const m = a.length, n = b.length;
+                const dp = Array.from({ length: m + 1 }, (_, i) => Array.from({ length: n + 1 }, (_, j) => i === 0 ? j : j === 0 ? i : 0));
+                for (let i = 1; i <= m; i++)
+                    for (let j = 1; j <= n; j++)
+                        dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+                return dp[m][n];
+            }
+
+            // Normaliza texto: sin tildes, minúsculas, sin espacios extra
+            function normalize(str) {
+                return str.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            }
+
+            // Puntaje de relevancia: 0 = coincidencia exacta, menor = más relevante
+            function fuzzyScore(query, target) {
+                const q = normalize(query), t = normalize(target);
+                if (t === q) return -2;               // coincidencia exacta
+                if (t.startsWith(q)) return -1;       // empieza igual
+                if (t.includes(q)) return 0;          // contiene el texto
+                return levenshtein(q, t);              // distancia de edición
+            }
+
+            let selectedIndex = -1;
+
+            function getVisibleOptions() {
+                return Array.from(dropdown.querySelectorAll('.product-category-option'))
+                    .filter(o => o.style.display !== 'none');
+            }
+
+            function highlightOption(opts, idx) {
+                opts.forEach((o, i) => {
+                    o.classList.toggle('category-option-active', i === idx);
+                });
+            }
+
+            function closeCategoryDropdown() {
+                dropdown.style.display = 'none';
+                selectedIndex = -1;
+                getVisibleOptions().forEach(o => o.classList.remove('category-option-active'));
+            }
+
+            if (input && dropdown) {
+                // Filtrado difuso al escribir
+                input.addEventListener('input', () => {
+                    selectedIndex = -1;
+                    const val = input.value;
+                    if (!val.trim()) {
+                        closeCategoryDropdown();
+                        return;
+                    }
+                    const allOptions = Array.from(dropdown.querySelectorAll('.product-category-option'));
+                    // Calcular puntaje para cada opción
+                    const scored = allOptions.map(opt => ({
+                        opt,
+                        score: fuzzyScore(val, opt.textContent)
+                    }));
+                    // Mostrar solo las que tienen puntaje razonable (distancia <= 3 o contienen el texto)
+                    let visible = 0;
+                    scored.forEach(({ opt, score }) => {
+                        const show = score <= 3;
+                        opt.style.display = show ? 'block' : 'none';
+                        opt.classList.remove('category-option-active');
+                        if (show) visible++;
+                    });
+                    // Reordenar visualmente por relevancia
+                    scored
+                        .filter(s => s.score <= 3)
+                        .sort((a, b) => a.score - b.score)
+                        .forEach(({ opt }) => dropdown.appendChild(opt));
+                    dropdown.style.display = visible > 0 ? 'block' : 'none';
+                });
+
+                // Navegación con flechas y selección con Enter desde el input
+                input.addEventListener('keydown', (e) => {
+                    const opts = getVisibleOptions();
+                    if (dropdown.style.display !== 'block' || opts.length === 0) return;
+
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        selectedIndex = Math.min(selectedIndex + 1, opts.length - 1);
+                        highlightOption(opts, selectedIndex);
+                        opts[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        selectedIndex = Math.max(selectedIndex - 1, 0);
+                        highlightOption(opts, selectedIndex);
+                        opts[selectedIndex]?.scrollIntoView({ block: 'nearest' });
+                    } else if (e.key === 'Enter' && selectedIndex >= 0) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.stopImmediatePropagation();
+                        opts[selectedIndex].click();
+                    } else if (e.key === 'Escape') {
+                        closeCategoryDropdown();
+                    }
+                }, true);
+
+                // Cerrar al hacer clic fuera
+                document.addEventListener('mousedown', (e) => {
+                    if (!input.contains(e.target) && !dropdown.contains(e.target)) {
+                        closeCategoryDropdown();
+                    }
+                }, { once: false });
+            }
+
             if (form) {
                 // Prevenir que el 'Enter' guarde el formulario (común con escáneres)
-                // En su lugar, saltar al siguiente campo
                 form.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
-                        // C2: Detener propagación para evitar que KeyboardManager guarde el modal automáticamente
+                        // Si hay categoría activa seleccionada, ya fue manejado por el listener del input
+                        if (document.activeElement === input && selectedIndex >= 0 && dropdown.style.display === 'block') return;
+
                         e.preventDefault();
                         e.stopPropagation();
                         e.stopImmediatePropagation();
 
                         const inputs = Array.from(form.querySelectorAll('input, select, textarea'));
                         const index = inputs.indexOf(e.target);
-
-                        // Si estamos en un campo de texto y hay un siguiente, saltar a él
                         if (index > -1 && index < inputs.length - 1) {
                             inputs[index + 1].focus();
-                            // Si el siguiente es la categoría y queremos que esté listo para escribir
-                            if (inputs[index + 1].id === 'productCategoryInput') {
-                                inputs[index + 1].select();
-                            }
+                            if (inputs[index + 1].id === 'productCategoryInput') inputs[index + 1].select();
                         }
                     }
-                }, true); // Usar fase de captura para adelantarnos a otros manejadores
-            }
-
-            const input = document.getElementById('productCategoryInput');
-            const dropdown = document.getElementById('productCategoryDropdown');
-            if (input && dropdown) {
-                input.addEventListener('input', () => {
-                    const val = input.value.toLowerCase();
-                    const options = dropdown.querySelectorAll('.product-category-option');
-                    let count = 0;
-                    options.forEach(opt => {
-                        const show = opt.textContent.toLowerCase().includes(val);
-                        opt.style.display = show ? 'block' : 'none';
-                        if (show) count++;
-                    });
-                    dropdown.style.display = val.length > 0 && count > 0 ? 'block' : 'none';
-                });
+                }, true);
             }
 
             // Inicializar panel de margen con valores actuales del producto
@@ -650,9 +758,28 @@ const ProductsView = {
 
     selectCategoryOption(val) {
         const input = document.getElementById('productCategoryInput');
-        if (input) input.value = val;
+        // ponytail: normalizar al seleccionar (trim + capitalizar primera letra)
+        if (input) input.value = val.trim().replace(/^./, c => c.toUpperCase());
         const dropdown = document.getElementById('productCategoryDropdown');
-        if (dropdown) dropdown.style.display = 'none';
+        if (dropdown) {
+            dropdown.style.display = 'none';
+            dropdown.querySelectorAll('.product-category-option').forEach(o => o.classList.remove('category-option-active'));
+        }
+    },
+
+    toggleCategoryDropdown() {
+        const dropdown = document.getElementById('productCategoryDropdown');
+        const input = document.getElementById('productCategoryInput');
+        if (!dropdown) return;
+        const isVisible = dropdown.style.display === 'block';
+        if (isVisible) {
+            dropdown.style.display = 'none';
+        } else {
+            // Mostrar todas las opciones al abrir con el botón Lista
+            dropdown.querySelectorAll('.product-category-option').forEach(o => o.style.display = 'block');
+            dropdown.style.display = 'block';
+            if (input) input.focus();
+        }
     },
 
     async saveProduct(id) {
@@ -660,9 +787,12 @@ const ProductsView = {
         if (!form.reportValidity()) return;
         const data = Object.fromEntries(new FormData(form));
 
-        // Defecto a General si está vacío
+        // Normalizar categoría: trim + capitalizar primera letra para evitar duplicados por espacios o capitalización
         if (!data.category || data.category.trim() === '') {
             data.category = 'General';
+        } else {
+            const cat = data.category.trim();
+            data.category = cat.charAt(0).toUpperCase() + cat.slice(1);
         }
 
         if (id) data.id = id;

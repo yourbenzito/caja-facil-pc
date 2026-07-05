@@ -257,39 +257,78 @@ class Database {
         
         const all = await this.getAll(storeName);
         if (!term) return all;
-        const lowerTerm = term.toLowerCase();
         
-        const filtered = all.filter(item => {
-            return Object.values(item).some(val => 
-                val && typeof val === 'string' && val.toLowerCase().includes(lowerTerm)
-            );
+        let cs = ['name'];
+        if (storeName === 'products') cs = ['name', 'barcode', 'description'];
+        else if (storeName === 'customers') cs = ['name', 'rut', 'phone', 'email'];
+        else if (storeName === 'suppliers') cs = ['name', 'phone', 'email'];
+        else if (storeName === 'sales') cs = ['saleNumber'];
+        else if (storeName === 'purchases') cs = ['invoiceNumber', 'purchaseNumber'];
+        
+        const queryNormalized = cleanAccents(term).trim();
+        const queryWords = queryNormalized.split(' ').filter(w => w.length > 0);
+        if (queryWords.length === 0) return [];
+        
+        // 1. Filtrar registros y calcular score de relevancia estratégica
+        const scoredRows = all.map(row => {
+            let score = 0;
+            
+            // Unir todos los valores de los campos de búsqueda en un solo texto normalizado
+            const rowValues = cs.map(f => row[f] ? cleanAccents(row[f]) : '');
+            const rowText = rowValues.join(' ');
+            
+            // A. Coincidencia exacta del término completo en el nombre (si existe)
+            if (row.name) {
+                const nameNormalized = cleanAccents(row.name);
+                if (nameNormalized === queryNormalized) score += 1000;
+                else if (nameNormalized.startsWith(queryNormalized)) score += 500;
+                else if (nameNormalized.includes(' ' + queryNormalized)) score += 300;
+                else if (nameNormalized.includes(queryNormalized)) score += 100;
+            }
+            
+            // B. Coincidencia de palabras individuales
+            queryWords.forEach(qw => {
+                if (rowText.includes(qw)) {
+                    score += 150;
+                }
+            });
+            
+            // C. Tolerancia a errores ortográficos (distancia Levenshtein)
+            const rowWords = rowText.split(/\s+/).filter(w => w.length > 2);
+            queryWords.forEach(qw => {
+                if (qw.length <= 2) return;
+                
+                let minWordDistance = 999;
+                rowWords.forEach(rw => {
+                    const dist = getLevenshteinDistance(qw, rw);
+                    if (dist < minWordDistance) {
+                        minWordDistance = dist;
+                    }
+                });
+                
+                if (minWordDistance === 0) {
+                    score += 200;
+                } else if (minWordDistance === 1) {
+                    score += 80;  // Tolerancia de 1 error tipográfico
+                } else if (minWordDistance === 2 && qw.length >= 5) {
+                    score += 30;  // Tolerancia de 2 errores
+                }
+            });
+            
+            // D. Coincidencia de código de barras exacto (especial para productos)
+            if (row.barcode && row.barcode === term) {
+                score += 2000;
+            }
+            
+            return { ...row, _score: score };
         });
-
+        
+        const matched = scoredRows.filter(r => r._score > 0);
+        
         // 2. Ordenar por relevancia estratégica
-        return filtered.sort((a, b) => {
-            const aName = (a.name || '').toLowerCase();
-            const bName = (b.name || '').toLowerCase();
-
-            // Prioridad 1: NOMBRE EXACTO (ej: "Pan")
-            if (aName === lowerTerm && bName !== lowerTerm) return -1;
-            if (bName === lowerTerm && aName !== lowerTerm) return 1;
-
-            // Prioridad 2: NOMBRE EMPIEZA POR (ej: "Pan amasado" antes que "Empanada")
-            const aStarts = aName.startsWith(lowerTerm);
-            const bStarts = bName.startsWith(lowerTerm);
-            if (aStarts && !bStarts) return -1;
-            if (bStarts && !aStarts) return 1;
-
-            // Prioridad 3: Coincidencia exacta en otros campos (como código de barras o categoría)
-            const aExactOther = Object.values(a).some(v => v && typeof v === 'string' && v.toLowerCase() === lowerTerm);
-            const bExactOther = Object.values(b).some(v => v && typeof v === 'string' && v.toLowerCase() === lowerTerm);
-            if (aExactOther && !bExactOther) return -1;
-            if (bExactOther && !aExactOther) return 1;
-
-            // Prioridad 4: Si ambos empiezan igual, orden alfabético por nombre
-            if (aStarts && bStarts) return aName.localeCompare(bName);
-
-            return 0;
+        return matched.sort((a, b) => {
+            if (b._score !== a._score) return b._score - a._score;
+            return (a.name || '').localeCompare(b.name || '');
         });
     }
 
@@ -325,6 +364,31 @@ class Database {
             indexedDB.deleteDatabase(this.dbName).onsuccess = () => { localStorage.clear(); r(true); };
         });
     }
+}
+
+// Helpers globales para búsqueda inteligente en IndexedDB (modo local offline)
+function cleanAccents(str) {
+    if (!str) return '';
+    return str.toString()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/ñ/g, 'n');
+}
+
+function getLevenshteinDistance(a, b) {
+    if (a.length === 0) return b.length;
+    if (b.length === 0) return a.length;
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+    for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) matrix[i][j] = matrix[i - 1][j - 1];
+            else matrix[i][j] = Math.min(matrix[i - 1][j - 1] + 1, Math.min(matrix[i][j - 1] + 1, matrix[i - 1][j] + 1));
+        }
+    }
+    return matrix[b.length][a.length];
 }
 
 // Inicialización global (app.js también llama init — idempotente)

@@ -15,7 +15,9 @@ const DashboardView = {
             lowStock: [],
             overdueDebt: [],
             cashOpenTooLong: false
-        }
+        },
+        stagnantValue: 0,
+        stagnantCount: 0
     },
 
     async render() {
@@ -214,6 +216,16 @@ const DashboardView = {
                     <div class="db-kpi-value" style="color:#0f172a;">${this.data.alerts.lowStock.length + this.data.alerts.overdueDebt.length}</div>
                     <div class="db-kpi-sub" style="color:#64748b;">
                         ${this.data.alerts.lowStock.length} stock bajo · ${this.data.alerts.overdueDebt.length} deudas
+                    </div>
+                </div>
+
+                <!-- Dinero Inmovilizado -->
+                <div class="db-kpi" style="border-left-color: #f97316; animation-delay: 0.22s; cursor: pointer;" onclick="ReportsView.currentReport = 'stagnant'; app.navigate('reports')">
+                    <div class="db-kpi-bg-icon">⏳</div>
+                    <div class="db-kpi-label" style="color:#f97316;">Dinero Inmovilizado</div>
+                    <div class="db-kpi-value" style="color:#0f172a;">${formatCLP(this.data.stagnantValue, true)}</div>
+                    <div class="db-kpi-sub" style="color:#64748b;">
+                        ${this.data.stagnantCount} productos sin venta > 30d
                     </div>
                 </div>
             </div>
@@ -434,6 +446,17 @@ const DashboardView = {
 
             // Alertas
             await this.loadAlerts();
+
+            // Dinero Inmovilizado (>30 días de inactividad)
+            try {
+                const stagnantReport = await ReportController.getStagnantProducts(30);
+                this.data.stagnantValue = stagnantReport.reduce((sum, item) => sum + (item.costValue || 0), 0);
+                this.data.stagnantCount = stagnantReport.length;
+            } catch (e) {
+                console.error('[Dashboard] Error cargando dinero inmovilizado:', e);
+                this.data.stagnantValue = 0;
+                this.data.stagnantCount = 0;
+            }
 
         } catch (error) {
             console.error('[Dashboard] Error cargando datos:', error);

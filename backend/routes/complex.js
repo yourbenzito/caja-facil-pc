@@ -131,6 +131,11 @@ router.post('/api/complex/bulk-adjustment', async (req, res) => {
 });
 
 router.post('/api/complex/product', async (req, res) => {
+    // ponytail: normalizar categoría en backend para evitar duplicados por espacios o capitalización
+    if (req.body.category) {
+        const cat = req.body.category.trim();
+        req.body.category = cat ? cat.charAt(0).toUpperCase() + cat.slice(1) : 'General';
+    }
     const product = { ...req.body, business_id: req.business_id, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), isActive: 1 };
     const bid = req.business_id;
     try {
@@ -154,6 +159,11 @@ router.post('/api/complex/product', async (req, res) => {
 
 router.put('/api/complex/product/:id', async (req, res) => {
     const { id } = req.params; 
+    // ponytail: normalizar categoría en backend
+    if (req.body.category) {
+        const cat = req.body.category.trim();
+        req.body.category = cat ? cat.charAt(0).toUpperCase() + cat.slice(1) : 'General';
+    }
     const product = { ...req.body }; 
     const bid = req.business_id;
     try {
@@ -316,11 +326,14 @@ router.post('/api/complex/purchase/:id/cancel', async (req, res) => {
                 const qty = item.quantity || item.qty || 0;
                 if (pid && qty > 0) {
                     const p = await dbGet("SELECT cost, price FROM products WHERE id = ? AND business_id = ?", [pid, bid]);
-                    await dbRun("UPDATE products SET stock = stock - ? WHERE id = ? AND business_id = ?", [qty, pid, bid]);
-                    await dbRun(`INSERT INTO stockMovements (productId, quantity, type, date, business_id, reference, reason, cost_value, sale_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                        [pid, -qty, 'adjustment', now, bid, id, `Anulación Compra #${purchase.purchaseNumber || id}`, (p?.cost || 0) * qty, (p?.price || 0) * qty]);
+                    if (p) {
+                        await dbRun("UPDATE products SET stock = stock - ? WHERE id = ? AND business_id = ?", [qty, pid, bid]);
+                        await dbRun(`INSERT INTO stockMovements (productId, quantity, type, date, business_id, reference, reason, cost_value, sale_value) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                            [pid, -qty, 'adjustment', now, bid, id, `Anulación Compra #${purchase.purchaseNumber || id}`, (p?.cost || 0) * qty, (p?.price || 0) * qty]);
+                    }
                 }
             }
+
 
             const payments = await dbAll("SELECT id, method FROM supplierPayments WHERE purchaseId = ? AND business_id = ?", [id, bid]);
             for (const p of payments) {
@@ -378,7 +391,7 @@ router.put('/api/complex/purchase/:id', async (req, res) => {
                 if (!product) continue;
 
                 const currentStock = parseFloat(product.stock) || 0;
-                const newStock = currentStock + ops.stockDelta;
+                let newStock = currentStock + ops.stockDelta;
                 
                 let inCostNeto = 0, inCostGross = 0;
                 if (ops.newCost !== undefined) {
@@ -393,23 +406,30 @@ router.put('/api/complex/purchase/:id', async (req, res) => {
 
                 const currentCostNeto = (product.costNeto !== undefined && product.costNeto !== null) ? parseFloat(product.costNeto) : ((parseFloat(product.cost) || 0) / 1.19);
                 const oldQty = ops.oldQty || 0;
-                const oldTotalCostNeto = ops.oldTotalCostNeto || 0;
-                
-                const baseStock = Math.max(0, currentStock - oldQty);
-                let baseTotalCostNeto = (currentStock * currentCostNeto) - oldTotalCostNeto;
-                if (baseTotalCostNeto < 0 || baseStock === 0) baseTotalCostNeto = 0;
-                
-                let baseAvgCostNeto = baseStock > 0 ? (baseTotalCostNeto / baseStock) : currentCostNeto;
-                
-                let finalAvgNeto = baseAvgCostNeto;
-                let finalAvgGross = parseFloat((finalAvgNeto * 1.19).toFixed(2));
-                
-                if (ops.newCost !== undefined && ops.itemQty > 0) {
-                    const newTotalCostNeto = baseTotalCostNeto + (ops.itemQty * inCostNeto);
-                    finalAvgNeto = newStock > 0 ? (newTotalCostNeto / newStock) : inCostNeto;
+                const oldItemCostNeto = oldQty > 0 ? (ops.oldTotalCostNeto / oldQty) : 0;
+
+                // Revertir solo la cantidad que realmente queda en stock de la compra anterior
+                const qtyToRevert = Math.max(0, Math.min(currentStock, oldQty));
+                const costToRevertNeto = qtyToRevert * oldItemCostNeto;
+
+                // Stock y costo base que pertenecen a otras compras anteriores
+                const baseStock = Math.max(0, currentStock - qtyToRevert);
+                const baseTotalCostNeto = Math.max(0, (currentStock * currentCostNeto) - costToRevertNeto);
+
+                // Nuevo stock e inserción de la compra editada
+                newStock = Math.max(0, currentStock + ops.stockDelta);
+                let finalAvgNeto = currentCostNeto;
+
+                if (newStock > 0) {
+                    const qtyFromNewPurchase = Math.min(newStock, ops.itemQty);
+                    const newTotalCostNeto = baseTotalCostNeto + (qtyFromNewPurchase * inCostNeto);
+                    finalAvgNeto = newTotalCostNeto / newStock;
                     finalAvgNeto = Math.round(finalAvgNeto * 100) / 100;
-                    finalAvgGross = parseFloat((finalAvgNeto * 1.19).toFixed(2));
+                } else {
+                    finalAvgNeto = inCostNeto;
                 }
+                const finalAvgGross = parseFloat((finalAvgNeto * 1.19).toFixed(2));
+
 
                 const newPrice = ops.newPrice !== undefined ? ops.newPrice : product.price;
 
@@ -792,12 +812,17 @@ router.delete('/api/complex/sale/:id', async (req, res) => {
 
             const openRegister = await dbGet("SELECT id FROM cashRegisters WHERE status = 'open' AND business_id = ? ORDER BY id DESC LIMIT 1", [bid]);
             if (openRegister) {
-                const payments = await dbAll("SELECT amount, paymentMethod FROM payments WHERE saleId = ? AND business_id = ?", [id, bid]);
-                const totalCashToReturn = computeCashRefundForSale(sale, payments);
+                // Solo crear movimiento de egreso si la venta es de una caja ANTERIOR (ya cerrada).
+                // Si es de la misma caja abierta, no se hace movimiento, porque el sistema simplemente 
+                // dejará de sumarla en los ingresos del día, equilibrando el balance automáticamente.
+                if (sale.cashRegisterId !== openRegister.id) {
+                    const payments = await dbAll("SELECT amount, paymentMethod FROM payments WHERE saleId = ? AND business_id = ?", [id, bid]);
+                    const totalCashToReturn = computeCashRefundForSale(sale, payments);
 
-                if (totalCashToReturn > 0) {
-                    await dbRun(`INSERT INTO cashMovements (cashRegisterId, type, amount, description, date, business_id) VALUES (?, 'out', ?, ?, ?, ?)`, 
-                    [openRegister.id, totalCashToReturn, `Reembolso por Anulación Venta #${sale.saleNumber || id}`, new Date().toISOString(), bid]);
+                    if (totalCashToReturn > 0) {
+                        await dbRun(`INSERT INTO cashMovements (cashRegisterId, type, amount, description, date, business_id) VALUES (?, 'out', ?, ?, ?, ?)`, 
+                        [openRegister.id, totalCashToReturn, `Reembolso por Anulación Venta #${sale.saleNumber || id} (Turno Anterior)`, new Date().toISOString(), bid]);
+                    }
                 }
             }
 
@@ -820,11 +845,13 @@ router.put('/api/complex/sale/:id', async (req, res) => {
     const { saleData, items } = req.body; 
     const bid = req.business_id;
     try {
+        let validationResult = {};
         await withTransaction(async () => {
             const old = await dbGet("SELECT items, saleNumber FROM sales WHERE id = ? AND business_id = ?", [id, bid]);
             if (!old) throw new Error('Venta no encontrada');
 
             const validation = validateSaleCalculations(saleData);
+            validationResult = validation;
             if (!validation.valid) {
                 console.error('[Sale Update Validation] Errores en cálculos de venta:', validation.errors);
                 const correctedFiscal = computeFiscalFromTotal(saleData.total, saleData.documentType || 'boleta');
@@ -879,7 +906,7 @@ router.put('/api/complex/sale/:id', async (req, res) => {
                 }
             }
         });
-        res.json({ success: true, validation });
+        res.json({ success: true, validation: validationResult });
     } catch (err) { 
         res.status(500).json({ error: err.message }); 
     }

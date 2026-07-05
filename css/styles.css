@@ -1312,6 +1312,15 @@ select.form-control {
     color: #fff;
 }
 
+/* Ítem activo por teclado: mismo estilo azul del buscador del POS */
+.product-category-option.category-option-active,
+.product-category-option.category-option-active:hover {
+    background: #3b82f6 !important;
+    color: #ffffff !important;
+    font-weight: 700;
+    border-left: 3px solid #1d4ed8;
+}
+
 .product-category-dropdown-empty {
     padding: 0.75rem 0.85rem;
     font-size: 0.85rem;
@@ -2282,11 +2291,27 @@ body.keyboard-nav .search-result-item:hover {
 .pos-search-input {
     width: 100%;
     height: 64px;
-    font-size: 1.2rem;
-    padding: 0 1rem 0 3.75rem !important;
-    border-radius: var(--radius-md);
-    border: 2.5px solid var(--primary) !important;
+    font-size: 1.25rem;
+    padding: 0 1.5rem 0 4rem !important;
+    border-radius: 1rem;
+    border: 2px solid transparent !important;
+    background: #f8fafc;
     font-weight: 600;
+    color: #0f172a;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.pos-search-input:focus {
+    background: #ffffff;
+    border-color: #3b82f6 !important;
+    box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.15), 0 10px 15px -3px rgba(0,0,0,0.05);
+    outline: none;
+}
+
+.pos-search-input::placeholder {
+    color: #94a3b8;
+    font-weight: 500;
 }
 
 .pos-cart-panel {
@@ -2657,63 +2682,160 @@ body.keyboard-nav .search-result-item:hover {
 
 .pos-search-results {
     position: absolute;
-    top: 100%;
+    top: calc(100% + 5px);
     left: 0;
     right: 0;
-    background: #ffffff !important; /* Forzar fondo blanco */
-    border: 3px solid #000000; /* Borde exterior muy notorio */
-    border-radius: 0 0 1.5rem 1.5rem;
+    background: rgba(255, 255, 255, 0.95) !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 1rem;
     max-height: 450px;
     overflow-y: auto;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5); /* Sombra más fuerte */
-    z-index: 2000; /* Asegurar que esté sobre todo */
+    box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+    z-index: 2000;
     display: none;
-    margin-top: 5px;
+    padding: 0.5rem; /* Espacio para que los items no toquen el borde */
+}
+
+/* Scrollbar estilizado para la lista */
+.pos-search-results::-webkit-scrollbar {
+    width: 6px;
+}
+.pos-search-results::-webkit-scrollbar-track {
+    background: transparent;
+}
+.pos-search-results::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
 }
 
 .search-result-item {
-    padding: 1.25rem 2rem;
-    border-bottom: 2px solid #000000; /* Bordes internos notorios */
+    padding: 1rem 1.25rem;
+    border-bottom: none;
+    border-radius: 0.75rem; /* Bordes suaves */
     display: flex;
     justify-content: space-between;
     align-items: center;
     cursor: pointer;
-    transition: all 0.2s ease;
-    color: #000000 !important; /* Texto negro para máxima legibilidad */
-    background: #ffffff;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    color: #1e293b !important;
+    background: transparent;
+    margin-bottom: 0.25rem; /* Espacio entre filas */
+    border-left: 4px solid transparent;
 }
 
 .search-result-item:last-child {
-    border-bottom: none;
+    margin-bottom: 0;
 }
 
 .search-result-item:hover {
-    background: #f0f7ff;
-    padding-left: 2.5rem;
+    background: #eff6ff;
+    padding-left: 1.5rem;
+    border-left: 4px solid #3b82f6;
+    box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.1);
 }
 
-.search-result-item.selected {
-    background: #3b82f6 !important; /* Azul vibrante al seleccionar */
+.search-result-item.selected,
+.search-result-item.selected:hover,
+body.keyboard-nav .search-result-item.selected,
+body.keyboard-nav .search-result-item.selected:hover {
+    background: #3b82f6 !important;
     color: #ffffff !important;
-    font-weight: 800;
-    border-left: 10px solid #000000;
+    font-weight: 700;
+    border-left: 4px solid #1d4ed8 !important;
+    box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.4) !important;
+}
+
+/* Fix colors when selected */
+.search-result-item.selected .pos-search-name,
+.search-result-item.selected .search-result-name,
+.search-result-item.selected .search-result-price,
+.search-result-item.selected .search-result-price-label {
+    color: #ffffff !important;
 }
 
 .pos-search-name {
     font-size: 1.15rem;
-    font-weight: 600;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.01em;
 }
 
 .pos-search-stock {
-    font-size: 0.9rem;
-    color: rgba(226, 232, 240, 0.8);
-    margin-top: 0.25rem;
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-top: 0.35rem;
+    font-weight: 500;
 }
 
 .pos-search-stock strong {
     font-size: 1rem;
-    color: #c7d2fe;
+    color: #3b82f6;
 }
+
+/* Clases generadas por pos.js (ya que pos.js usa estas clases internamente) */
+.search-result-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.search-result-name {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.search-result-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+.search-result-badge {
+    font-size: 0.75rem;
+    background: #f1f5f9;
+    color: #475569;
+    padding: 0.2rem 0.5rem;
+    border-radius: 0.25rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    border: 1px solid #e2e8f0;
+}
+
+
+
+.search-result-price-box {
+    text-align: right;
+}
+
+.search-result-price {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #3b82f6;
+    letter-spacing: -0.02em;
+}
+
+.search-result-price-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: #64748b;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+}
+
+.search-result-stock {
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.search-result-stock.stock-ok { color: #10b981; }
+.search-result-stock.stock-low { color: #f59e0b; }
+.search-result-stock.stock-none { color: #ef4444; }
+
+
 
 .pending-client-card {
     display: flex;

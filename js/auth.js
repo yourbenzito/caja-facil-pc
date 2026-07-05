@@ -299,10 +299,12 @@ class AuthManager {
                     });
 
                     if (result && result.success) {
-                        // Limpiar sesión pendiente
+                        // ponytail: Limpiar sesión pendiente y AUTH_TOKEN temporal por seguridad
                         sessionStorage.removeItem('PENDING_PASSWORD_CHANGE_USER');
+                        localStorage.removeItem('AUTH_TOKEN');
+                        localStorage.removeItem(AuthManager.SESSION_KEY);
+                        sessionStorage.removeItem(AuthManager.SESSION_KEY);
                         
-                        // Mostrar éxito y redirigir al login
                         alert('✅ Contraseña cambiada exitosamente. Por favor inicia sesión nuevamente.');
                         document.getElementById('force-password-change-modal').remove();
                         this.showLoginScreen();
@@ -316,13 +318,18 @@ class AuthManager {
                     
                     if (userIndex !== -1) {
                         users[userIndex].password = newPassword;
+                        // ponytail: Actualizar el hash local para login offline seguro
+                        users[userIndex].localHash = await _hashSHA256(newPassword);
                         users[userIndex].forcePasswordChange = 0;
                         users[userIndex].updatedAt = new Date().toISOString();
                         
                         await db.put('users', users[userIndex]);
                         
-                        // Limpiar sesión pendiente
+                        // ponytail: Limpiar sesión pendiente y AUTH_TOKEN temporal por seguridad
                         sessionStorage.removeItem('PENDING_PASSWORD_CHANGE_USER');
+                        localStorage.removeItem('AUTH_TOKEN');
+                        localStorage.removeItem(AuthManager.SESSION_KEY);
+                        sessionStorage.removeItem(AuthManager.SESSION_KEY);
                         
                         alert('✅ Contraseña cambiada exitosamente. Por favor inicia sesión nuevamente.');
                         document.getElementById('force-password-change-modal').remove();
@@ -839,6 +846,8 @@ class AuthManager {
         const resetBusinessNameInput = document.getElementById('reset-business-name');
         const resetUsernameInput = document.getElementById('reset-username');
         const resetMethodVal = document.getElementById('reset-method-val');
+        const resetMethodPin = document.getElementById('reset-method-pin');
+        const resetMethodCode = document.getElementById('reset-method-code');
         const methodOptions = recoverPasswordForm.querySelectorAll('.login-method-option');
         const resetPinGroup = document.getElementById('reset-pin-group');
         const resetCodeGroup = document.getElementById('reset-code-group');
@@ -1185,6 +1194,7 @@ class AuthManager {
         if (methodOptions && methodOptions.length > 0) {
             methodOptions.forEach(option => {
                 option.addEventListener('click', () => {
+                    if (resetMethodVerified) return; // ponytail: bloquear si ya se verificó
                     methodOptions.forEach(opt => opt.classList.remove('active'));
                     option.classList.add('active');
                     
@@ -1388,8 +1398,13 @@ class AuthManager {
                 if (subtitle) subtitle.textContent = 'Inicia sesión o crea una cuenta';
 
                 setTimeout(() => {
-                    if (usernameInput) usernameInput.focus();
-                }, 100);
+                    if (usernameInput) {
+                        usernameInput.disabled = false;
+                        usernameInput.focus();
+                    }
+                    const passIn = document.getElementById('login-password');
+                    if (passIn) passIn.disabled = false;
+                }, 250);
             });
         }
 
@@ -1401,7 +1416,7 @@ class AuthManager {
 
                 // Verificar que todos los elementos estén disponibles
                 if (!resetBusinessNameInput || !resetUsernameInput || !resetAdminPinInput || !resetRecoveryCodeInput ||
-                    !resetMethodPin || !resetMethodCode || !recoverBtn || !recoverErrorDiv) {
+                    !recoverBtn || !recoverErrorDiv) {
                     console.error('❌ Elementos del DOM no encontrados');
                     alert('Error: No se encontraron todos los elementos del formulario. Por favor recarga la página.');
                     return;
@@ -1409,7 +1424,7 @@ class AuthManager {
 
                 const businessName = resetBusinessNameInput.value.trim();
                 const username = resetUsernameInput.value.trim();
-                const usePIN = resetMethodPin.checked;
+                const usePIN = resetMethodVal ? resetMethodVal.value === 'adminPIN' : true;
                 const pin = resetAdminPinInput.value.trim();
                 const code = resetRecoveryCodeInput.value.trim().replace(/-/g, '').toUpperCase();
 
@@ -1699,7 +1714,7 @@ class AuthManager {
                         throw new Error('Usuario no encontrado');
                     }
 
-                    const usePIN = resetMethodPin.checked;
+                    const usePIN = resetMethodVal ? resetMethodVal.value === 'adminPIN' : true;
                     const pin = resetAdminPinInput.value.trim();
                     const code = resetRecoveryCodeInput.value.trim().replace(/-/g, '').toUpperCase();
 

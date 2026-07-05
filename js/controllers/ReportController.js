@@ -64,8 +64,25 @@ class ReportController {
         totalNeto -= returnedNeto;
         ivaDebito -= returnedIVA;
 
-        const pocketProfit = totalAmount - totalCostGross;
-        const realProfit = totalNeto - totalCostNet;
+        // Gastos Operativos reales del periodo
+        let operationalExpenses = 0;
+        try {
+            const movements = await CashMovement.getByDateRange(startDate, endDate);
+            movements.forEach(m => {
+                const isOut = m.type === 'out';
+                const isGasto = (m.description || '').includes('[GASTO]') ||
+                                (m.category && m.category !== '' &&
+                                 !['sale','payment','withdraw','add'].includes(m.category));
+                if (isOut && isGasto) {
+                    operationalExpenses += parseFloat(m.amount) || 0;
+                }
+            });
+        } catch (e) {
+            console.warn('Error al calcular gastos en getFiscalSummary:', e);
+        }
+
+        const pocketProfit = totalAmount - totalCostGross - operationalExpenses;
+        const realProfit = totalNeto - totalCostNet - Math.round(operationalExpenses / 1.19);
 
         // IVA Crédito (Compras tipo Factura en el periodo)
         // CORRECCIÓN: documentType puede ser 'factura', 'factura_neto' o 'factura_bruto'
@@ -99,7 +116,8 @@ class ReportController {
             pocketProfit,
             realProfit,
             totalCostGross,
-            totalCostNet
+            totalCostNet,
+            operationalExpenses
         };
     }
 
@@ -173,8 +191,25 @@ class ReportController {
         totalNeto -= returnedNeto;
         ivaDebito -= returnedIVA;
 
-        const pocketProfit = totalAmount - totalCostGross;
-        const realProfit = totalNeto - totalCostNet;
+        // Gastos Operativos reales del periodo semanal
+        let operationalExpenses = 0;
+        try {
+            const movements = await CashMovement.getByDateRange(start, end);
+            movements.forEach(m => {
+                const isOut = m.type === 'out';
+                const isGasto = (m.description || '').includes('[GASTO]') ||
+                                (m.category && m.category !== '' &&
+                                 !['sale','payment','withdraw','add'].includes(m.category));
+                if (isOut && isGasto) {
+                    operationalExpenses += parseFloat(m.amount) || 0;
+                }
+            });
+        } catch (e) {
+            console.warn('Error al calcular gastos en getWeeklySales:', e);
+        }
+
+        const pocketProfit = totalAmount - totalCostGross - operationalExpenses;
+        const realProfit = totalNeto - totalCostNet - Math.round(operationalExpenses / 1.19);
 
         const weekPurchases = await Purchase.getByDateRange(start, end);
         // CORRECCIÓN: mismo fix que en getFiscalSummary — includes('factura') en vez de === 'factura'
@@ -204,7 +239,8 @@ class ReportController {
             pocketProfit,
             realProfit,
             totalCostGross,
-            totalCostNet
+            totalCostNet,
+            operationalExpenses
         };
     }
 
@@ -447,8 +483,25 @@ class ReportController {
         totalRevenue -= totalReturnedRevenue;
         totalCostOfSales -= totalReturnedCost;
 
-        const netProfit = totalRevenue - totalCostOfSales;
+        // Gastos Operativos reales del periodo de rentabilidad
+        let totalExpenses = 0;
+        try {
+            const movements = await CashMovement.getByDateRange(startDate, endDate);
+            movements.forEach(m => {
+                const isOut = m.type === 'out';
+                const isGasto = (m.description || '').includes('[GASTO]') ||
+                                (m.category && m.category !== '' &&
+                                 !['sale','payment','withdraw','add'].includes(m.category));
+                if (isOut && isGasto) {
+                    totalExpenses += parseFloat(m.amount) || 0;
+                }
+            });
+        } catch (e) {
+            console.warn('Error al calcular gastos en getProfitability:', e);
+        }
+
         const grossProfit = totalRevenue - totalCostOfSales;
+        const netProfit = grossProfit - totalExpenses;
         const margin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
         const grossMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
 
@@ -466,7 +519,7 @@ class ReportController {
             revenue: totalRevenue,
             costOfSales: totalCostOfSales,
             grossProfit: grossProfit,
-            operationalExpenses: 0,
+            operationalExpenses: totalExpenses,
             profit: netProfit,
             margin: margin,
             grossMargin: grossMargin,

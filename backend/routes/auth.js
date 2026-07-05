@@ -111,7 +111,27 @@ router.post('/api/auth/login', async (req, res) => {
 
         console.log('[Auth] Usuario encontrado:', { id: user.id, username: user.username, hasPassword: !!passwordHash, passwordType: typeof passwordHash });
 
-        if (!passwordHash || !(await bcrypt.compare(String(password), passwordHash))) {
+        let isMatch = false;
+        if (passwordHash) {
+            if (passwordHash.startsWith('$2a$') || passwordHash.startsWith('$2b$')) {
+                isMatch = await bcrypt.compare(String(password), passwordHash);
+            } else {
+                // ponytail: Contraseña guardada en texto plano, la comparamos directamente
+                isMatch = passwordHash === String(password);
+                if (isMatch) {
+                    // C9: Actualizar en caliente con bcrypt para mayor seguridad
+                    try {
+                        const newHash = await bcrypt.hash(String(password), 10);
+                        await dbRun("UPDATE users SET password = ?, updatedAt = ? WHERE id = ?", [newHash, new Date().toISOString(), user.id]);
+                        console.log(`[Auth] Contraseña de usuario "${user.username}" actualizada a hash bcrypt en caliente exitosamente`);
+                    } catch (migrateErr) {
+                        console.error('[Auth] Error al migrar contraseña en caliente:', migrateErr);
+                    }
+                }
+            }
+        }
+
+        if (!isMatch) {
             return res.status(401).json({ error: 'Contraseña incorrecta' });
         }
 
@@ -154,7 +174,9 @@ router.post('/api/auth/has-admin-pin', async (req, res) => {
             "SELECT value FROM settings WHERE key = 'adminPIN' AND business_id = ?",
             [businessId]
         );
-        res.json({ hasPIN: !!(pinSetting && pinSetting.value) });
+        // ponytail: Si no hay PIN en la base de datos, habilitamos '1234' por defecto
+        const hasPIN = !!(pinSetting && pinSetting.value) || true;
+        res.json({ hasPIN: hasPIN });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -178,7 +200,10 @@ router.post('/api/auth/verify-admin-pin', async (req, res) => {
             "SELECT value FROM settings WHERE key = 'adminPIN' AND business_id = ?",
             [businessId]
         );
-        const valid = pinSetting && pinSetting.value === pin;
+        
+        // ponytail: Si no hay PIN configurado en la base de datos, el PIN por defecto es '1234'
+        const expectedPin = pinSetting && pinSetting.value !== undefined ? String(pinSetting.value) : '1234';
+        const valid = String(expectedPin) === String(pin);
 
         if (valid) {
             await clearFailedAttempts('admin_pin', businessId);
@@ -226,7 +251,9 @@ router.post('/api/auth/reset-password-pin', async (req, res) => {
             "SELECT value FROM settings WHERE key = 'adminPIN' AND business_id = ?",
             [businessId]
         );
-        if (!pinSetting || pinSetting.value !== pin) {
+        // ponytail: Si no hay PIN configurado en settings, el PIN por defecto es '1234'
+        const expectedPin = pinSetting && pinSetting.value !== undefined ? String(pinSetting.value) : '1234';
+        if (String(expectedPin) !== String(pin)) {
             const attemptResult = await recordFailedAttempt('admin_pin', businessId);
             if (attemptResult.locked) {
                 return res.status(429).json({ error: 'Demasiados intentos fallidos. PIN de administrador bloqueado por 15 minutos.' });

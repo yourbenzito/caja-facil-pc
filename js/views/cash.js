@@ -377,7 +377,7 @@ const CashView = {
             <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:1rem; margin-bottom:1.5rem;">
 
                 <!-- Ventas del día -->
-                <div class="cx-kpi" style="border-left-color:#4f46e5; cursor:pointer; animation-delay:0s;" onclick="CashView.showVentasHoy()">
+                <div class="cx-kpi" style="border-left-color:#4f46e5; cursor:pointer; animation-delay:0s;" onclick="CashView.showVentasHoy()" title="Total vendido SOLAMENTE durante el turno actual (desde que abriste la caja).">
                     <div class="cx-kpi-bg">🛍️</div>
                     <div class="cx-kpi-lbl" style="color:#4f46e5;">Ventas Hoy</div>
                     <div class="cx-kpi-val">${formatCLP(totalTodaySales)}</div>
@@ -958,42 +958,70 @@ const CashView = {
     renderCashHistory(history) {
         if (history.length === 0) return '<div class="empty-state">No hay registros de caja previos</div>';
 
+        const formatDT = (dateVal) => {
+            const formatted = formatDateTime(dateVal);
+            if (formatted.includes(',')) {
+                const parts = formatted.split(',');
+                return { date: parts[0].trim(), time: parts[1].trim() };
+            }
+            const lastSpaceIdx = formatted.lastIndexOf(' ');
+            if (lastSpaceIdx !== -1) {
+                return {
+                    date: formatted.substring(0, lastSpaceIdx).trim(),
+                    time: formatted.substring(lastSpaceIdx).trim()
+                };
+            }
+            return { date: formatted, time: '' };
+        };
+
         return `
             <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 1.5rem; overflow: hidden; margin-top: 1rem;">
                 <table class="table-modern" style="width: 100%; border-collapse: separate; border-spacing: 0;">
                     <thead style="background: rgba(15, 23, 42, 0.6);">
                         <tr>
-                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px;">📅 Fecha / Apertura</th>
-                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px;">🔒 Cierre</th>
-                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px;">💰 Inicial</th>
-                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; text-align: center;">Ventas</th>
-                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; text-align: center;">Estado</th>
-                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; text-align: right;">Acción</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px;">📅 Apertura (Fecha y Hora)</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px;">🔒 Cierre (Fecha y Hora)</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px;">💰 Inicial</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; text-align: center;">Ventas</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; text-align: center;">Estado</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; text-align: right;">Acción</th>
                         </tr>
                     </thead>
                     <tbody>
                         ${history.slice(0, 10).map(c => {
                             const totalVentas = c.paymentSummary ? Object.values(c.paymentSummary).reduce((a, b) => a + b, 0) : 0;
+                            const openInfo = formatDT(c.openDate);
+                            const closeInfo = c.closeDate ? formatDT(c.closeDate) : null;
                             return `
                             <tr style="border-bottom: 1px solid rgba(255,255,255,0.03); transition: background 0.2s;">
-                                <td style="padding: 1rem; color: #f1f5f9;">
-                                    <div style="font-weight: 700;">${formatDateTime(c.openDate).split(' ')[0]}</div>
-                                    <div style="font-size: 0.75rem; color: #64748b;">Turno #${c.id}</div>
+                                <td style="padding: 1.25rem 1rem; color: #f1f5f9; vertical-align: middle;">
+                                    <div style="font-size: 1.15rem; font-weight: 800; color: #ffffff;">${openInfo.date}</div>
+                                    <div style="font-size: 1rem; font-weight: 700; color: #60a5fa; margin-top: 0.15rem;">⏰ ${openInfo.time}</div>
+                                    <div style="font-size: 0.8rem; color: #94a3b8; font-weight: 600; margin-top: 0.25rem;">Turno #${c.id}</div>
                                 </td>
-                                <td style="padding: 1rem; color: #94a3b8; font-size: 0.85rem;">
-                                    ${c.closeDate ? formatDateTime(c.closeDate).split(' ')[1] : '<span style="color: #10b981;">Abierta</span>'}
+                                <td style="padding: 1.25rem 1rem; color: #94a3b8; vertical-align: middle;">
+                                    ${closeInfo ? `
+                                        <div style="font-size: 1.15rem; font-weight: 800; color: #cbd5e1;">${closeInfo.date}</div>
+                                        <div style="font-size: 1rem; font-weight: 700; color: #94a3b8; margin-top: 0.15rem;">⏰ ${closeInfo.time}</div>
+                                    ` : `
+                                        <span style="background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 0.4rem 0.8rem; border-radius: 0.75rem; font-weight: 800; font-size: 0.95rem; border: 1px solid rgba(16, 185, 129, 0.3); display: inline-block;">
+                                            🔓 Abierta (En curso)
+                                        </span>
+                                    `}
                                 </td>
-                                <td style="padding: 1rem; color: #f1f5f9; font-weight: 600;">${formatCLP(c.initialAmount)}</td>
-                                <td style="padding: 1rem; text-align: center;">
-                                    <div style="color: #10b981; font-weight: 800;">${totalVentas > 0 ? '+' : ''}${formatCLP(totalVentas)}</div>
+                                <td style="padding: 1.25rem 1rem; color: #f1f5f9; font-weight: 700; font-size: 1.1rem; vertical-align: middle;">
+                                    ${formatCLP(c.initialAmount)}
                                 </td>
-                                <td style="padding: 1rem; text-align: center;">
-                                    <span class="badge ${c.status === 'open' ? 'badge-success' : 'badge-info'}" style="padding: 0.25rem 0.75rem; border-radius: 2rem; font-size: 0.7rem;">
+                                <td style="padding: 1.25rem 1rem; text-align: center; vertical-align: middle;">
+                                    <div style="color: #34d399; font-weight: 800; font-size: 1.1rem;">${totalVentas > 0 ? '+' : ''}${formatCLP(totalVentas)}</div>
+                                </td>
+                                <td style="padding: 1.25rem 1rem; text-align: center; vertical-align: middle;">
+                                    <span class="badge ${c.status === 'open' ? 'badge-success' : 'badge-info'}" style="padding: 0.4rem 0.8rem; border-radius: 2rem; font-size: 0.85rem; font-weight: 800;">
                                         ${c.status === 'open' ? 'Activa' : 'Cerrada'}
                                     </span>
                                 </td>
-                                <td style="padding: 1rem; text-align: right;">
-                                    <button class="btn btn-sm" onclick="CashView.showCashHistory('${c.id}')" style="background: rgba(99, 102, 241, 0.1); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.2); font-weight: 800; border-radius: 0.5rem; padding: 0.4rem 0.8rem;">
+                                <td style="padding: 1.25rem 1rem; text-align: right; vertical-align: middle;">
+                                    <button class="btn btn-sm" onclick="CashView.showCashHistory('${c.id}')" style="background: rgba(99, 102, 241, 0.15); color: #a5b4fc; border: 1.5px solid rgba(99, 102, 241, 0.3); font-weight: 800; border-radius: 0.75rem; padding: 0.5rem 1rem; font-size: 0.9rem; transition: all 0.2s;" onmouseover="this.style.background='rgba(99, 102, 241, 0.3)'" onmouseout="this.style.background='rgba(99, 102, 241, 0.15)'">
                                         📋 Historial
                                     </button>
                                 </td>
@@ -1011,6 +1039,8 @@ const CashView = {
             showNotification('Caja no encontrada', 'error');
             return;
         }
+
+        const summary = await CashRegister.getSummary(cashRegisterId);
 
         // Obtener todos los datos relacionados con la caja
         const sales = await Sale.getByCashRegister(cashRegisterId);
@@ -1166,7 +1196,7 @@ const CashView = {
 
         const content = `
             <div style="padding: 1rem; background: #0f172a; border-radius: 1.5rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3rem; padding: 2.5rem; background: linear-gradient(135deg, #1e293b, #0f172a); border-radius: 1.5rem; border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding: 2.5rem; background: linear-gradient(135deg, #1e293b, #0f172a); border-radius: 1.5rem; border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
                     <div>
                         <div style="color: #6366f1; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; font-size: 0.8rem; margin-bottom: 0.5rem;">Resumen de Transacciones</div>
                         <h2 style="margin: 0; font-size: 2.2rem; font-weight: 900; color: white;">Sesión de Caja #${cashRegister.id}</h2>
@@ -1178,32 +1208,55 @@ const CashView = {
                                 <span style="font-size: 1.2rem;">👤</span> <span>${cashRegister.username || 'Admin'}</span>
                             </div>
                             <span class="badge ${cashRegister.status === 'open' ? 'badge-success' : 'badge-secondary'}" style="padding: 0.5rem 1rem; border-radius: 2rem; font-weight: 800;">
-                                ${cashRegister.status === 'open' ? '🟢 CAJA ABIERTA' : '🔴 CAJA CERRADA'}
+                                ${cashRegister.status === 'open' ? 'Abierta' : 'Cerrada'}
                             </span>
                         </div>
                     </div>
-                    <div style="text-align: right;">
-                        <div style="font-size: 0.8rem; color: #64748b; font-weight: 800; text-transform: uppercase; margin-bottom: 0.5rem;">Balance Final Estimado</div>
-                        <div style="font-size: 2.8rem; font-weight: 950; color: #6366f1; text-shadow: 0 0 20px rgba(99, 102, 241, 0.3); line-height: 1;">${formatCLP(runningBalance)}</div>
+                </div>
+
+                <!-- Fila 1: Cuadratura y Caja Físico -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem; padding: 1rem; background: rgba(30, 41, 59, 0.4); border-radius: 1rem; border: 1px solid rgba(255,255,255,0.03);">
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">💵 Fondo Inicial</span>
+                        <strong style="font-size: 1.1rem; color: white; font-weight: 800;">${formatCLP(summary.initialAmount || 0)}</strong>
+                    </div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">💸 Efectivo Esperado</span>
+                        <strong style="font-size: 1.1rem; color: white; font-weight: 800;">${formatCLP(summary.expectedCash || 0)}</strong>
+                    </div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">📥 Efectivo Contado (Cierre)</span>
+                        <strong style="font-size: 1.1rem; color: white; font-weight: 800;">${formatCLP(summary.finalAmount || 0)}</strong>
+                    </div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">⚖️ Diferencia</span>
+                        <strong style="font-size: 1.1rem; color: ${(summary.difference || 0) === 0 ? '#10b981' : ((summary.difference || 0) > 0 ? '#fbbf24' : '#ef4444')}; font-weight: 800;">
+                            ${(summary.difference || 0) === 0 ? 'Cuadra Exacto' : formatCLP(summary.difference)}
+                        </strong>
                     </div>
                 </div>
 
-                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-bottom: 3rem;">
-                    <div style="background: rgba(30, 41, 59, 0.4); padding: 1.5rem; border-radius: 1.25rem; border: 1px solid rgba(255,255,255,0.05); text-align: center;">
-                        <div style="font-size: 0.75rem; color: #94a3b8; font-weight: 800; text-transform: uppercase; margin-bottom: 0.75rem;">💰 Fondo Inicial</div>
-                        <div style="font-size: 1.35rem; font-weight: 900; color: #f1f5f9;">${formatCLP(cashRegister.initialAmount)}</div>
+                <!-- Fila 2: Ventas, Impuestos y Ganancias -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 2rem; padding: 1rem; background: rgba(30, 41, 59, 0.6); border-radius: 1rem; border: 1px solid rgba(255,255,255,0.05);">
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">💰 Total Vendido</span>
+                        <strong style="font-size: 1.1rem; color: #60a5fa; font-weight: 800;">${formatCLP(summary.totalSalesAmount || 0)}</strong>
                     </div>
-                    <div style="background: rgba(16, 185, 129, 0.05); padding: 1.5rem; border-radius: 1.25rem; border: 1px solid rgba(16, 185, 129, 0.1); text-align: center;">
-                        <div style="font-size: 0.75rem; color: #10b981; font-weight: 800; text-transform: uppercase; margin-bottom: 0.75rem;">📈 Total Ventas</div>
-                        <div style="font-size: 1.35rem; font-weight: 900; color: #10b981;">+${formatCLP(sales.reduce((s, e) => s + e.total, 0))}</div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">🔴 IVA Débito (Ventas)</span>
+                        <strong style="font-size: 1.1rem; color: #f87171; font-weight: 800;">${formatCLP(summary.ivaDebito || 0)}</strong>
                     </div>
-                    <div style="background: rgba(239, 68, 68, 0.05); padding: 1.5rem; border-radius: 1.25rem; border: 1px solid rgba(239, 68, 68, 0.1); text-align: center;">
-                        <div style="font-size: 0.75rem; color: #f87171; font-weight: 800; text-transform: uppercase; margin-bottom: 0.75rem;">📉 Salidas de Efectivo</div>
-                        <div style="font-size: 1.35rem; font-weight: 900; color: #f87171;">-${formatCLP(events.filter(e => e.type === 'cash_out').reduce((s, e) => s + Math.abs(e.amount), 0))}</div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">🟢 IVA Crédito (Compras)</span>
+                        <strong style="font-size: 1.1rem; color: #34d399; font-weight: 800;">${formatCLP(summary.ivaCredito || 0)}</strong>
                     </div>
-                    <div style="background: rgba(99, 102, 241, 0.05); padding: 1.5rem; border-radius: 1.25rem; border: 1px solid rgba(99, 102, 241, 0.1); text-align: center;">
-                        <div style="font-size: 0.75rem; color: #818cf8; font-weight: 800; text-transform: uppercase; margin-bottom: 0.75rem;">🔄 Operaciones</div>
-                        <div style="font-size: 1.35rem; font-weight: 900; color: #818cf8;">${events.length} Transacc.</div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">💸 Gastos del Turno</span>
+                        <strong style="font-size: 1.1rem; color: #ef4444; font-weight: 800;">-${formatCLP(summary.totalExpenses || 0)}</strong>
+                    </div>
+                    <div style="text-align: center; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 0.5rem;">
+                        <span style="font-size: 0.65rem; color: #10b981; display: block; font-weight: 800; text-transform: uppercase;">💎 Ganancia Neta</span>
+                        <strong style="font-size: 1.1rem; color: #10b981; font-weight: 900;">${formatCLP(summary.netProfit || 0)}</strong>
                     </div>
                 </div>
 
@@ -1708,6 +1761,24 @@ const CashView = {
                         <span style="font-size: 0.85rem; color: #64748b; font-weight: 700;">PASO FINAL</span>
                     </div>
                     <p style="color: #64748b; margin-bottom: 1rem; font-weight: 600;">Compara los montos reales recibidos con lo reportado por el sistema.</p>
+
+                    <div style="background: #1e293b; color: white; padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                        <h4 style="margin: 0; font-size: 0.9rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">📈 Rendimiento de este Turno</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; text-align: center;">
+                            <div style="background: rgba(255,255,255,0.03); padding: 0.75rem; border-radius: 0.75rem;">
+                                <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase; margin-bottom: 0.25rem;">Ventas Netas (Sin IVA)</span>
+                                <strong style="font-size: 1.15rem; color: #3b82f6; font-weight: 900;">${formatCLP(summary.totalSalesAmount - (summary.ivaDebito || 0))}</strong>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.03); padding: 0.75rem; border-radius: 0.75rem;">
+                                <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase; margin-bottom: 0.25rem;">Gastos del Turno</span>
+                                <strong style="font-size: 1.15rem; color: #ef4444; font-weight: 900;">-${formatCLP(summary.totalExpenses || 0)}</strong>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.03); padding: 0.75rem; border-radius: 0.75rem; border: 1px solid rgba(16, 185, 129, 0.2);">
+                                <span style="font-size: 0.65rem; color: #10b981; display: block; font-weight: 800; text-transform: uppercase; margin-bottom: 0.25rem;">Ganancia Neta Turno</span>
+                                <strong style="font-size: 1.15rem; color: #10b981; font-weight: 900;">${formatCLP(summary.netProfit || 0)}</strong>
+                            </div>
+                        </div>
+                    </div>
                     
                     <div style="display: flex; flex-direction: column; gap: 1rem;">
                         ${methodRows}
@@ -1839,13 +1910,15 @@ const CashView = {
 
         if (result) {
             try {
-                await CashController.closeCash(id, finalAmount);
+                const summary = await CashController.closeCash(id, finalAmount);
                 
                 // Cerrar el modal de resumen de cierre
                 closeModal(); 
                 
                 showNotification('¡Caja cerrada exitosamente!', 'success');
-                app.navigate('cash');
+                
+                // Mostrar ventana para compartir el reporte de cierre
+                await CashView.showShareReportModal(id, summary);
             } catch (error) {
                 // Si la caja ya está cerrada, significa que el proceso terminó con éxito previamente
                 if (error.message.includes('ya está cerrada')) {
@@ -1869,6 +1942,183 @@ const CashView = {
                 btn.style.opacity = '1';
                 btn.innerText = 'FINALIZAR Y CERRAR CAJA 🔒';
             }
+        }
+    },
+
+    async showShareReportModal(registerId, summary) {
+        const register = await db.get('cashRegisters', registerId) || {};
+        
+        const phoneKey = 'share_report_whatsapp_phone';
+        const tgTokenKey = 'share_report_telegram_token';
+        const tgChatIdKey = 'share_report_telegram_chat_id';
+        
+        const savedPhone = localStorage.getItem(phoneKey) || '';
+        const savedToken = localStorage.getItem(tgTokenKey) || '';
+        const savedChatId = localStorage.getItem(tgChatIdKey) || '';
+        
+        const content = `
+            <div style="padding: 1rem 0;">
+                <p style="margin-bottom: 1.25rem; font-size: 1rem; color: #475569; line-height: 1.5; font-weight: 500;">
+                    La caja ha sido cerrada con éxito. Elige una de las siguientes opciones para compartir el reporte de cierre diario con el administrador o dueño del negocio:
+                </p>
+                
+                <!-- SECCIÓN WHATSAPP -->
+                <div style="background: rgba(34, 197, 94, 0.03); border: 1.5px solid #22c55e; border-radius: 1rem; padding: 1.25rem; margin-bottom: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                    <h4 style="margin: 0; color: #166534; display: flex; align-items: center; gap: 0.5rem; font-size: 1.05rem; font-weight: 800;">
+                        <span>📱</span> Compartir por WhatsApp Web
+                    </h4>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="text" id="sharePhone" class="form-control" placeholder="Ej: 56912345678" value="${savedPhone}" style="flex: 1;" />
+                        <button class="btn btn-success" onclick="CashView.shareWhatsApp(${registerId}, ${JSON.stringify(summary).replace(/"/g, '&quot;')})" style="border-radius: 0.75rem; font-weight: 700; white-space: nowrap; display: flex; align-items: center; gap: 0.35rem;">
+                            <span>🚀</span> Enviar WhatsApp
+                        </button>
+                    </div>
+                    <button class="btn" onclick="CashView.copyReportToClipboard(${registerId}, ${JSON.stringify(summary).replace(/"/g, '&quot;')})" style="background: #f1f5f9; color: #334155; border: 1.5px solid #cbd5e1; border-radius: 0.75rem; font-weight: 700; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.5rem 0;">
+                        <span>📋</span> Copiar Reporte al Portapapeles (Pegar donde quieras)
+                    </button>
+                    <small style="color: #166534; opacity: 0.8; margin-top: -0.25rem; font-size: 0.75rem; font-weight: 500;">Ingresa el número con código de país (ej: 569 para Chile, sin el signo +).</small>
+                </div>
+                
+                <!-- SECCIÓN TELEGRAM -->
+                <div style="background: rgba(14, 165, 233, 0.03); border: 1.5px solid #0ea5e9; border-radius: 1rem; padding: 1.25rem; margin-bottom: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                    <h4 style="margin: 0; color: #0369a1; display: flex; align-items: center; gap: 0.5rem; font-size: 1.05rem; font-weight: 800;">
+                        <span>🤖</span> Enviar vía Bot de Telegram (Silencioso)
+                    </h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                        <div>
+                            <label style="font-size: 0.75rem; color: #0369a1; font-weight: 700;">TOKEN DEL BOT:</label>
+                            <input type="password" id="shareTgToken" class="form-control" placeholder="Bot Token" value="${savedToken}" />
+                        </div>
+                        <div>
+                            <label style="font-size: 0.75rem; color: #0369a1; font-weight: 700;">CHAT ID DESTINATARIO:</label>
+                            <input type="text" id="shareTgChatId" class="form-control" placeholder="Chat ID" value="${savedChatId}" />
+                        </div>
+                    </div>
+                    <button class="btn" style="background: #0ea5e9; color: white; width: 100%; border-radius: 0.75rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.35rem; margin-top: 0.25rem;" onclick="CashView.shareTelegram(${registerId}, ${JSON.stringify(summary).replace(/"/g, '&quot;')})">
+                        <span>✈️</span> Enviar reporte automático
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        const footer = `
+            <button class="btn btn-secondary" onclick="closeModal(); app.navigate('cash');" style="border-radius: 0.75rem; padding: 0.75rem 2rem; font-weight: 700; width: 100%;">
+                🏁 Finalizar y Salir
+            </button>
+        `;
+        
+        showModal(content, { title: 'Compartir Reporte Diario', footer, width: '550px' });
+    },
+
+    getShareReportMessage(summary, register) {
+        const businessName = localStorage.getItem('business_name') || 'Mi Almacén';
+        const dateStr = new Date().toLocaleString('es-CL');
+        const username = register.username || 'Cajero';
+        
+        // La diferencia real calculada al cerrar la caja
+        const diff = summary.difference !== undefined ? summary.difference : (summary.finalAmount - summary.expectedCash);
+        const diffText = diff === 0 
+            ? '✅ CUADRA EXACTO' 
+            : (diff > 0 
+                ? `📈 SOBRANTE: ${formatCLP(diff)}` 
+                : `🚨 FALTANTE: ${formatCLP(Math.abs(diff))}`);
+        
+        let details = '';
+        // Usar paymentSummary en lugar del inexistente paymentsByMethod
+        const paymentMap = summary.paymentSummary || {};
+        details = Object.entries(paymentMap)
+            .map(([method, amount]) => `🔹 *${method.toUpperCase()}:* ${formatCLP(amount)}`)
+            .join('\n');
+ 
+        return `📊 *REPORTE DE CIERRE DE CAJA*\n` +
+               `🏪 *Negocio:* ${businessName}\n` +
+               `📅 *Fecha:* ${dateStr}\n` +
+               `👤 *Cajero:* ${username}\n` +
+               `----------------------------------\n` +
+               `💵 *Fondo de Caja:* ${formatCLP(summary.initialAmount || 0)}\n` +
+               `💰 *Ventas Totales:* ${formatCLP(summary.totalSalesAmount || 0)}\n` +
+               `💸 *Efectivo Esperado:* ${formatCLP(summary.expectedCash || 0)}\n` +
+               `📥 *Efectivo Contado:* ${formatCLP(summary.finalAmount || 0)}\n` +
+               `----------------------------------\n` +
+               `📈 *Ganancia Bruta:* ${formatCLP(summary.grossProfit || 0)}\n` +
+               `💸 *Gastos del Turno:* ${formatCLP(summary.totalExpenses || 0)}\n` +
+               `💎 *Ganancia Neta:* ${formatCLP(summary.netProfit || 0)}\n` +
+               `----------------------------------\n` +
+               `📊 *Por Método de Pago:*\n${details}\n` +
+               `----------------------------------\n` +
+               `📢 *Estado:* ${diffText}\n` +
+               `----------------------------------\n` +
+               `⚡ *CajaFácil POS*`;
+    },
+
+    async shareWhatsApp(registerId, summary) {
+        const phone = document.getElementById('sharePhone').value.trim().replace(/\+/g, '');
+        if (!phone) {
+            showNotification('Ingresa un número de celular de destino', 'warning');
+            return;
+        }
+        
+        localStorage.setItem('share_report_whatsapp_phone', phone);
+        
+        const register = await db.get('cashRegisters', registerId) || {};
+        const message = this.getShareReportMessage(summary, register);
+        const encodedText = encodeURIComponent(message);
+        
+        // Redirigir directamente a la versión Web de WhatsApp en el navegador (no requiere app instalada)
+        const url = `https://web.whatsapp.com/send?phone=${phone}&text=${encodedText}`;
+        window.open(url, '_blank');
+        showNotification('Abriendo WhatsApp Web en tu navegador...', 'success');
+    },
+
+    async copyReportToClipboard(registerId, summary) {
+        try {
+            const register = await db.get('cashRegisters', registerId) || {};
+            const message = this.getShareReportMessage(summary, register);
+            
+            await navigator.clipboard.writeText(message);
+            showNotification('Reporte copiado al portapapeles. ¡Ya puedes pegarlo donde quieras!', 'success');
+        } catch (err) {
+            console.error('Error al copiar reporte:', err);
+            showNotification('No se pudo copiar el reporte. Inténtalo de nuevo.', 'error');
+        }
+    },
+    
+    async shareTelegram(registerId, summary) {
+        const token = document.getElementById('shareTgToken').value.trim();
+        const chatId = document.getElementById('shareTgChatId').value.trim();
+        
+        if (!token || !chatId) {
+            showNotification('Token y Chat ID son requeridos para Telegram', 'warning');
+            return;
+        }
+        
+        localStorage.setItem('share_report_telegram_token', token);
+        localStorage.setItem('share_report_telegram_chat_id', chatId);
+        
+        const register = await db.get('cashRegisters', registerId) || {};
+        const message = this.getShareReportMessage(summary, register);
+        
+        try {
+            const url = `https://api.telegram.org/bot${token}/sendMessage`;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    text: message,
+                    parse_mode: 'Markdown'
+                })
+            });
+            
+            const data = await response.json();
+            if (data.ok) {
+                showNotification('¡Reporte enviado exitosamente a Telegram! ✈️', 'success');
+            } else {
+                throw new Error(data.description || 'Error desconocido del servidor de Telegram');
+            }
+        } catch (error) {
+            console.error('Telegram share error:', error);
+            showNotification('Error al enviar a Telegram: ' + error.message, 'error');
         }
     },
 
