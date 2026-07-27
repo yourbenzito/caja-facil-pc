@@ -2007,8 +2007,11 @@ const SalesView = {
                     const result = await SaleReturnService.processReturn(saleId, returnItems, reason, deductFromCashRegister);
 
                     closeModal();
+                    const debtNote = result.appliedToDebt > 0
+                        ? ` Se descontaron ${formatCLP(result.appliedToDebt)} de la deuda del cliente.`
+                        : '';
                     showNotification(
-                        `Devolución #${result.returnId} registrada exitosamente por ${formatCLP(result.totalReturned)}. Stock restaurado.`,
+                        `Devolución #${result.returnId} registrada exitosamente por ${formatCLP(result.totalReturned)}. Stock restaurado.${debtNote}`,
                         'success'
                     );
                     this.offset = 0;

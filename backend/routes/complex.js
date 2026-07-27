@@ -39,6 +39,11 @@ router.post('/api/complex/sale', async (req, res) => {
         if (sale.subtotal) {
             sale.subtotal = roundPrice(sale.subtotal);
         }
+        // El redondeo del total no puede dejar la venta con más pagado que su total
+        if (parseFloat(sale.paidAmount) > parseFloat(sale.total)) {
+            sale.paidAmount = sale.total;
+            if (sale.status === 'partial' || sale.status === 'pending') sale.status = 'completed';
+        }
 
         const saleId = await withTransaction(async () => {
             const saleRecord = { ...sale };
@@ -465,12 +470,13 @@ router.post('/api/complex/payment', async (req, res) => {
             const r = await dbRun(`INSERT INTO payments (${cols.join(',')}, business_id) VALUES (${cols.map(() => '?').join(',')}, ?)`, [...cols.map(c => typeof cleanPayment[c] === 'object' ? JSON.stringify(cleanPayment[c]) : cleanPayment[c]), bid]);
             const s = await dbGet("SELECT total, paidAmount FROM sales WHERE id = ? AND business_id = ?", [payment.saleId, bid]);
             if (s) { 
-                const newPaid = (s.paidAmount || 0) + payment.amount; 
+                // Nunca acreditar más de lo que resta por pagar
+                const newPaid = Math.min((s.paidAmount || 0) + payment.amount, s.total);
                 const isCompleted = newPaid >= s.total;
                 await dbRun("UPDATE sales SET paidAmount = ?, status = ?, paidAt = ? WHERE id = ? AND business_id = ?", 
                     [newPaid, isCompleted ? 'completed' : 'partial', isCompleted ? (payment.date || new Date().toISOString()) : null, payment.saleId, bid]); 
             }
-            if (payment.cashRegisterId && !['credit', 'discount'].includes(payment.paymentMethod)) { 
+            if (payment.cashRegisterId && payment.paymentMethod === 'cash') { 
                 await dbRun("INSERT INTO cashMovements (cashRegisterId, type, amount, description, date, paymentId, business_id) VALUES (?, 'in', ?, ?, ?, ?, ?)", [payment.cashRegisterId, payment.amount, `Abono Venta #${payment.saleId}`, new Date().toISOString(), r.lastID, bid]); 
             }
             return r.lastID;
@@ -573,6 +579,9 @@ router.post('/api/complex/credit-deposit', async (req, res) => {
         if (deposit.amount !== undefined) {
             deposit.amount = roundPrice(deposit.amount);
         }
+        if (!(parseFloat(deposit.amount) > 0)) {
+            throw new Error('El monto del depósito debe ser mayor a 0');
+        }
 
         await withTransaction(async () => {
             const c = await dbGet("SELECT balanceCredit FROM customers WHERE id = ? AND business_id = ?", [deposit.customerId, bid]);
@@ -587,7 +596,7 @@ router.post('/api/complex/credit-deposit', async (req, res) => {
             const cols = Object.keys(cleanDeposit);
             await dbRun(`INSERT INTO customerCreditDeposits (${cols.join(',')}, business_id) VALUES (${cols.map(() => '?').join(',')}, ?)`, [...cols.map(k => typeof cleanDeposit[k] === 'object' ? JSON.stringify(cleanDeposit[k]) : cleanDeposit[k]), bid]);
             
-            if (deposit.cashRegisterId) {
+            if (deposit.cashRegisterId && (deposit.paymentMethod || 'cash') === 'cash') {
                 await dbRun("INSERT INTO cashMovements (cashRegisterId, type, amount, description, date, business_id) VALUES (?, 'in', ?, ?, ?, ?)", 
                     [deposit.cashRegisterId, deposit.amount, `Carga saldo a favor: ${deposit.customerId}`, new Date().toISOString(), bid]);
             }
@@ -612,13 +621,14 @@ router.post('/api/complex/account-payment', async (req, res) => {
                 
                 const s = await dbGet("SELECT total, paidAmount FROM sales WHERE id = ? AND business_id = ?", [p.saleId, bid]);
                 if (s) {
-                    const newPaid = (s.paidAmount || 0) + p.amount;
+                    // Nunca acreditar más de lo que resta por pagar
+                    const newPaid = Math.min((s.paidAmount || 0) + p.amount, s.total);
                     const isCompleted = newPaid >= s.total;
                     await dbRun("UPDATE sales SET paidAmount = ?, status = ?, paidAt = ? WHERE id = ? AND business_id = ?", 
                         [newPaid, isCompleted ? 'completed' : 'partial', isCompleted ? (p.date || new Date().toISOString()) : null, p.saleId, bid]);
                 }
                 
-                if (p.cashRegisterId && !['credit', 'discount'].includes(p.paymentMethod)) {
+                if (p.cashRegisterId && p.paymentMethod === 'cash') {
                     await dbRun("INSERT INTO cashMovements (cashRegisterId, type, amount, description, date, paymentId, business_id) VALUES (?, 'in', ?, ?, ?, ?, ?)", 
                         [p.cashRegisterId, p.amount, `Abono Venta #${p.saleId}`, new Date().toISOString(), r.lastID, bid]);
                 }
@@ -748,7 +758,7 @@ router.post('/api/complex/customer-credit-use', async (req, res) => {
 });
 
 router.post('/api/complex/sale-return', async (req, res) => {
-    const { returnRecord, validatedItems, deductFromCashRegister, cashRegisterId } = req.body;
+    const { returnRecord, validatedItems, deductFromCashRegister, cashRegisterId, cashRefundAmount } = req.body;
     const bid = req.business_id;
     try {
         if (returnRecord.totalReturned !== undefined) {
@@ -769,9 +779,11 @@ router.post('/api/complex/sale-return', async (req, res) => {
                     [item.productId, item.quantity, 'return', new Date().toISOString(), bid, returnRecord.saleId, `Devolución Venta #${returnRecord.saleNumber || returnRecord.saleId}: ${returnRecord.reason || ''}`, (p?.cost || 0) * item.quantity, (p?.price || 0) * item.quantity]);
             }
             
-            if (deductFromCashRegister && cashRegisterId) {
+            // Solo sale de caja la parte que el cliente ya había pagado; el resto se abona a su deuda
+            const refund = cashRefundAmount !== undefined ? roundPrice(cashRefundAmount) : returnRecord.totalReturned;
+            if (deductFromCashRegister && cashRegisterId && refund > 0) {
                 await dbRun(`INSERT INTO cashMovements (cashRegisterId, type, amount, description, date, business_id) VALUES (?, 'out', ?, ?, ?, ?)`, 
-                    [cashRegisterId, returnRecord.totalReturned, `Reembolso por Devolución Venta #${returnRecord.saleNumber || returnRecord.saleId}`, new Date().toISOString(), bid]);
+                    [cashRegisterId, refund, `Reembolso por Devolución Venta #${returnRecord.saleNumber || returnRecord.saleId}`, new Date().toISOString(), bid]);
             }
             return r.lastID;
         });
@@ -810,7 +822,11 @@ router.delete('/api/complex/sale/:id', async (req, res) => {
             }
             await dbRun("DELETE FROM customerCreditUses WHERE saleId = ? AND business_id = ?", [id, bid]);
 
-            const openRegister = await dbGet("SELECT id FROM cashRegisters WHERE status = 'open' AND business_id = ? ORDER BY id DESC LIMIT 1", [bid]);
+            // Con varias cajas abiertas, el reembolso sale de la caja del usuario que anula
+            const openRegister = (req.userId
+                ? await dbGet("SELECT id FROM cashRegisters WHERE status = 'open' AND userId = ? AND business_id = ? ORDER BY id DESC LIMIT 1", [req.userId, bid])
+                : null
+            ) || await dbGet("SELECT id FROM cashRegisters WHERE status = 'open' AND business_id = ? ORDER BY id DESC LIMIT 1", [bid]);
             if (openRegister) {
                 // Solo crear movimiento de egreso si la venta es de una caja ANTERIOR (ya cerrada).
                 // Si es de la misma caja abierta, no se hace movimiento, porque el sistema simplemente 

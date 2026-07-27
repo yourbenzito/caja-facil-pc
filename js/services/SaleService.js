@@ -240,7 +240,7 @@ class SaleService {
 
         // Restore stock in an atomic transaction
         if (db.mode === 'sqlite') {
-            const result = await ApiClient.delete(`complex/sale/${saleId}`);
+            const result = await ApiClient.delete('complex/sale', saleId);
             if (!result.success) throw new Error(result.error || 'Error al anular venta en SQLite');
             // Log auditing (after successful transaction)
             AuditLogService.log({

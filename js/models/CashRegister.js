@@ -370,7 +370,8 @@ class CashRegister {
         } catch (_) {}
         totalSalesRevenueNet = Math.max(0, totalSalesRevenueNet - totalReturnedRevenueNet);
 
-        const grossProfit = Math.max(0, totalSalesRevenueNet - totalSalesCostNet);
+        // ponytail: sin Math.max, para que una pérdida se vea como número negativo y no como $0
+        const grossProfit = totalSalesRevenueNet - totalSalesCostNet;
         const netProfit = grossProfit - totalExpenses;
 
         return {

@@ -39,7 +39,8 @@ class PaymentValidator {
      * @returns {Object} - { valid: boolean, error?: string }
      */
     static validateMethod(method) {
-        const validMethods = ['cash', 'card', 'qr', 'other'];
+        // 'discount' y 'credit' no mueven dinero: se usan para abonos por devolución o saldo a favor
+        const validMethods = ['cash', 'card', 'qr', 'other', 'discount', 'credit'];
         
         if (!method) {
             return {

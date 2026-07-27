@@ -49,6 +49,14 @@ class SaleReturnService {
         const alreadyReturned = await SaleReturn.getReturnedQuantitiesBySale(saleId);
 
         // 4. Validar cada ítem de devolución
+        // ponytail: si la venta tuvo descuento, se devuelve lo realmente pagado por el ítem,
+        // no el precio de lista.
+        const saleSubtotal = parseFloat(sale.subtotal) || 0;
+        const saleTotal = parseFloat(sale.total) || 0;
+        const discountFactor = (saleSubtotal > 0 && saleTotal > 0 && saleTotal < saleSubtotal)
+            ? saleTotal / saleSubtotal
+            : 1;
+
         const validatedItems = [];
         let totalReturned = 0;
 
@@ -71,7 +79,7 @@ class SaleReturnService {
                 );
             }
 
-            const itemTotal = roundPrice(qtyToReturn * soldInfo.unitPrice);
+            const itemTotal = roundPrice(qtyToReturn * soldInfo.unitPrice * discountFactor);
             totalReturned += itemTotal;
 
             validatedItems.push({
@@ -88,11 +96,17 @@ class SaleReturnService {
             throw new Error('No hay ítems válidos para devolver (cantidades deben ser mayores a 0)');
         }
 
+        // La parte de la venta que el cliente todavía debe se abona con la devolución;
+        // solo el resto (lo que ya había pagado) se reembolsa en dinero.
+        const pendingDebt = Math.max(0, saleTotal - (parseFloat(sale.paidAmount) || 0));
+        const appliedToDebt = Math.min(pendingDebt, totalReturned);
+        const cashRefundAmount = Math.max(0, totalReturned - appliedToDebt);
+
         let openCash = null;
-        if (deductFromCashRegister) {
+        if (deductFromCashRegister || appliedToDebt > 0) {
             openCash = await CashRegister.getOpen();
             if (!openCash || !openCash.id) {
-                throw new Error('No hay una caja abierta para extraer el efectivo del reembolso');
+                throw new Error('No hay una caja abierta para registrar la devolución');
             }
         }
 
@@ -111,18 +125,21 @@ class SaleReturnService {
             const result = await ApiClient.post('complex/sale-return', {
                 returnRecord,
                 validatedItems,
-                deductFromCashRegister,
+                deductFromCashRegister: deductFromCashRegister && cashRefundAmount > 0,
+                cashRefundAmount,
                 cashRegisterId: openCash ? openCash.id : null
             });
             if (!result.success) throw new Error(result.error || 'Error en devolución SQLite');
-            
+
+            await this.applyReturnToDebt(sale, appliedToDebt);
+
             // CRITICAL: Invalidate relevant caches
             db.clearCache('sales');
             db.clearCache('products');
             db.clearCache('stockMovements');
             db.clearCache('saleReturns');
-            
-            return { returnId: result.id, totalReturned };
+
+            return { returnId: result.id, totalReturned, appliedToDebt, cashRefundAmount };
         }
 
         // CRITICAL FIX: Stock restore + movement creation + return record + optional cash deduct
@@ -164,12 +181,12 @@ class SaleReturnService {
             };
 
             executeStockRestore().then(() => {
-                if (deductFromCashRegister && openCash) {
+                if (deductFromCashRegister && openCash && cashRefundAmount > 0) {
                     const desc = `Reembolso por Devolución Venta #${sale.saleNumber || saleId}`;
                     cashMovementStore.add({
                         cashRegisterId: openCash.id,
                         type: 'out',
-                        amount: totalReturned,
+                        amount: cashRefundAmount,
                         description: desc,
                         date: new Date().toISOString()
                     });
@@ -179,7 +196,27 @@ class SaleReturnService {
             });
         });
 
-        return { returnId, totalReturned };
+        await this.applyReturnToDebt(sale, appliedToDebt);
+
+        return { returnId, totalReturned, appliedToDebt, cashRefundAmount };
+    }
+
+    /**
+     * Abona a la deuda de la venta la parte devuelta que el cliente aún no había pagado.
+     * ponytail: se reutiliza el flujo de pagos existente con el método 'discount', que no
+     * suma dinero a la caja, en lugar de modificar la venta original.
+     * @param {Object} sale
+     * @param {number} appliedToDebt
+     */
+    static async applyReturnToDebt(sale, appliedToDebt) {
+        if (!(appliedToDebt > 0)) return;
+        await Payment.create({
+            saleId: sale.id,
+            customerId: sale.customerId || null,
+            amount: appliedToDebt,
+            paymentMethod: 'discount',
+            notes: `Devolución Venta #${sale.saleNumber || sale.id}`
+        });
     }
 
     /**
