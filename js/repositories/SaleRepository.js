@@ -240,10 +240,15 @@ class SaleRepository extends BaseRepository {
 
             if (initialPaidAmount > 0) {
                 if (sale.paymentDetails && typeof sale.paymentDetails === 'object' && Object.keys(sale.paymentDetails).length > 0) {
-                    const entries = Object.entries(sale.paymentDetails).filter(([method]) => method !== 'creditBalance');
+                    // ponytail: solo prorrateamos entre métodos de dinero real (cash/card/qr/other).
+                    // 'debt' no es dinero recibido y 'creditBalance' ya se contó cuando el cliente
+                    // depositó el saldo a favor; incluirlos descuadraba el efectivo esperado.
+                    const entries = Object.entries(sale.paymentDetails).filter(([method]) => totals[method] !== undefined);
                     const totalDetails = entries.reduce((sum, [, amount]) => sum + (parseFloat(amount) || 0), 0);
+                    const creditUsed = parseFloat(sale.paymentDetails.creditBalance) || 0;
+                    const realMoneyPaid = Math.max(0, initialPaidAmount - creditUsed);
                     // Proporción del pago inicial que corresponde a cada método en el pago mixto
-                    const factor = totalDetails > 0 ? (initialPaidAmount / totalDetails) : 1;
+                    const factor = totalDetails > 0 ? (realMoneyPaid / totalDetails) : 1;
                     for (const [method, amount] of entries) {
                         if (totals[method] !== undefined) {
                             totals[method] += (parseFloat(amount) || 0) * factor;
