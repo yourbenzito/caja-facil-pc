@@ -1899,6 +1899,13 @@ const CashView = {
         }
 
         const finalAmount = parseFloat(document.getElementById('finalAmount').value);
+
+        // ponytail: guardamos el conteo de los 4 métodos para que el reporte pueda
+        // comparar esperado vs contado; antes solo se persistía el efectivo.
+        const countedByMethod = ['cash', 'card', 'qr', 'other'].reduce((acc, method) => {
+            acc[method] = parseFloat(document.getElementById(`closeMethod-${method}`)?.value) || 0;
+            return acc;
+        }, {});
         
         // Validación de confirmación explícita solicitada
         const result = await showConfirm(
@@ -1910,7 +1917,7 @@ const CashView = {
 
         if (result) {
             try {
-                const summary = await CashController.closeCash(id, finalAmount);
+                const summary = await CashController.closeCash(id, finalAmount, countedByMethod);
 
                 // Cerrar el modal de resumen de cierre
                 closeModal();
@@ -2022,45 +2029,90 @@ const CashView = {
         showModal(content, { title: 'Compartir Reporte Diario', footer, width: '550px' });
     },
 
-    getShareReportMessage(summary, register) {
-        const businessName = localStorage.getItem('business_name') || 'Mi Almacén';
-        const dateStr = new Date().toLocaleString('es-CL');
-        const username = register.username || 'Cajero';
-        
-        // La diferencia real calculada al cerrar la caja
-        const diff = summary.difference !== undefined ? summary.difference : (summary.finalAmount - summary.expectedCash);
-        const diffText = diff === 0 
-            ? '✅ CUADRA EXACTO' 
-            : (diff > 0 
-                ? `📈 SOBRANTE: ${formatCLP(diff)}` 
-                : `🚨 FALTANTE: ${formatCLP(Math.abs(diff))}`);
-        
-        let details = '';
-        // Usar paymentSummary en lugar del inexistente paymentsByMethod
-        const paymentMap = summary.paymentSummary || {};
-        details = Object.entries(paymentMap)
-            .map(([method, amount]) => `🔹 *${method.toUpperCase()}:* ${formatCLP(amount)}`)
-            .join('\n');
- 
-        return `📊 *REPORTE DE CIERRE DE CAJA*\n` +
-               `🏪 *Negocio:* ${businessName}\n` +
-               `📅 *Fecha:* ${dateStr}\n` +
-               `👤 *Cajero:* ${username}\n` +
+    async getCashierName(register) {
+        const userId = register.userId || register.openedBy;
+        if (!userId) return 'Cajero';
+        try {
+            const user = await User.getById(userId);
+            return (user && user.username) ? user.username : 'Cajero';
+        } catch (e) {
+            return 'Cajero';
+        }
+    },
+
+    async getShareReportMessage(summary, register) {
+        // ponytail: Telegram usa Markdown; quitamos los caracteres que rompen el envío
+        // en vez de mantener dos plantillas distintas.
+        const clean = (text) => String(text || '').replace(/[*_`\[\]]/g, '');
+
+        const businessName = clean(localStorage.getItem('business_name') || 'Mi Almacén');
+        const username = clean(await this.getCashierName(register));
+        const fmtDate = (value) => value ? new Date(value).toLocaleString('es-CL') : '-';
+
+        const methods = ['cash', 'card', 'qr', 'other'];
+        const labels = {
+            cash: 'Efectivo',
+            card: 'Tarjetas',
+            qr: 'Pagos QR',
+            other: 'Transferencias/Otros'
+        };
+        const paymentSummary = summary.paymentSummary || {};
+        // El efectivo esperado incluye el fondo inicial, los otros métodos no
+        const expected = {
+            cash: summary.expectedCash || 0,
+            card: paymentSummary.card || 0,
+            qr: paymentSummary.qr || 0,
+            other: paymentSummary.other || 0
+        };
+        const counted = summary.countedByMethod || register.countedByMethod || { cash: summary.finalAmount || 0 };
+
+        const diffLabel = (value) => value === 0
+            ? '✅ cuadra'
+            : (value > 0 ? `📈 sobra ${formatCLP(value)}` : `📉 falta ${formatCLP(Math.abs(value))}`);
+
+        let totalExpected = 0;
+        let totalCounted = 0;
+        const methodLines = methods.map(method => {
+            const exp = parseFloat(expected[method]) || 0;
+            const cnt = parseFloat(counted[method]) || 0;
+            totalExpected += exp;
+            totalCounted += cnt;
+            return `🔹 ${labels[method]}\n` +
+                   `   Sistema: ${formatCLP(exp)} | Contado: ${formatCLP(cnt)}\n` +
+                   `   ${diffLabel(cnt - exp)}`;
+        }).join('\n');
+
+        const totalDiff = totalCounted - totalExpected;
+        const cashDiff = summary.difference !== undefined
+            ? summary.difference
+            : ((parseFloat(counted.cash) || 0) - (expected.cash || 0));
+
+        return `📊 *CIERRE DE CAJA N° ${register.id || summary.id || '-'}*\n` +
+               `🏪 ${businessName}\n` +
+               `👤 Cajero: ${username}\n` +
+               `🕒 Apertura: ${fmtDate(register.openDate || summary.openDate)}\n` +
+               `🕒 Cierre: ${fmtDate(register.closeDate || summary.closeDate)}\n` +
                `----------------------------------\n` +
-               `💵 *Fondo de Caja:* ${formatCLP(summary.initialAmount || 0)}\n` +
-               `💰 *Ventas Totales:* ${formatCLP(summary.totalSalesAmount || 0)}\n` +
-               `💸 *Efectivo Esperado:* ${formatCLP(summary.expectedCash || 0)}\n` +
-               `📥 *Efectivo Contado:* ${formatCLP(summary.finalAmount || 0)}\n` +
+               `*MOVIMIENTO DEL TURNO*\n` +
+               `💵 Fondo inicial: ${formatCLP(summary.initialAmount || 0)}\n` +
+               `🧾 Ventas (${summary.totalSales || 0}): ${formatCLP(summary.totalSalesAmount || 0)}\n` +
+               `🤝 Pagos de deudas: ${formatCLP(summary.totalDebtPayments || 0)}\n` +
+               `➕ Ingresos a caja: ${formatCLP(summary.totalCashIn || 0)}\n` +
+               `➖ Retiros de caja: ${formatCLP(summary.totalRetiros || 0)}\n` +
                `----------------------------------\n` +
-               `📈 *Ganancia Bruta:* ${formatCLP(summary.grossProfit || 0)}\n` +
-               `💸 *Gastos del Turno:* ${formatCLP(summary.totalExpenses || 0)}\n` +
-               `💎 *Ganancia Neta:* ${formatCLP(summary.netProfit || 0)}\n` +
+               `*CUADRATURA POR MÉTODO*\n${methodLines}\n` +
                `----------------------------------\n` +
-               `📊 *Por Método de Pago:*\n${details}\n` +
+               `💰 Total sistema: ${formatCLP(totalExpected)}\n` +
+               `📥 Total contado: ${formatCLP(totalCounted)}\n` +
+               `📢 *Diferencia total: ${diffLabel(totalDiff)}*\n` +
+               `💵 Solo efectivo: ${diffLabel(cashDiff)}\n` +
                `----------------------------------\n` +
-               `📢 *Estado:* ${diffText}\n` +
+               `*RESULTADO*\n` +
+               `📈 Ganancia bruta: ${formatCLP(summary.grossProfit || 0)}\n` +
+               `💸 Gastos del turno: ${formatCLP(summary.totalExpenses || 0)}\n` +
+               `💎 Ganancia neta: ${formatCLP(summary.netProfit || 0)}\n` +
                `----------------------------------\n` +
-               `⚡ *CajaFácil POS*`;
+               `⚡ CajaFácil POS`;
     },
 
     async shareWhatsApp(registerId, summary = this._lastCloseSummary || {}) {
@@ -2073,7 +2125,7 @@ const CashView = {
         localStorage.setItem('share_report_whatsapp_phone', phone);
         
         const register = await db.get('cashRegisters', registerId) || {};
-        const message = this.getShareReportMessage(summary, register);
+        const message = await this.getShareReportMessage(summary, register);
         const encodedText = encodeURIComponent(message);
         
         // Redirigir directamente a la versión Web de WhatsApp en el navegador (no requiere app instalada)
@@ -2085,7 +2137,7 @@ const CashView = {
     async copyReportToClipboard(registerId, summary = this._lastCloseSummary || {}) {
         try {
             const register = await db.get('cashRegisters', registerId) || {};
-            const message = this.getShareReportMessage(summary, register);
+            const message = await this.getShareReportMessage(summary, register);
             
             await navigator.clipboard.writeText(message);
             showNotification('Reporte copiado al portapapeles. ¡Ya puedes pegarlo donde quieras!', 'success');
@@ -2108,7 +2160,7 @@ const CashView = {
         localStorage.setItem('share_report_telegram_chat_id', chatId);
         
         const register = await db.get('cashRegisters', registerId) || {};
-        const message = this.getShareReportMessage(summary, register);
+        const message = await this.getShareReportMessage(summary, register);
         
         try {
             const url = `https://api.telegram.org/bot${token}/sendMessage`;

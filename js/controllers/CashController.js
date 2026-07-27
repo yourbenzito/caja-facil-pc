@@ -14,13 +14,13 @@ class CashController {
         }
     }
 
-    static async closeCash(id, finalAmount) {
-        if (finalAmount < 0) {
+    static async closeCash(id, finalAmount, countedByMethod = null) {
+        if (!(finalAmount >= 0)) {
             throw new Error('Monto final inválido');
         }
         
         try {
-            await CashRegister.close(id, finalAmount);
+            await CashRegister.close(id, finalAmount, countedByMethod);
             
             const summary = await this.getCashSummary(id);
             

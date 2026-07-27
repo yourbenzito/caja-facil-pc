@@ -33,9 +33,10 @@ class CashRegister {
      * Close cash register (IMMUTABLE)
      * @param {number} id - Cash register ID
      * @param {number} finalAmount - Final cash amount
+     * @param {Object|null} countedByMethod - Conteo real ingresado por el cajero {cash, card, qr, other}
      * @returns {Promise<void>}
      */
-    static async close(id, finalAmount) {
+    static async close(id, finalAmount, countedByMethod = null) {
         const cashRegister = await this.getById(id);
         if (!cashRegister) throw new Error('Caja no encontrada');
         if (cashRegister.status === 'closed') throw new Error('La caja ya está cerrada');
@@ -76,7 +77,8 @@ class CashRegister {
             expectedAmount: expectedCash,
             difference: finalAmountParsed - expectedCash,
             status: 'closed',
-            paymentSummary: paymentSummary
+            paymentSummary: paymentSummary,
+            countedByMethod: countedByMethod || cashRegister.countedByMethod || null
         };
 
         return await this._repository.replace(updated);

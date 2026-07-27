@@ -170,6 +170,7 @@ CREATE TABLE IF NOT EXISTS cashRegisters (
     observations TEXT,
     denominations JSON,
     paymentSummary JSON,
+    countedByMethod JSON,
     business_id INTEGER DEFAULT 1
 );
 

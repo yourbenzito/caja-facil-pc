@@ -26,6 +26,7 @@ async function runSchemaMigrations() {
         ['purchases', 'vatMode', 'TEXT DEFAULT "net"'],
         ['purchases', 'cancelledAt', 'TEXT'],   // fecha de anulación (soft-delete)
         ['purchases', 'cancelReason', 'TEXT'],  // motivo de anulación
+        ['cashRegisters', 'countedByMethod', 'JSON'], // conteo real por método al cerrar caja
         ['cashMovements', 'saleId', 'INTEGER'],
         ['cashMovements', 'expenseId', 'INTEGER'],
         ['products', 'costNeto', 'REAL'],
@@ -230,7 +231,7 @@ async function initDatabaseSchema() {
             // Verificar si hay migraciones pendientes
             const migrationVersion = await dbGet("SELECT value FROM settings WHERE key = 'schema_version' AND business_id = 1");
             const currentVersion = migrationVersion ? parseInt(migrationVersion.value) : 0;
-            const TARGET_VERSION = 1;
+            const TARGET_VERSION = 2;
 
             if (currentVersion < TARGET_VERSION) {
                 console.log(`[Schema] Versión actual: ${currentVersion}, ejecutando migraciones...`);
