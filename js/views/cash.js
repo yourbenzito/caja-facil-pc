@@ -1911,14 +1911,22 @@ const CashView = {
         if (result) {
             try {
                 const summary = await CashController.closeCash(id, finalAmount);
-                
+
                 // Cerrar el modal de resumen de cierre
-                closeModal(); 
-                
+                closeModal();
+
                 showNotification('¡Caja cerrada exitosamente!', 'success');
-                
-                // Mostrar ventana para compartir el reporte de cierre
-                await CashView.showShareReportModal(id, summary);
+
+                // ponytail: la caja ya está cerrada en la BD; refrescamos la vista antes de
+                // cualquier paso opcional para que la pantalla nunca quede mostrando caja abierta.
+                await app.navigate('cash');
+
+                try {
+                    await CashView.showShareReportModal(id, summary);
+                } catch (shareError) {
+                    console.error('Error al mostrar el reporte de cierre:', shareError);
+                    showNotification('Caja cerrada, pero no se pudo abrir el reporte para compartir.', 'warning');
+                }
             } catch (error) {
                 // Si la caja ya está cerrada, significa que el proceso terminó con éxito previamente
                 if (error.message.includes('ya está cerrada')) {
@@ -1947,6 +1955,10 @@ const CashView = {
 
     async showShareReportModal(registerId, summary) {
         const register = await db.get('cashRegisters', registerId) || {};
+
+        // ponytail: guardamos el resumen en memoria en vez de serializarlo dentro de
+        // atributos onclick (el JSON incrustado rompía el HTML del modal).
+        this._lastCloseSummary = summary;
         
         const phoneKey = 'share_report_whatsapp_phone';
         const tgTokenKey = 'share_report_telegram_token';
@@ -1969,11 +1981,11 @@ const CashView = {
                     </h4>
                     <div style="display: flex; gap: 0.5rem;">
                         <input type="text" id="sharePhone" class="form-control" placeholder="Ej: 56912345678" value="${savedPhone}" style="flex: 1;" />
-                        <button class="btn btn-success" onclick="CashView.shareWhatsApp(${registerId}, ${JSON.stringify(summary).replace(/"/g, '&quot;')})" style="border-radius: 0.75rem; font-weight: 700; white-space: nowrap; display: flex; align-items: center; gap: 0.35rem;">
+                        <button class="btn btn-success" onclick="CashView.shareWhatsApp(${registerId})" style="border-radius: 0.75rem; font-weight: 700; white-space: nowrap; display: flex; align-items: center; gap: 0.35rem;">
                             <span>🚀</span> Enviar WhatsApp
                         </button>
                     </div>
-                    <button class="btn" onclick="CashView.copyReportToClipboard(${registerId}, ${JSON.stringify(summary).replace(/"/g, '&quot;')})" style="background: #f1f5f9; color: #334155; border: 1.5px solid #cbd5e1; border-radius: 0.75rem; font-weight: 700; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.5rem 0;">
+                    <button class="btn" onclick="CashView.copyReportToClipboard(${registerId})" style="background: #f1f5f9; color: #334155; border: 1.5px solid #cbd5e1; border-radius: 0.75rem; font-weight: 700; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.5rem 0;">
                         <span>📋</span> Copiar Reporte al Portapapeles (Pegar donde quieras)
                     </button>
                     <small style="color: #166534; opacity: 0.8; margin-top: -0.25rem; font-size: 0.75rem; font-weight: 500;">Ingresa el número con código de país (ej: 569 para Chile, sin el signo +).</small>
@@ -1994,7 +2006,7 @@ const CashView = {
                             <input type="text" id="shareTgChatId" class="form-control" placeholder="Chat ID" value="${savedChatId}" />
                         </div>
                     </div>
-                    <button class="btn" style="background: #0ea5e9; color: white; width: 100%; border-radius: 0.75rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.35rem; margin-top: 0.25rem;" onclick="CashView.shareTelegram(${registerId}, ${JSON.stringify(summary).replace(/"/g, '&quot;')})">
+                    <button class="btn" style="background: #0ea5e9; color: white; width: 100%; border-radius: 0.75rem; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 0.35rem; margin-top: 0.25rem;" onclick="CashView.shareTelegram(${registerId})">
                         <span>✈️</span> Enviar reporte automático
                     </button>
                 </div>
@@ -2051,7 +2063,7 @@ const CashView = {
                `⚡ *CajaFácil POS*`;
     },
 
-    async shareWhatsApp(registerId, summary) {
+    async shareWhatsApp(registerId, summary = this._lastCloseSummary || {}) {
         const phone = document.getElementById('sharePhone').value.trim().replace(/\+/g, '');
         if (!phone) {
             showNotification('Ingresa un número de celular de destino', 'warning');
@@ -2070,7 +2082,7 @@ const CashView = {
         showNotification('Abriendo WhatsApp Web en tu navegador...', 'success');
     },
 
-    async copyReportToClipboard(registerId, summary) {
+    async copyReportToClipboard(registerId, summary = this._lastCloseSummary || {}) {
         try {
             const register = await db.get('cashRegisters', registerId) || {};
             const message = this.getShareReportMessage(summary, register);
@@ -2083,7 +2095,7 @@ const CashView = {
         }
     },
     
-    async shareTelegram(registerId, summary) {
+    async shareTelegram(registerId, summary = this._lastCloseSummary || {}) {
         const token = document.getElementById('shareTgToken').value.trim();
         const chatId = document.getElementById('shareTgChatId').value.trim();
         
