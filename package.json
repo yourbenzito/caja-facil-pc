@@ -1,0 +1,54 @@
+{
+  "name": "sistema-ventas-oficial",
+  "version": "1.0.0",
+  "description": "Sistema de ventas offline",
+  "author": "Sistema Ventas",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "server": "node --max-old-space-size=4096 backend/server.js",
+    "app": "npx electron .",
+    "build": "electron-builder",
+    "importar": "node import_backup.js",
+    "setup": "node backend/setup-env.js",
+    "postinstall": "node backend/setup-env.js"
+  },
+  "build": {
+    "appId": "com.benzo.sistemaventas",
+    "productName": "Sistema de Ventas",
+    "icon": "icons/icon.png",
+    "asarUnpack": [
+      "node_modules/sqlite3/**",
+      "backend/server.js",
+      "backend/schema.sql",
+      "backend/data/database.sqlite"
+    ],
+    "files": [
+      "**/*",
+      "!backend/.env",
+      "!**/*.log",
+      "!**/node_modules/.cache/**"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "icons/icon.png",
+      "signAndEditExecutable": false
+    }
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.8.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mercadopago": "^2.0.0",
+    "sqlite3": "^6.0.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.1/xlsx-0.20.1.tgz"
+  },
+  "devDependencies": {
+    "electron": "^39.2.7",
+    "electron-builder": "^26.4.0"
+  }
+}

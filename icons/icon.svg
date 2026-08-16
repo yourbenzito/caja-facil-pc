@@ -1,0 +1,12 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="80" fill="#2563eb"/>
+  <g transform="translate(100, 80)">
+    <!-- Shopping cart icon -->
+    <path d="M 40 80 L 80 80 L 120 240 L 280 240 L 320 120 L 100 120" 
+          stroke="white" stroke-width="20" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="140" cy="280" r="20" fill="white"/>
+    <circle cx="260" cy="280" r="20" fill="white"/>
+    <!-- POS text -->
+    <text x="20" y="360" font-family="Arial, sans-serif" font-size="80" font-weight="bold" fill="white">POS</text>
+  </g>
+</svg>

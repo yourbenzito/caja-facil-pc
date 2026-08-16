@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>POS Lakurva Móvil</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="css/mobile-styles.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- Carga de jsPDF para generación offline de tickets y HTML5QRCode para escáner -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body class="mobile-body">
+
+    <!-- 1. PANTALLA DE INICIO DE SESIÓN (LOGIN) -->
+    <div id="login-screen" class="screen active">
+        <div class="login-container">
+            <div class="login-brand">
+                <span class="brand-icon">🛒</span>
+                <h1>POS Lakurva Móvil</h1>
+                <p>Sistema de Ventas PWA 100% Offline</p>
+            </div>
+            
+            <form id="login-form" class="login-form">
+                <div class="form-group">
+                    <label for="login-server">Dirección del Servidor (opcional en offline)</label>
+                    <input type="url" id="login-server" placeholder="ej: http://192.168.1.50:3000">
+                </div>
+                <div class="form-group">
+                    <label for="login-business">Nombre del Negocio</label>
+                    <input type="text" id="login-business" placeholder="Mi Negocio" required>
+                </div>
+                <div class="form-group">
+                    <label for="login-username">Usuario</label>
+                    <input type="text" id="login-username" placeholder="Usuario" required>
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Contraseña</label>
+                    <input type="password" id="login-password" placeholder="••••••••" required>
+                </div>
+                <div id="login-error" class="error-msg" style="display: none;"></div>
+                <button type="submit" class="btn-primary">Iniciar Sesión / Modo Offline</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 2. PANTALLA PRINCIPAL DE LA APP -->
+    <div id="app-screen" class="screen">
+        <!-- TOP HEADER SLIM -->
+        <header class="app-header">
+            <div class="header-info">
+                <span class="business-name" id="app-biz-name">Mi Negocio</span>
+                <span class="user-role" id="app-user-name">Cajero Móvil</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <span id="offline-badge" class="badge-offline">OFFLINE</span>
+                <button class="btn-customer-select" onclick="MobileApp.openSelectCustomerModal()">
+                    👤 <span id="selected-customer-name">Cliente General</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- VISTA 1: POS / VENTA -->
+        <main id="view-sell" class="view active">
+            <div class="search-section">
+                <div class="search-input-wrapper">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="mobile-search" placeholder="Buscar por nombre o barra..." autocomplete="off">
+                    <button type="button" class="btn-camera-scan" onclick="MobileApp.startCameraScanner()" title="Escanear Código con Cámara">📷</button>
+                </div>
+            </div>
+
+            <!-- Categorías -->
+            <div class="categories-bar" id="mobile-categories"></div>
+
+            <!-- Grilla de Productos -->
+            <div class="products-grid" id="mobile-products-list"></div>
+        </main>
+
+        <!-- VISTA 2: CARRITO -->
+        <main id="view-cart" class="view">
+            <div class="cart-header-title">
+                <h2>Productos Seleccionados</h2>
+                <button class="btn-clear-cart" onclick="MobileApp.clearCart()">Limpiar 🗑️</button>
+            </div>
+            <div class="cart-items-list" id="mobile-cart-items"></div>
+            
+            <!-- SECCIÓN DE DESCUENTOS -->
+            <div class="discount-section" id="cart-discount-wrapper" style="padding: 1rem; background: white; border: 1.5px solid var(--border); border-radius: var(--radius-md); margin-top: 1rem;">
+                <h3 style="font-size: 0.9rem; font-weight: 800; margin-bottom: 0.5rem;">Aplicar Descuento a la Venta</h3>
+                <div style="display: flex; gap: 0.5rem;">
+                    <select id="discount-type" class="input-select" onchange="MobileApp.recalculateCartTotals()" style="width: 40%;">
+                        <option value="none">Sin Descuento</option>
+                        <option value="amount">Monto ($)</option>
+                        <option value="percent">Porcentaje (%)</option>
+                    </select>
+                    <input type="number" id="discount-value" class="input-lg" placeholder="0" oninput="MobileApp.recalculateCartTotals()" style="width: 60%;">
+                </div>
+            </div>
+
+            <div class="cart-empty" id="mobile-cart-empty">
+                <span>🛒</span>
+                <p>El carrito está vacío</p>
+                <button class="btn-outline" onclick="MobileApp.switchView('sell')">Ir a Catálogo</button>
+            </div>
+        </main>
+
+        <!-- VISTA 3: PRODUCTOS & STOCK -->
+        <main id="view-products" class="view">
+            <div class="cart-header-title">
+                <h2>Gestión de Productos</h2>
+                <button class="btn-primary-sm" onclick="MobileApp.openStockAdjustModal()">+ Ajustar Stock</button>
+            </div>
+            <div class="search-section" style="margin-bottom: 1rem;">
+                <div class="search-input-wrapper">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="mobile-product-mgr-search" placeholder="Filtrar productos..." oninput="MobileApp.filterProductManager()">
+                </div>
+            </div>
+            <div id="mobile-products-mgr-list" style="display: flex; flex-direction: column; gap: 0.75rem;"></div>
+        </main>
+
+        <!-- VISTA 4: CAJA DE EFECTIVO -->
+        <main id="view-cash" class="view">
+            <div class="cart-header-title">
+                <h2>Caja de Efectivo</h2>
+                <button class="btn-primary-sm" onclick="MobileApp.openCashModal()">Caja 💵</button>
+            </div>
+            <div id="mobile-cash-container"></div>
+        </main>
+
+        <!-- VISTA 5: REPORTES & EXPORTACIÓN -->
+        <main id="view-reports" class="view">
+            <div class="cart-header-title">
+                <h2>Reportes y Ventas</h2>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="btn-outline-sm" onclick="MobileApp.exportReportsExcel()">📊 Excel</button>
+                    <button class="btn-outline-sm" onclick="MobileApp.exportReportsPDF()">📄 PDF</button>
+                </div>
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 1.5rem;">
+                <div class="kpi-card">
+                    <div class="kpi-label">Ventas</div>
+                    <strong id="kpi-sales-count" class="kpi-val">-</strong>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Total</div>
+                    <strong id="kpi-sales-amount" class="kpi-val text-success">-</strong>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Por Cobrar</div>
+                    <strong id="kpi-sales-pending" class="kpi-val text-warning">-</strong>
+                </div>
+            </div>
+            <h3 style="font-size: 0.95rem; font-weight: 800; margin-bottom: 0.75rem; color: var(--text);">Historial de Ventas</h3>
+            <div id="mobile-recent-sales-list" style="display: flex; flex-direction: column; gap: 0.75rem;"></div>
+        </main>
+
+        <!-- VISTA 6: COMPRAS -->
+        <main id="view-purchases" class="view">
+            <div class="cart-header-title">
+                <h2>Recepción de Mercadería</h2>
+                <button class="btn-primary-sm" onclick="MobileApp.openPurchaseModal()">+ Nueva Compra</button>
+            </div>
+            <div id="mobile-purchases-list" style="display: flex; flex-direction: column; gap: 0.75rem;"></div>
+        </main>
+
+        <!-- VISTA 7: PROVEEDORES -->
+        <main id="view-suppliers" class="view">
+            <div class="cart-header-title">
+                <h2>Directorio de Proveedores</h2>
+                <button class="btn-primary-sm" onclick="MobileApp.openSupplierModal()">+ Crear Proveedor</button>
+            </div>
+            <div id="mobile-suppliers-list" style="display: flex; flex-direction: column; gap: 0.75rem;"></div>
+        </main>
+
+        <!-- VISTA 8: CLIENTES -->
+        <main id="view-customers" class="view">
+            <div class="cart-header-title">
+                <h2>Clientes y Fiados</h2>
+                <button class="btn-primary-sm" onclick="MobileApp.openNewCustomerModal()">+ Crear Cliente</button>
+            </div>
+            <div class="search-section" style="margin-bottom: 1rem;">
+                <div class="search-input-wrapper">
+                    <span class="search-icon">🔍</span>
+                    <input type="text" id="mobile-customer-search" placeholder="Buscar cliente por nombre o RUT..." oninput="MobileApp.filterMobileCustomers()">
+                </div>
+            </div>
+            <div class="customer-list" id="mobile-customers-list" style="display: flex; flex-direction: column; gap: 0.75rem;"></div>
+        </main>
+
+        <!-- VISTA 9: AJUSTES -->
+        <main id="view-settings" class="view">
+            <div class="settings-container">
+                <h2>Ajustes de la Aplicación Móvil</h2>
+                <div class="settings-card">
+                    <h3>Modo de Operación</h3>
+                    <p class="settings-desc">Servidor activo / Modo Local Offline:</p>
+                    <strong id="active-server-url" style="color: var(--primary);">Local (Offline IndexedDB)</strong>
+                    <button class="btn-outline" style="margin-top: 1rem; width: 100%;" onclick="MobileApp.changeServer()">Cambiar Servidor</button>
+                </div>
+                <div class="settings-card">
+                    <h3>Cierre de Sesión</h3>
+                    <p class="settings-desc">Cerrar sesión actual:</p>
+                    <button class="btn-danger" style="width: 100%;" onclick="MobileApp.logout()">Cerrar Sesión</button>
+                </div>
+            </div>
+        </main>
+
+        <!-- STICKY BOTTOM CHECKOUT BAR -->
+        <div class="sticky-checkout-bar" id="checkout-bar" style="display: none;">
+            <div class="checkout-total">
+                <span class="checkout-label">Total a pagar:</span>
+                <strong class="checkout-value" id="checkout-total-val">$0</strong>
+            </div>
+            <button class="btn-checkout" onclick="MobileApp.openPaymentModal()">Cobrar 💸</button>
+        </div>
+
+        <!-- BOTTOM NAVIGATION BAR -->
+        <nav class="bottom-nav">
+            <button class="nav-item active" id="nav-sell" onclick="MobileApp.switchView('sell')">
+                <span class="nav-icon">🛒</span>
+                <span class="nav-label">Vender</span>
+            </button>
+            <button class="nav-item" id="nav-cart" onclick="MobileApp.switchView('cart')">
+                <span class="nav-icon" style="position: relative;">
+                    📋
+                    <span class="cart-badge" id="mobile-cart-badge">0</span>
+                </span>
+                <span class="nav-label">Carrito</span>
+            </button>
+            <button class="nav-item" id="nav-products" onclick="MobileApp.switchView('products')">
+                <span class="nav-icon">📦</span>
+                <span class="nav-label">Stock</span>
+            </button>
+            <button class="nav-item" id="nav-customers" onclick="MobileApp.switchView('customers')">
+                <span class="nav-icon">👥</span>
+                <span class="nav-label">Clientes</span>
+            </button>
+
+            <button class="nav-item" id="nav-cash" onclick="MobileApp.switchView('cash')">
+                <span class="nav-icon">💵</span>
+                <span class="nav-label">Caja</span>
+            </button>
+            <button class="nav-item" id="nav-purchases" onclick="MobileApp.switchView('purchases')">
+                <span class="nav-icon">🚚</span>
+                <span class="nav-label">Compras</span>
+            </button>
+            <button class="nav-item" id="nav-suppliers" onclick="MobileApp.switchView('suppliers')">
+                <span class="nav-icon">🤝</span>
+                <span class="nav-label">Prov.</span>
+            </button>
+            <button class="nav-item" id="nav-reports" onclick="MobileApp.switchView('reports')">
+                <span class="nav-icon">📊</span>
+                <span class="nav-label">Reportes</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- MODAL DE PAGO (COBRO) -->
+    <div id="payment-modal" class="modal-overlay">
+        <div class="mobile-modal">
+            <div class="modal-header">
+                <h2>Procesar Pago</h2>
+                <button class="close-modal-btn" onclick="MobileApp.closePaymentModal()">✕</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-total-display">
+                    <span>Total Final Venta</span>
+                    <h1 id="modal-total-amount">$0</h1>
+                </div>
+
+                <div class="form-group">
+                    <label>Método de Pago</label>
+                    <div class="payment-methods-grid">
+                        <button class="btn-method active" id="method-cash" onclick="MobileApp.selectPaymentMethod('cash')">💵 Efectivo</button>
+                        <button class="btn-method" id="method-card" onclick="MobileApp.selectPaymentMethod('card')">💳 Tarjeta</button>
+                        <button class="btn-method" id="method-transfer" onclick="MobileApp.selectPaymentMethod('transfer')">📲 Transferencia</button>
+                        <button class="btn-method" id="method-credit" onclick="MobileApp.selectPaymentMethod('credit')">📝 Fiado (Crédito)</button>
+                    </div>
+                </div>
+
+                <!-- Selector de cliente obligatorio para Venta a Crédito -->
+                <div class="form-group" id="credit-customer-group" style="display: none;">
+                    <label>Cliente a asociar deuda *</label>
+                    <select id="modal-credit-customer-select" class="input-select"></select>
+                </div>
+
+                <div class="form-group" id="cash-received-group">
+                    <label for="cash-received">Efectivo Recibido</label>
+                    <input type="number" id="cash-received" class="input-lg" placeholder="$0" oninput="MobileApp.calculateChange()">
+                </div>
+
+                <div class="change-display" id="change-display-group">
+                    <span>Vuelto a entregar:</span>
+                    <strong id="modal-change-amount">$0</strong>
+                </div>
+
+                <button class="btn-primary btn-lg" onclick="MobileApp.submitSale()">Confirmar Venta y Descargar Ticket ✅</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL ESCÁNER DE CÁMARA -->
+    <div id="scanner-modal" class="modal-overlay">
+        <div class="mobile-modal">
+            <div class="modal-header">
+                <h2>Lector de Código de Barras</h2>
+                <button class="close-modal-btn" onclick="MobileApp.stopCameraScanner()">✕</button>
+            </div>
+            <div class="modal-body" style="text-align: center;">
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.75rem;">Apunta la cámara del celular al código de barras del producto</p>
+                <div id="camera-reader" style="width: 100%; max-width: 320px; margin: 0 auto; border-radius: var(--radius-md); overflow: hidden; background: #000;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL NUEVO CLIENTE -->
+    <div id="customer-modal" class="modal-overlay">
+        <div class="mobile-modal">
+            <div class="modal-header">
+                <h2>Registrar Cliente Habitual</h2>
+                <button class="close-modal-btn" onclick="MobileApp.closeCustomerModal()">✕</button>
+            </div>
+            <form id="customer-form" class="modal-body" onsubmit="MobileApp.saveCustomer(event)">
+                <div class="form-group">
+                    <label>Nombre Completo *</label>
+                    <input type="text" id="cust-name" required class="input-lg" placeholder="Ej: Juan Pérez">
+                </div>
+                <div class="form-group">
+                    <label>Teléfono / WhatsApp</label>
+                    <input type="tel" id="cust-phone" class="input-lg" placeholder="+56912345678">
+                </div>
+                <div class="form-group">
+                    <label>RUT / Identificación</label>
+                    <input type="text" id="cust-rut" class="input-lg" placeholder="12.345.678-9">
+                </div>
+                <div class="form-group">
+                    <label>Límite de Crédito Max ($)</label>
+                    <input type="number" id="cust-credit-limit" class="input-lg" placeholder="100000" value="100000">
+                </div>
+                <button type="submit" class="btn-primary btn-lg">Guardar Cliente 👤</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL REGISTRAR ABONO -->
+    <div id="abono-modal" class="modal-overlay">
+        <div class="mobile-modal">
+            <div class="modal-header">
+                <h2>Registrar Abono a Deuda</h2>
+                <button class="close-modal-btn" onclick="MobileApp.closeAbonoModal()">✕</button>
+            </div>
+            <form id="abono-form" class="modal-body" onsubmit="MobileApp.submitAbono(event)">
+                <div style="background: var(--bg-body); padding: 1rem; border-radius: var(--radius-md); margin-bottom: 1rem;">
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">Cliente:</div>
+                    <strong id="abono-cust-name" style="font-size: 1.1rem; color: var(--text);">-</strong>
+                    <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.5rem;">Deuda Actual:</div>
+                    <strong id="abono-cust-debt" style="font-size: 1.2rem; color: var(--danger);">$0</strong>
+                </div>
+                <div class="form-group">
+                    <label>Monto a Abonar ($) *</label>
+                    <input type="number" id="abono-amount" required class="input-lg" placeholder="$0">
+                </div>
+                <button type="submit" class="btn-primary btn-lg">Procesar Abono y Descargar PDF 📄</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL COMPRAS -->
+    <div id="purchase-modal" class="modal-overlay">
+        <div class="mobile-modal">
+            <div class="modal-header">
+                <h2>Registrar Compra Rápida</h2>
+                <button class="close-modal-btn" onclick="MobileApp.closePurchaseModal()">✕</button>
+            </div>
+            <form id="purchase-form" class="modal-body" onsubmit="MobileApp.submitPurchase(event)">
+                <div class="form-group">
+                    <label>Proveedor *</label>
+                    <select id="purchase-supplier-select" required class="input-select"></select>
+                </div>
+                <div class="form-group">
+                    <label>Producto a recibir *</label>
+                    <select id="purchase-product-select" required class="input-select"></select>
+                </div>
+                <div class="form-group">
+                    <label>Cantidad Recibida *</label>
+                    <input type="number" step="any" id="purchase-qty" required class="input-lg" placeholder="10">
+                </div>
+                <div class="form-group">
+                    <label>Costo Total Pagado ($) *</label>
+                    <input type="number" id="purchase-cost" required class="input-lg" placeholder="$0">
+                </div>
+                <button type="submit" class="btn-primary btn-lg">Ingresar Mercadería 🚚</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL PROVEEDOR -->
+    <div id="supplier-modal" class="modal-overlay">
+        <div class="mobile-modal">
+            <div class="modal-header">
+                <h2>Registrar Proveedor</h2>
+                <button class="close-modal-btn" onclick="MobileApp.closeSupplierModal()">✕</button>
+            </div>
+            <form id="supplier-form" class="modal-body" onsubmit="MobileApp.saveSupplier(event)">
+                <div class="form-group">
+                    <label>Nombre Proveedor / Distribuidor *</label>
+                    <input type="text" id="supp-name" required class="input-lg" placeholder="Ej: Distribuidora El Sol">
+                </div>
+                <div class="form-group">
+                    <label>Teléfono / WhatsApp *</label>
+                    <input type="tel" id="supp-phone" required class="input-lg" placeholder="+56912345678">
+                </div>
+                <div class="form-group">
+                    <label>Nombre de Contacto</label>
+                    <input type="text" id="supp-contact" class="input-lg" placeholder="Ej: Carlos vendedor">
+                </div>
+                <button type="submit" class="btn-primary btn-lg">Guardar Proveedor 🤝</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL AJUSTE DE STOCK -->
+    <div id="stock-adjust-modal" class="modal-overlay">
+        <div class="mobile-modal">
+            <div class="modal-header">
+                <h2>Ajuste de Stock / Merma</h2>
+                <button class="close-modal-btn" onclick="MobileApp.closeStockAdjustModal()">✕</button>
+            </div>
+            <form id="stock-adjust-form" class="modal-body" onsubmit="MobileApp.submitStockAdjust(event)">
+                <div class="form-group">
+                    <label>Seleccionar Producto *</label>
+                    <select id="adjust-prod-select" required class="input-select"></select>
+                </div>
+                <div class="form-group">
+                    <label>Nuevo Stock Exacto *</label>
+                    <input type="number" step="any" id="adjust-new-stock" required class="input-lg" placeholder="Ej: 15">
+                </div>
+                <div class="form-group">
+                    <label>Motivo del Ajuste *</label>
+                    <select id="adjust-reason" class="input-select">
+                        <option value="Merma / Dañado">Merma / Producto Dañado</option>
+                        <option value="Reconteo de Inventario">Reconteo de Inventario</option>
+                        <option value="Uso Interno">Uso Interno del Negocio</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn-primary btn-lg">Actualizar Stock 📦</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL APERTURA / CIERRE DE CAJA -->
+    <div id="cash-modal" class="modal-overlay">
+        <div class="mobile-modal">
+            <div class="modal-header">
+                <h2>Gestión de Caja Registradora</h2>
+                <button class="close-modal-btn" onclick="MobileApp.closeCashModal()">✕</button>
+            </div>
+            <div id="cash-modal-body" class="modal-body"></div>
+        </div>
+    </div>
+
+    <!-- Script de lógica móvil -->
+    <script src="js/mobile-app.js"></script>
+    <script>
+        // Registro del Service Worker para PWA Offline
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+                .then(reg => console.log('✅ Service Worker registrado con éxito:', reg))
+                .catch(err => console.warn('⚠️ Error al registrar Service Worker:', err));
+        }
+    </script>
+</body>
+</html>
