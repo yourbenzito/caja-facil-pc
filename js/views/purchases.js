@@ -1623,7 +1623,7 @@ const PurchasesView = {
                 </div>
 
                 <!-- PASO 2: PRODUCTOS -->
-                <div id="step-content-2" class="step-content">
+                <div id="step-content-2" class="step-content" style="max-height: calc(82vh - 160px); overflow-y: auto; padding-right: 0.3rem;">
                     <div style="background: #ffffff; border: 3px solid #3b82f6; border-radius: 1.25rem; padding: 1rem; margin-bottom: 0.75rem; box-shadow: 0 4px 15px rgba(0,0,0,0.05); flex-shrink: 0;">
                         <label style="font-size: 1rem; color: #1e293b; font-weight: 950; margin-bottom: 0.4rem; display: block; text-transform: uppercase; letter-spacing: 0.5px;">🔍 BUSCAR O ESCANEAR PRODUCTO</label>
                         <div class="search-box" style="position: relative;">
@@ -1646,7 +1646,7 @@ const PurchasesView = {
                         </button>
                     </div>
                     
-                    <div id="purchaseItemsList" class="mobile-scroll-container" style="background: #ffffff; border-radius: 1.25rem; border: 3px solid #1e293b; box-shadow: 0 10px 25px rgba(0,0,0,0.1); flex: 1; overflow-y: auto; max-height: 380px; min-height: 140px;">
+                    <div id="purchaseItemsList" class="mobile-scroll-container" style="background: #ffffff; border-radius: 1.25rem; border: 3px solid #1e293b; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow-y: auto; min-height: 180px; max-height: 260px;">
                         ${this.renderPurchaseItems()}
                     </div>
 
@@ -1765,15 +1765,6 @@ const PurchasesView = {
                         </details>
 
                         <!-- Widget 4: Notas Internas de la Compra -->
-                        <details style="background: #ffffff; border: 2px solid #e2e8f0; border-radius: 0.75rem; padding: 0.75rem 1rem;">
-                            <summary style="font-weight: 950; color: #1e293b; cursor: pointer; font-size: 0.9rem; text-transform: uppercase; outline: none; list-style: none;">📝 Notas Internas del Pedido</summary>
-                            <div style="padding-top: 0.75rem;">
-                                <textarea name="purchaseNotes" id="purchaseNotes" class="form-control" placeholder="Escribe aquí observaciones (ej. si llegó mercadería dañada o retrasos)..." style="height: 80px; font-size: 0.9rem; font-weight: 800; border-radius: 0.5rem; border: 2px solid #cbd5e1; padding: 0.5rem; width:100%;"></textarea>
-                            </div>
-                        </details>
-                    </div>
-                </div> solid #cbd5e1; padding: 0.5rem; width:100%;"></textarea>
-                            </div>
                         </details>
                     </div>
                 </div>
@@ -2181,12 +2172,7 @@ const PurchasesView = {
                                    class="form-control" 
                                    placeholder="${product.type === 'weight' ? '0.000' : '1'}"
                                    onfocus="this.select()"
-                                   style="height: 70px; font-size: 2rem; font-weight: 950; border-radius: 1rem; text-align: center; border: 3px solid #cbd5e1; background: #f8fafc; color: #000; flex: 1;">
-                            <button type="button" 
-                                    class="btn btn-secondary" 
-                                    onclick="PurchasesView.openCalculatorModal('addQuantity')" 
-                                    style="width: 70px; height: 70px; font-size: 1.8rem; border-radius: 1rem; display: flex; align-items: center; justify-content: center; background: #e2e8f0; border: 3px solid #cbd5e1; color: #1e293b;" 
-                                    title="Abrir Calculadora">🧮</button>
+                                   style="height: 70px; font-size: 2rem; font-weight: 950; border-radius: 1rem; text-align: center; border: 3px solid #cbd5e1; background: #f8fafc; color: #000; width: 100%;">
                         </div>
                     </div>
                     
@@ -2733,25 +2719,25 @@ const PurchasesView = {
     renderPurchaseItems() {
         return `
             <div class="table-responsive-wrapper">
-                <table style="width: 100%; border-collapse: separate; border-spacing: 0 12px; margin-top: -10px;">
+                <table style="width: 100%; border-collapse: separate; border-spacing: 0 8px; margin-top: -5px;">
                 <thead>
-                    <tr style="background: #1e293b; box-shadow: 0 4px 20px rgba(0,0,0,0.15);">
-                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 1.5rem; text-align: left; font-weight: 900; font-size: 0.95rem; text-transform: uppercase; border-radius: 1.25rem 0 0 1.25rem; letter-spacing: 1.5px; border-bottom: 4px solid #3b82f6;">Producto</th>
-                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 1.5rem 10px; text-align: center; font-weight: 900; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 1.5px; width: 80px; border-bottom: 4px solid #3b82f6;">Cant.</th>
-                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 1.5rem 10px; text-align: center; font-weight: 900; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 1.5px; width: 130px; border-bottom: 4px solid #3b82f6;">Costo Neto</th>
-                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 1.5rem 10px; text-align: center; font-weight: 900; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 1.5px; width: 100px; border-bottom: 4px solid #3b82f6;">IVA (19%)</th>
-                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 1.5rem 10px; text-align: center; font-weight: 900; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 1.5px; width: 130px; border-bottom: 4px solid #3b82f6;">Costo Bruto</th>
-                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 1.5rem 10px; text-align: center; font-weight: 900; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 1.5px; width: 120px; border-bottom: 4px solid #3b82f6;">P. Venta</th>
-                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 1.5rem 10px; text-align: right; font-weight: 900; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 1.5px; width: 140px; border-bottom: 4px solid #3b82f6;">Total Neto</th>
-                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 1.5rem; text-align: center; border-radius: 0 1.25rem 1.25rem 0; border-bottom: 4px solid #3b82f6; width: 60px;"></th>
+                    <tr style="background: #1e293b; box-shadow: 0 4px 15px rgba(0,0,0,0.15);">
+                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.85rem 1rem; text-align: left; font-weight: 900; font-size: 0.85rem; text-transform: uppercase; border-radius: 0.75rem 0 0 0.75rem; letter-spacing: 1px; border-bottom: 3px solid #3b82f6;">Producto</th>
+                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.85rem 6px; text-align: center; font-weight: 900; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; width: 85px; border-bottom: 3px solid #3b82f6;">Cant.</th>
+                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.85rem 6px; text-align: center; font-weight: 900; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; width: 120px; border-bottom: 3px solid #3b82f6;">Costo Neto</th>
+                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.85rem 6px; text-align: center; font-weight: 900; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; width: 95px; border-bottom: 3px solid #3b82f6;">IVA (19%)</th>
+                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.85rem 6px; text-align: center; font-weight: 900; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; width: 120px; border-bottom: 3px solid #3b82f6;">Costo Bruto</th>
+                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.85rem 6px; text-align: center; font-weight: 900; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; width: 110px; border-bottom: 3px solid #3b82f6;">P. Venta</th>
+                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.85rem 1rem; text-align: right; font-weight: 900; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; width: 130px; border-bottom: 3px solid #3b82f6;">Total Neto</th>
+                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.85rem; text-align: center; border-radius: 0 0.75rem 0.75rem 0; border-bottom: 3px solid #3b82f6; width: 50px;"></th>
                     </tr>
                 </thead>
                 <tbody style="background: transparent;">
                     ${this.purchaseItems.length === 0 ? `
                         <tr>
-                            <td colspan="8" style="padding: 6rem; text-align: center; color: #64748b; font-weight: 900; font-size: 1.4rem; background: #ffffff; border-radius: 1.5rem; border: 4px dashed #cbd5e1; box-shadow: inset 0 2px 10px rgba(0,0,0,0.05);">
-                                <div style="font-size: 4rem; margin-bottom: 1.5rem; filter: grayscale(1); opacity: 0.5;">🛒</div>
-                                EL CARRO ESTÁ VACÍO.<br><span style="font-weight: 500; font-size: 1rem; opacity: 0.7;">Busca productos en el buscador superior para comenzar.</span>
+                            <td colspan="8" style="padding: 4rem 2rem; text-align: center; color: #64748b; font-weight: 900; font-size: 1.2rem; background: #ffffff; border-radius: 1.25rem; border: 3px dashed #cbd5e1; box-shadow: inset 0 2px 10px rgba(0,0,0,0.05);">
+                                <div style="font-size: 3.5rem; margin-bottom: 1rem; filter: grayscale(1); opacity: 0.5;">🛒</div>
+                                EL CARRO ESTÁ VACÍO.<br><span style="font-weight: 500; font-size: 0.95rem; opacity: 0.7;">Busca productos en el buscador superior para comenzar.</span>
                             </td>
                         </tr>
                     ` : this.purchaseItems.map((item, index) => {
@@ -2759,7 +2745,7 @@ const PurchasesView = {
             const displayIva = Number((item.cost * 0.19).toFixed(2));
             const displayGross = Number((item.cost * 1.19).toFixed(2));
             const lineNetTotal = item.total || 0;
-            const inputStyle = "height: 60px; border: 3px solid #cbd5e1; background: #ffffff; color: #000; font-size: 1.2rem; font-weight: 950; border-radius: 1rem; text-align: center; width: 100%; transition: all 0.2s; padding: 0 0.5rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05);";
+            const inputStyle = "height: 44px; border: 2px solid #cbd5e1; background: #ffffff; color: #000; font-size: 1.05rem; font-weight: 900; border-radius: 0.65rem; text-align: center; width: 100%; transition: all 0.2s; padding: 0 0.4rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05);";
 
             // Trend Indicator calculations
             let trendNetHtml = '';
@@ -2769,12 +2755,10 @@ const PurchasesView = {
                 const diff = item.cost - item.lastCostNeto;
                 if (Math.abs(diff) >= 0.01) {
                     if (diff > 0) {
-                        trendNetHtml = `<div style="color: #10b981; font-size: 0.72rem; font-weight: 900; margin-top: 3px; text-align: center; line-height: 1.1;">🟢 +$${diff.toFixed(1)}</div>`;
+                        trendNetHtml = `<div style="color: #10b981; font-size: 0.7rem; font-weight: 900; margin-top: 2px; text-align: center; line-height: 1.1;">🟢 +$${diff.toFixed(1)}</div>`;
                     } else {
-                        trendNetHtml = `<div style="color: #ef4444; font-size: 0.72rem; font-weight: 900; margin-top: 3px; text-align: center; line-height: 1.1;">🔴 -$${Math.abs(diff).toFixed(1)}</div>`;
+                        trendNetHtml = `<div style="color: #ef4444; font-size: 0.7rem; font-weight: 900; margin-top: 2px; text-align: center; line-height: 1.1;">🔴 -$${Math.abs(diff).toFixed(1)}</div>`;
                     }
-                } else {
-                    trendNetHtml = `<div style="color: #64748b; font-size: 0.72rem; font-weight: 900; margin-top: 3px; text-align: center; line-height: 1.1;">⚖️ MISMO</div>`;
                 }
             }
 
@@ -2783,12 +2767,10 @@ const PurchasesView = {
                 const diff = itemGross - item.lastCostGross;
                 if (Math.abs(diff) >= 0.01) {
                     if (diff > 0) {
-                        trendGrossHtml = `<div style="color: #10b981; font-size: 0.72rem; font-weight: 900; margin-top: 3px; text-align: center; line-height: 1.1;">🟢 +$${diff.toFixed(1)}</div>`;
+                        trendGrossHtml = `<div style="color: #10b981; font-size: 0.7rem; font-weight: 900; margin-top: 2px; text-align: center; line-height: 1.1;">🟢 +$${diff.toFixed(1)}</div>`;
                     } else {
-                        trendGrossHtml = `<div style="color: #ef4444; font-size: 0.72rem; font-weight: 900; margin-top: 3px; text-align: center; line-height: 1.1;">🔴 -$${Math.abs(diff).toFixed(1)}</div>`;
+                        trendGrossHtml = `<div style="color: #ef4444; font-size: 0.7rem; font-weight: 900; margin-top: 2px; text-align: center; line-height: 1.1;">🔴 -$${Math.abs(diff).toFixed(1)}</div>`;
                     }
-                } else {
-                    trendGrossHtml = `<div style="color: #64748b; font-size: 0.72rem; font-weight: 900; margin-top: 3px; text-align: center; line-height: 1.1;">⚖️ MISMO</div>`;
                 }
             }
 
@@ -2797,43 +2779,43 @@ const PurchasesView = {
             const costGrossTrend = isGrossMode ? trendGrossHtml : '';
 
             return `
-                        <tr style="background: #ffffff; box-shadow: 0 8px 15px -3px rgba(0,0,0,0.1); border-radius: 1.5rem; transform: translateZ(0);">
-                            <td style="padding: 1rem 1.5rem; border-radius: 1.5rem 0 0 1.5rem; border-right: 1px solid #f1f5f9;">
-                                <div style="font-weight: 950; color: #0f172a; font-size: 1.2rem; line-height: 1.1;">${item.name}</div>
-                                <div style="font-size: 0.8rem; color: #64748b; font-weight: 750; margin-top: 5px; opacity: 0.8; letter-spacing: 0.5px;">COD: ${item.barcode || '---'}</div>
+                        <tr style="background: #ffffff; box-shadow: 0 4px 10px -2px rgba(0,0,0,0.08); border-radius: 1rem;">
+                            <td style="padding: 0.6rem 1rem; border-radius: 1rem 0 0 1rem; border-right: 1px solid #f1f5f9;">
+                                <div style="font-weight: 900; color: #0f172a; font-size: 1.05rem; line-height: 1.1;">${safeHTML(item.name)}</div>
+                                <div style="font-size: 0.75rem; color: #64748b; font-weight: 700; margin-top: 3px; opacity: 0.8; letter-spacing: 0.5px;">COD: ${safeHTML(item.barcode || '---')}</div>
                                 ${item.additionalTaxesConfig && item.additionalTaxesConfig.length > 0 ? `
-                                    <div style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 5px;">
+                                    <div style="display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 4px;">
                                         ${item.additionalTaxesConfig.map((t, taxIdx) => `
-                                            <span class="badge" style="background: #fef3c7; color: #b45309; padding: 0.25rem 0.5rem; border-radius: 0.4rem; font-size: 0.75rem; font-weight: 800; border: 1px solid #f59e0b; display: inline-flex; align-items: center; gap: 0.2rem;">
-                                                ${t.name} $${Math.round(t.amount || 0).toLocaleString('es-CL')} (${t.rate}%)
+                                            <span class="badge" style="background: #fef3c7; color: #b45309; padding: 0.2rem 0.4rem; border-radius: 0.4rem; font-size: 0.7rem; font-weight: 800; border: 1px solid #f59e0b; display: inline-flex; align-items: center; gap: 0.2rem;">
+                                                ${safeHTML(t.name)} $${Math.round(t.amount || 0).toLocaleString('es-CL')} (${t.rate}%)
                                                 <span style="cursor: pointer; color: #ef4444; font-weight: 900; font-size: 0.85rem; margin-left: 0.2rem;" onclick="event.stopPropagation(); PurchasesView.removeItemTax(${index}, ${taxIdx})" title="Quitar">&times;</span>
                                             </span>
                                         `).join('')}
                                     </div>
                                 ` : ''}
                             </td>
-                            <td style="padding: 0.5rem 5px; width: 80px;">
+                            <td style="padding: 0.4rem 4px; width: 85px;">
                                 <input type="number" step="any" value="${item.quantity}" class="form-control" onfocus="this.select()" style="${inputStyle}" onchange="PurchasesView.updateItemQuantity(${index}, this.value)">
                             </td>
-                            <td style="padding: 0.5rem 5px; width: 130px;">
-                                <input type="number" step="any" value="${displayNet}" class="form-control" onfocus="this.select()" style="${inputStyle} text-align: right; border-color: #cbd5e1;" onchange="PurchasesView.updateItemCost(${index}, this.value)">
+                            <td style="padding: 0.4rem 4px; width: 120px;">
+                                <input type="number" step="any" value="${displayNet}" class="form-control" onfocus="this.select()" style="${inputStyle} text-align: right;" onchange="PurchasesView.updateItemCost(${index}, this.value)">
                                 ${costNetTrend}
                             </td>
-                            <td style="padding: 0.5rem 5px; width: 100px;">
+                            <td style="padding: 0.4rem 4px; width: 95px;">
                                 <input type="number" step="any" value="${displayIva}" class="form-control" disabled style="${inputStyle} text-align: right; background: #f8fafc; border-color: #e2e8f0; color: #64748b;">
                             </td>
-                            <td style="padding: 0.5rem 5px; width: 130px;">
-                                <input type="number" step="any" value="${displayGross}" class="form-control" onfocus="this.select()" style="${inputStyle} text-align: right; border-color: #cbd5e1;" onchange="PurchasesView.updateItemGrossCost(${index}, this.value)">
+                            <td style="padding: 0.4rem 4px; width: 120px;">
+                                <input type="number" step="any" value="${displayGross}" class="form-control" onfocus="this.select()" style="${inputStyle} text-align: right;" onchange="PurchasesView.updateItemGrossCost(${index}, this.value)">
                                 ${costGrossTrend}
                             </td>
-                            <td style="padding: 0.5rem 5px; width: 120px;">
+                            <td style="padding: 0.4rem 4px; width: 110px;">
                                 <input type="number" step="any" value="${item.price}" class="form-control" onfocus="this.select()" style="${inputStyle} text-align: right; border-color: #6366f1; color: #4338ca;" onchange="PurchasesView.updateItemPrice(${index}, this.value)">
                             </td>
-                            <td style="padding: 1rem; text-align: right; font-weight: 950; color: #0f172a; font-size: 1.4rem; min-width: 140px; background: rgba(79, 70, 229, 0.03); border-left: 1px solid #f1f5f9;">
+                            <td style="padding: 0.6rem 1rem; text-align: right; font-weight: 950; color: #0f172a; font-size: 1.2rem; min-width: 130px; background: rgba(79, 70, 229, 0.03); border-left: 1px solid #f1f5f9;">
                                 ${formatCLP(lineNetTotal)}
                             </td>
-                            <td style="padding: 1rem; text-align: center; border-radius: 0 1.5rem 1.5rem 0; width: 60px;">
-                                <button type="button" class="btn btn-danger" onclick="PurchasesView.removeItem(${index})" style="height: 50px; width: 50px; padding: 0; border-radius: 1rem; border: 3px solid #fff; font-weight: 950; display: flex; align-items: center; justify-content: center; box-shadow: 0 5px 15px rgba(239, 68, 68, 0.4);" title="Eliminar">🗑️</button>
+                            <td style="padding: 0.6rem; text-align: center; border-radius: 0 1rem 1rem 0; width: 50px;">
+                                <button type="button" class="btn btn-danger" onclick="PurchasesView.removeItem(${index})" style="height: 42px; width: 42px; padding: 0; border-radius: 0.65rem; border: 2px solid #fff; font-weight: 950; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);" title="Eliminar">🗑️</button>
                             </td>
                         </tr>
                     `;

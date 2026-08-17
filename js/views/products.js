@@ -23,8 +23,8 @@ const ProductsView = {
     async render() {
         let contentHtml = '';
         
-        if (this.selectedCategory || this.stockFilter !== 'all') {
-            const products = this.selectedCategory ? await Product.getByCategory(this.selectedCategory) : await Product.getAll();
+        if (this.selectedCategory) {
+            const products = await Product.getByCategory(this.selectedCategory);
             let filteredProducts = products;
             if (this.stockFilter === 'low') {
                 filteredProducts = filteredProducts.filter(p => (parseFloat(p.stock)||0) > 0 && (parseFloat(p.stock)||0) <= (parseFloat(p.minStock)||0));
@@ -235,31 +235,63 @@ const ProductsView = {
         if (Array.isArray(statsArray)) {
             statsArray.forEach(s => {
                 const name = s.category || 'General';
-                stats[name] = { total: s.total, low: s.low, out: s.out };
+                stats[name] = { total: s.total, low: s.low || 0, out: s.out || 0, negative: s.negative || 0 };
             });
         } else {
-            // Fallback por si acaso
             return '<p>Error cargando categorías</p>';
         }
 
-        const categories = Object.keys(stats).length > 0 ? Object.keys(stats).sort() : ['General'];
+        let categories = Object.keys(stats).length > 0 ? Object.keys(stats).sort() : ['General'];
+
+        // Si hay un filtro rápido de stock activo, filtrar las tarjetas de categoría
+        if (this.stockFilter === 'low') {
+            categories = categories.filter(cat => (stats[cat]?.low || 0) > 0);
+        } else if (this.stockFilter === 'out') {
+            categories = categories.filter(cat => (stats[cat]?.out || 0) > 0);
+        } else if (this.stockFilter === 'negative') {
+            categories = categories.filter(cat => (stats[cat]?.negative || 0) > 0);
+        }
+
+        if (categories.length === 0) {
+            const filterLabel = this.stockFilter === 'negative' ? 'Stock Negativo' : (this.stockFilter === 'low' ? 'Bajo Stock' : 'Sin Stock');
+            return `
+                <div style="text-align: center; padding: 4rem 2rem; background: #ffffff; border-radius: 1.25rem; border: 2px dashed #cbd5e1; margin: 1rem 0;">
+                    <div style="font-size: 3.5rem; margin-bottom: 0.5rem;">🎉</div>
+                    <h3 style="color: #1e293b; font-weight: 800;">¡No hay categorías con ${filterLabel}!</h3>
+                    <p style="color: #64748b; font-size: 0.9rem;">Todos tus productos en esta condición están al día.</p>
+                </div>
+            `;
+        }
 
         return `
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1.5rem; padding: 1rem 0;">
                 ${categories.map(cat => {
-            const s = stats[cat] || { total: 0, low: 0, out: 0 };
+            const s = stats[cat] || { total: 0, low: 0, out: 0, negative: 0 };
+            const mainOnClick = this.stockFilter !== 'all' 
+                ? `ProductsView.filterByCategoryWithStock('${safeHTML(cat)}', '${this.stockFilter}')` 
+                : `ProductsView.filterByCategory('${safeHTML(cat)}')`;
+            
+            let subtext = `<p style="color: #6366f1; font-weight: 700; font-size: 0.9rem; margin-bottom: 0;">${s.total} PRODUCTOS</p>`;
+            if (this.stockFilter === 'low') {
+                subtext = `<p style="color: #d97706; font-weight: 800; font-size: 0.95rem; margin-bottom: 0;">⚠️ ${s.low} BAJO STOCK</p>`;
+            } else if (this.stockFilter === 'negative') {
+                subtext = `<p style="color: #dc2626; font-weight: 800; font-size: 0.95rem; margin-bottom: 0;">🔴 ${s.negative} NEGATIVOS</p>`;
+            } else if (this.stockFilter === 'out') {
+                subtext = `<p style="color: #ef4444; font-weight: 800; font-size: 0.95rem; margin-bottom: 0;">❌ ${s.out} SIN STOCK</p>`;
+            }
+
             return `
                     <div
                          style="padding: 0; border-radius: 1.25rem; background: #ffffff; border: 1.5px solid #e5e7eb; text-align: center; overflow: hidden; display: flex; flex-direction: column; transition: transform 0.25s ease, box-shadow 0.25s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.05);"
                          onmouseover="this.style.transform='translateY(-6px)'; this.style.boxShadow='0 12px 28px rgba(0,0,0,0.1)'; this.style.borderColor='#9ca3af';" 
                          onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='0 2px 8px rgba(0,0,0,0.05)'; this.style.borderColor='#e5e7eb';">
                         
-                        <div style="padding: 1.5rem; cursor: pointer; flex: 1;" onclick="ProductsView.filterByCategory('${safeHTML(cat)}')">
+                        <div style="padding: 1.5rem; cursor: pointer; flex: 1;" onclick="${mainOnClick}">
                             <div style="font-size: 2.75rem; margin-bottom: 0.5rem;">
                                 ${this.getCategoryIcon(cat)}
                             </div>
                             <h3 style="margin: 0.25rem 0; font-size: 1.1rem; font-weight: 800; color: #111827; letter-spacing: 0.5px; text-transform: uppercase;">${safeHTML(cat)}</h3>
-                            <p style="color: #6366f1; font-weight: 700; font-size: 0.9rem; margin-bottom: 0;">${s.total} PRODUCTOS</p>
+                            ${subtext}
                         </div>
                         
                         <div style="display: flex; height: 60px; border-top: 1.5px solid #f3f4f6;">
@@ -413,7 +445,7 @@ const ProductsView = {
                             <div style="background: ${stock <= 0 ? '#fef2f2' : (stock <= minStock ? '#fffbeb' : '#f9fafb')}; border-radius: 0.75rem; padding: 0.75rem; border: 2px solid ${stockLevelColor}; text-align: center;">
                                 <div style="font-size: 0.68rem; color: ${stock <= minStock ? stockLevelColor : '#6b7280'}; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;">Disponible</div>
                                 <div style="font-size: 1.4rem; font-weight: 950; color: ${stockLevelColor};">
-                                    ${formatStock(p.stock)}<span style="font-size: 0.8rem; font-weight: 700; color: ${stockLevelColor}; opacity: 0.6;">${p.type === 'weight' ? 'kg' : 'u'}</span>
+                                    ${formatStock(p.stock, p.type === 'weight' ? 3 : 0)}<span style="font-size: 0.8rem; font-weight: 700; color: ${stockLevelColor}; opacity: 0.6;">${p.type === 'weight' ? 'kg' : 'u'}</span>
                                 </div>
                             </div>
                         </div>
@@ -524,18 +556,10 @@ const ProductsView = {
                 
                 <div class="form-row" style="display: flex; gap: 1rem;">
                     <div class="form-group" style="flex: 1;">
-                        <label>Categoría</label>
-                        <div class="product-category-field" style="display: flex; gap: 0.5rem;">
-                            <div style="flex: 1; position: relative;">
-                                <input type="text" id="productCategoryInput" name="category" class="form-control" value="${product?.category || ''}" placeholder="Escriba o seleccione..." autocomplete="off">
-                                <div id="productCategoryDropdown" class="product-category-dropdown" style="display: none; position: absolute; width: 100%; z-index: 100;">
-                                    ${categories.map(cat => `<button type="button" class="product-category-option" onclick="ProductsView.selectCategoryOption('${safeHTML(cat)}')">${safeHTML(cat)}</button>`).join('')}
-                                </div>
-                            </div>
-                            <button type="button" class="btn btn-secondary" style="white-space: nowrap;" onclick="ProductsView.toggleCategoryDropdown()">
-                                📂 Lista
-                            </button>
-                        </div>
+                        <label style="font-weight: 700; color: #1e293b;">📁 Categoría del Producto *</label>
+                        <select name="category" class="form-control" style="font-weight: 700; height: 42px; border: 2px solid #cbd5e1; border-radius: 0.5rem;" required>
+                            ${categories.map(cat => `<option value="${safeHTML(cat)}" ${CategoryHelper.areEqual(product?.category || 'General', cat) ? 'selected' : ''}>${safeHTML(cat)}</option>`).join('')}
+                        </select>
                     </div>
                     <div class="form-group" style="flex: 0.6;">
                         <label>📦 Unidad de Medida</label>
@@ -1084,24 +1108,26 @@ const ProductsView = {
             countMap[cat] = (countMap[cat] || 0) + 1;
         });
 
-        const uniqueCatNames = (typeof Category !== 'undefined') ? await Category.getUniqueNames() : Object.keys(countMap).sort();
+        // Asegurar que las categorías provienen de la lista oficial de categories
+        const catNamesSet = new Set(categories.map(c => c.name));
+        Object.keys(countMap).forEach(cName => catNamesSet.add(cName));
+        const uniqueCatNames = Array.from(catNamesSet).sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
 
         const content = `
             <div style="font-family: 'Inter', sans-serif;">
-                <div style="display: flex; gap: 0.5rem; border-bottom: 2px solid #e2e8f0; margin-bottom: 1rem; padding-bottom: 0.5rem; flex-wrap: wrap;">
+                <div style="display: flex; gap: 0.5rem; border-bottom: 2px solid #e2e8f0; margin-bottom: 1rem; padding-bottom: 0.5rem;">
                     <button id="catTabList" class="btn btn-sm btn-primary" onclick="ProductsView.switchCatTab('list')">📋 Lista de Categorías</button>
-                    <button id="catTabNew" class="btn btn-sm btn-secondary" onclick="ProductsView.switchCatTab('new')">➕ Crear Categoría</button>
-                    <button id="catTabMerge" class="btn btn-sm btn-secondary" onclick="ProductsView.switchCatTab('merge')" style="background: #8b5cf6; color: #fff; border: none;">🔗 Unificar / Fusionar</button>
+                    <button id="catTabNew" class="btn btn-sm btn-secondary" onclick="ProductsView.switchCatTab('new')">➕ Crear Nueva Categoría</button>
                 </div>
 
                 <div id="catSectionList">
-                    <div style="max-height: 350px; overflow-y: auto;">
+                    <div style="max-height: 380px; overflow-y: auto;">
                         <table class="table" style="width: 100%; border-collapse: collapse;">
                             <thead>
                                 <tr style="background: #f8fafc; border-bottom: 2px solid #cbd5e1; text-align: left;">
-                                    <th style="padding: 0.5rem 0.75rem;">Categoría</th>
-                                    <th style="padding: 0.5rem 0.75rem;">Productos</th>
-                                    <th style="padding: 0.5rem 0.75rem; text-align: right;">Acción</th>
+                                    <th style="padding: 0.6rem 0.75rem;">Categoría</th>
+                                    <th style="padding: 0.6rem 0.75rem;">Productos</th>
+                                    <th style="padding: 0.6rem 0.75rem; text-align: right;">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1109,20 +1135,25 @@ const ProductsView = {
                                     const count = countMap[name] || 0;
                                     const catObj = categories.find(c => (typeof CategoryHelper !== 'undefined') ? CategoryHelper.areEqual(c.name, name) : c.name === name);
                                     const catId = catObj ? catObj.id : null;
+                                    const isGeneral = CategoryHelper.areEqual(name, 'General');
+
                                     return `
                                         <tr style="border-bottom: 1px solid #f1f5f9;">
-                                            <td style="padding: 0.5rem 0.75rem; font-weight: 700; color: #1e293b;">
+                                            <td style="padding: 0.6rem 0.75rem; font-weight: 700; color: #1e293b;">
                                                 🏷️ ${safeHTML(name)}
                                             </td>
-                                            <td style="padding: 0.5rem 0.75rem;">
+                                            <td style="padding: 0.6rem 0.75rem;">
                                                 <span class="badge ${count > 0 ? 'badge-primary' : 'badge-secondary'}" style="padding: 0.25rem 0.6rem; border-radius: 1rem;">
                                                     ${count} ${count === 1 ? 'producto' : 'productos'}
                                                 </span>
                                             </td>
-                                            <td style="padding: 0.5rem 0.75rem; text-align: right;">
-                                                ${count === 0 && catId ? `
-                                                    <button class="btn btn-sm btn-danger" style="padding: 0.2rem 0.5rem; font-size: 0.75rem;" onclick="ProductsView.deleteCategory(${catId}, '${safeHTML(name)}')">🗑️ Eliminar</button>
-                                                ` : '<span style="font-size: 0.75rem; color: #94a3b8;">En uso</span>'}
+                                            <td style="padding: 0.6rem 0.75rem; text-align: right;">
+                                                <div style="display: flex; gap: 0.35rem; justify-content: flex-end; align-items: center;">
+                                                    ${!isGeneral ? `
+                                                        <button class="btn btn-sm" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; font-weight: 700;" onclick="ProductsView.promptRenameCategory('${catId || ''}', '${safeHTML(name)}')">✏️ Renombrar</button>
+                                                        <button class="btn btn-sm btn-danger" style="padding: 0.25rem 0.6rem; font-size: 0.75rem; font-weight: 700;" onclick="ProductsView.handleDeleteCategoryClick('${catId || ''}', '${safeHTML(name)}', ${count})">🗑️ Eliminar</button>
+                                                    ` : '<span style="font-size: 0.75rem; color: #94a3b8; font-weight: 700;">(Sistema)</span>'}
+                                                </div>
                                             </td>
                                         </tr>
                                     `;
@@ -1136,62 +1167,32 @@ const ProductsView = {
                     <form id="createCategoryForm" onsubmit="event.preventDefault(); ProductsView.saveNewCategory();">
                         <div class="form-group" style="margin-bottom: 1rem;">
                             <label style="font-weight: 700;">Nombre de la Categoría *</label>
-                            <input type="text" id="newCategoryName" class="form-control" placeholder="Ej: Bebidas Frías, Golosinas, etc." required autofocus>
+                            <input type="text" id="newCategoryName" class="form-control" placeholder="Ej: Bebidas Frías, Golosinas, Aseo..." required autofocus style="height: 42px; border: 2px solid #cbd5e1; font-weight: 700;">
                         </div>
-                        <div class="form-group" style="margin-bottom: 1rem;">
+                        <div class="form-group" style="margin-bottom: 1.25rem;">
                             <label style="font-weight: 700;">Color Distintivo</label>
                             <input type="color" id="newCategoryColor" value="#3b82f6" style="width: 100px; height: 40px; border-radius: 0.5rem; border: 1px solid #cbd5e1; cursor: pointer;">
                         </div>
-                        <button type="submit" class="btn btn-primary" style="width: 100%; font-weight: 800;">💾 Guardar Nueva Categoría</button>
+                        <button type="submit" class="btn btn-primary" style="width: 100%; font-weight: 800; height: 44px;">💾 Guardar Nueva Categoría</button>
                     </form>
-                </div>
-
-                <div id="catSectionMerge" style="display: none;">
-                    <p style="font-size: 0.85rem; color: #475569; margin-bottom: 1rem;">
-                        Selecciona la <strong>categoría principal</strong> a la que deseas mover los productos, y marca las <strong>categorías duplicadas o parecidas</strong> que deseas unificar.
-                    </p>
-                    <div class="form-group" style="margin-bottom: 1rem;">
-                        <label style="font-weight: 700;">Categoría Principal (Oficial) *</label>
-                        <select id="mergeTargetCat" class="form-control" style="font-weight: 700;">
-                            ${uniqueCatNames.map(name => `<option value="${safeHTML(name)}">${safeHTML(name)}</option>`).join('')}
-                        </select>
-                    </div>
-
-                    <label style="font-weight: 700; margin-bottom: 0.5rem; display: block;">Categorías a Fusionar en la Principal:</label>
-                    <div id="mergeSourcesList" style="max-height: 180px; overflow-y: auto; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; padding: 0.75rem; margin-bottom: 1rem;">
-                        ${uniqueCatNames.map(name => `
-                            <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0; cursor: pointer; font-size: 0.9rem;">
-                                <input type="checkbox" class="merge-source-checkbox" value="${safeHTML(name)}">
-                                <span>${safeHTML(name)} (${countMap[name] || 0} productos)</span>
-                            </label>
-                        `).join('')}
-                    </div>
-
-                    <button type="button" class="btn" style="background: #8b5cf6; color: #fff; width: 100%; font-weight: 800;" onclick="ProductsView.executeCategoryMerge()">
-                        🔗 Fusionar Categorías Seleccionadas
-                    </button>
                 </div>
             </div>
         `;
 
-        showModal(content, { title: '📂 Gestión de Categorías', width: '550px' });
+        showModal(content, { title: '📂 Gestión de Categorías', width: '580px' });
     },
 
     switchCatTab(tab) {
         const secList = document.getElementById('catSectionList');
         const secNew = document.getElementById('catSectionNew');
-        const secMerge = document.getElementById('catSectionMerge');
         if (secList) secList.style.display = tab === 'list' ? 'block' : 'none';
         if (secNew) secNew.style.display = tab === 'new' ? 'block' : 'none';
-        if (secMerge) secMerge.style.display = tab === 'merge' ? 'block' : 'none';
 
         const btnList = document.getElementById('catTabList');
         const btnNew = document.getElementById('catTabNew');
-        const btnMerge = document.getElementById('catTabMerge');
 
         if (btnList) btnList.className = tab === 'list' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
         if (btnNew) btnNew.className = tab === 'new' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
-        if (btnMerge) btnMerge.className = tab === 'merge' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
     },
 
     async saveNewCategory() {
@@ -1209,41 +1210,83 @@ const ProductsView = {
         }
     },
 
-    async deleteCategory(id, name) {
-        showConfirm(`¿Eliminar la categoría "${name}"?`, async () => {
-            try {
-                await Category.delete(id);
-                showNotification('Categoría eliminada', 'success');
-                closeModal();
-                await this.refresh();
-            } catch (e) {
-                showNotification(e.message, 'error');
-            }
-        });
+    async handleDeleteCategoryClick(catId, catName, count) {
+        if (count === 0) {
+            showConfirm(`¿Eliminar la categoría vacía "${catName}"?`, async () => {
+                try {
+                    await Category.deleteAndReassign(catId, catName, 'General');
+                    showNotification(`Categoría "${catName}" eliminada correctamente`, 'success');
+                    closeModal();
+                    await this.refresh();
+                } catch (e) {
+                    showNotification(e.message, 'error');
+                }
+            });
+        } else {
+            await this.showDeleteAndReassignModal(catId, catName, count);
+        }
     },
 
-    async executeCategoryMerge() {
-        const targetSelect = document.getElementById('mergeTargetCat');
-        if (!targetSelect) return;
-        const targetCategory = targetSelect.value;
+    async showDeleteAndReassignModal(catId, catName, count) {
+        const allCats = await Category.getUniqueNames();
+        const availableTargets = allCats.filter(c => !CategoryHelper.areEqual(c, catName));
 
-        const checkboxes = document.querySelectorAll('.merge-source-checkbox:checked');
-        const sourceCategories = Array.from(checkboxes).map(c => c.value).filter(v => v !== targetCategory);
+        const content = `
+            <div style="font-family: 'Inter', sans-serif; padding: 0.5rem 0;">
+                <div style="background: #fffbe6; border: 1.5px solid #fcd34d; border-radius: 0.75rem; padding: 1rem; margin-bottom: 1.25rem;">
+                    <p style="margin: 0; color: #92400e; font-weight: 700; font-size: 0.95rem;">
+                        ⚠️ La categoría <strong>"${safeHTML(catName)}"</strong> contiene <strong>${count} producto(s)</strong> asociados.
+                    </p>
+                    <p style="margin: 0.5rem 0 0 0; color: #b45309; font-size: 0.85rem;">
+                        Antes de eliminarla, selecciona a qué categoría deseas mover esos productos:
+                    </p>
+                </div>
 
-        if (sourceCategories.length === 0) {
-            showNotification('Selecciona al menos una categoría distinta a la principal para fusionar', 'warning');
-            return;
+                <div class="form-group" style="margin-bottom: 1.5rem;">
+                    <label style="font-weight: 800; color: #1e293b;">Categoría Destino para los Productos *</label>
+                    <select id="reassignTargetCategorySelect" class="form-control" style="font-weight: 700; height: 44px; border: 2px solid #3b82f6;">
+                        ${availableTargets.map(target => `<option value="${safeHTML(target)}" ${target === 'General' ? 'selected' : ''}>${safeHTML(target)}</option>`).join('')}
+                    </select>
+                </div>
+
+                <div style="display: flex; gap: 0.75rem; justify-content: flex-end;">
+                    <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+                    <button class="btn btn-danger" style="font-weight: 800;" onclick="ProductsView.executeDeleteAndReassign('${catId || ''}', '${safeHTML(catName)}')">
+                        🔄 Mover Productos y Eliminar
+                    </button>
+                </div>
+            </div>
+        `;
+
+        showModal(content, { title: `🗑️ Eliminar Categoría: ${safeHTML(catName)}`, width: '500px' });
+    },
+
+    async executeDeleteAndReassign(catId, catName) {
+        const select = document.getElementById('reassignTargetCategorySelect');
+        if (!select) return;
+        const targetCategory = select.value;
+
+        try {
+            await Category.deleteAndReassign(catId, catName, targetCategory);
+            showNotification(`Categoría "${catName}" eliminada y productos movidos a "${targetCategory}"`, 'success');
+            closeModal();
+            await this.refresh();
+        } catch (e) {
+            showNotification('Error al eliminar categoría: ' + e.message, 'error');
         }
+    },
 
-        showConfirm(`¿Confirmas fusionar ${sourceCategories.length} categoría(s) en "${targetCategory}"? Todos sus productos serán reasignados.`, async () => {
-            try {
-                await Category.mergeCategories(targetCategory, sourceCategories);
-                showNotification(`Categorías unificadas correctamente en "${targetCategory}"`, 'success');
-                closeModal();
-                await this.refresh();
-            } catch (e) {
-                showNotification('Error al fusionar categorías: ' + e.message, 'error');
-            }
-        });
+    async promptRenameCategory(catId, oldName) {
+        const newName = prompt(`Ingresa el nuevo nombre para la categoría "${oldName}":`, oldName);
+        if (!newName || !newName.trim() || CategoryHelper.areEqual(newName.trim(), oldName)) return;
+
+        try {
+            await Category.rename(catId, oldName, newName.trim());
+            showNotification(`Categoría renombrada a "${newName.trim()}"`, 'success');
+            closeModal();
+            await this.refresh();
+        } catch (e) {
+            showNotification('Error al renombrar categoría: ' + e.message, 'error');
+        }
     }
 };

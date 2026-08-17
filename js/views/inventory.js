@@ -3006,7 +3006,6 @@ const InventoryView = {
         if (this.auditState.status === 'report') {
             const missing = this.auditState.items.filter(i => i.physicalCount < i.systemStock);
             const extra = this.auditState.items.filter(i => i.physicalCount > i.systemStock);
-            // CORRECCIÓN: Para productos sobrantes, si el stock estaba negativo, contabilizar desde 0
             const lossMoney = missing.reduce((sum, i) => sum + ((i.systemStock - i.physicalCount) * parseFloat(i.cost || 0)), 0);
             const extraMoney = extra.reduce((sum, i) => {
                 const systemStock = i.systemStock < 0 ? 0 : i.systemStock;
@@ -3014,15 +3013,18 @@ const InventoryView = {
             }, 0);
 
             let missingHtml = missing.length > 0 ? missing.map(i => {
+                const isWeight = i.type === 'weight';
                 const diff = (i.systemStock - i.physicalCount);
-                const displayDiff = Number.isInteger(diff) ? diff : diff.toFixed(2);
+                const displayDiff = formatStock(diff, isWeight ? 3 : 0);
+                const realClean = formatStock(i.physicalCount, isWeight ? 3 : 0);
+                const sysClean = formatStock(i.systemStock, isWeight ? 3 : 0);
                 return `
                 <div style="display: flex; flex-direction: column; padding: 1rem; border-bottom: 1px solid rgba(239, 68, 68, 0.1);">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                        <div style="color: #f1f5f9; font-weight: 600;">${i.name}</div>
+                        <div style="color: #f1f5f9; font-weight: 600;">${safeHTML(i.name)}</div>
                         <div style="text-align: right;">
                             <div style="color: #f87171; font-weight: 800; font-size: 1rem;">Faltan ${displayDiff}</div>
-                            <div style="color: #64748b; font-size: 0.75rem;">(${i.physicalCount} real vs ${i.systemStock} sys)</div>
+                            <div style="color: #64748b; font-size: 0.75rem;">(Real ${realClean} vs Sys ${sysClean})</div>
                         </div>
                     </div>
                     <div style="display: flex; gap: 0.75rem; margin-top: 0.75rem;">
@@ -3041,19 +3043,19 @@ const InventoryView = {
             `}).join('') : '<div style="padding: 3rem; text-align: center; color: #64748b; font-style: italic;">✨ No hay productos faltantes. Todo está en orden.</div>';
 
             let extraHtml = extra.length > 0 ? extra.map(i => {
-                const diff = (i.physicalCount - i.systemStock);
-                const displayDiff = Number.isInteger(diff) ? diff : diff.toFixed(2);
-                // CORRECCIÓN: Si el stock estaba negativo, contabilizar desde 0
+                const isWeight = i.type === 'weight';
                 const systemStock = i.systemStock < 0 ? 0 : i.systemStock;
-                const adjustedDiff = i.physicalCount - systemStock;
-                const displayAdjustedDiff = Number.isInteger(adjustedDiff) ? adjustedDiff : adjustedDiff.toFixed(2);
+                const adjustedDiff = (i.physicalCount - systemStock);
+                const displayAdjustedDiff = formatStock(adjustedDiff, isWeight ? 3 : 0);
+                const realClean = formatStock(i.physicalCount, isWeight ? 3 : 0);
+                const sysClean = formatStock(i.systemStock, isWeight ? 3 : 0);
                 const note = i.systemStock < 0 ? '<div style="color: #f59e0b; font-size: 0.7rem; margin-top: 0.25rem;">⚠️ Stock estaba negativo, contabiliza desde 0</div>' : '';
                 return `
                 <div style="display: flex; justify-content: space-between; padding: 1rem; border-bottom: 1px solid rgba(16, 185, 129, 0.1); align-items: center;">
-                    <div style="color: #f1f5f9; font-weight: 600;">${i.name}</div>
+                    <div style="color: #f1f5f9; font-weight: 600;">${safeHTML(i.name)}</div>
                     <div style="text-align: right;">
                         <div style="color: #34d399; font-weight: 800; font-size: 1rem;">Sobran ${displayAdjustedDiff}</div>
-                        <div style="color: #64748b; font-size: 0.75rem;">(${i.physicalCount} real vs ${systemStock} sys)</div>
+                        <div style="color: #64748b; font-size: 0.75rem;">(Real ${realClean} vs Sys ${sysClean})</div>
                         ${note}
                     </div>
                 </div>
@@ -3297,29 +3299,37 @@ const InventoryView = {
             }, 0);
 
             // Guardar detalle para mostrar en "Controles recientes"
-            const missingItems = missing.map(i => ({
-                productId: i.id,
-                name: i.name,
-                barcode: i.barcode || null,
-                systemStock: i.systemStock,
-                physicalCount: i.physicalCount,
-                diff: (i.physicalCount - i.systemStock),
-                unitsMissing: (i.systemStock - i.physicalCount),
-                cost: parseFloat(i.cost || 0),
-                moneyImpact: (i.systemStock - i.physicalCount) * parseFloat(i.cost || 0)
-            }));
+            const missingItems = missing.map(i => {
+                const uMiss = roundQuantity(i.systemStock - i.physicalCount);
+                return {
+                    productId: i.id,
+                    name: i.name,
+                    type: i.type || 'unit',
+                    barcode: i.barcode || null,
+                    systemStock: roundQuantity(i.systemStock),
+                    physicalCount: roundQuantity(i.physicalCount),
+                    diff: roundQuantity(i.physicalCount - i.systemStock),
+                    unitsMissing: uMiss,
+                    cost: parseFloat(i.cost || 0),
+                    moneyImpact: uMiss * parseFloat(i.cost || 0)
+                };
+            });
 
-            const extraItems = extra.map(i => ({
-                productId: i.id,
-                name: i.name,
-                barcode: i.barcode || null,
-                systemStock: i.systemStock,
-                physicalCount: i.physicalCount,
-                diff: (i.physicalCount - i.systemStock),
-                unitsExtra: (i.physicalCount - i.systemStock),
-                cost: parseFloat(i.cost || 0),
-                moneyImpact: (i.physicalCount - i.systemStock) * parseFloat(i.cost || 0)
-            }));
+            const extraItems = extra.map(i => {
+                const uExtra = roundQuantity(i.physicalCount - i.systemStock);
+                return {
+                    productId: i.id,
+                    name: i.name,
+                    type: i.type || 'unit',
+                    barcode: i.barcode || null,
+                    systemStock: roundQuantity(i.systemStock),
+                    physicalCount: roundQuantity(i.physicalCount),
+                    diff: roundQuantity(i.physicalCount - i.systemStock),
+                    unitsExtra: uExtra,
+                    cost: parseFloat(i.cost || 0),
+                    moneyImpact: uExtra * parseFloat(i.cost || 0)
+                };
+            });
 
             // Registrar en el log de auditoría para el historial
             await AuditLogService.log({
@@ -3375,21 +3385,27 @@ const InventoryView = {
 
             return `
                 <div style="max-height: 45vh; overflow-y: auto; padding-right: 0.5rem;">
-                    ${items.map(i => `
+                    ${items.map(i => {
+                        const isWeight = i.type === 'weight';
+                        const uMissingClean = formatStock(i.unitsMissing, isWeight ? 3 : 0);
+                        const uExtraClean = formatStock(i.unitsExtra, isWeight ? 3 : 0);
+                        const realClean = formatStock(i.physicalCount, isWeight ? 3 : 0);
+                        const sysClean = formatStock(i.systemStock, isWeight ? 3 : 0);
+                        return `
                         <div style="display:flex; justify-content:space-between; gap: 1rem; padding: 0.9rem 0.75rem; border-bottom: 1px solid #e2e8f0;">
                             <div style="min-width: 0;">
-                                <div style="font-weight: 800; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${i.name}</div>
-                                <div style="color:#64748b; font-size: 0.8rem; font-family: monospace;">${i.barcode || 'SIN CÓDIGO'}</div>
+                                <div style="font-weight: 800; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${safeHTML(i.name)}</div>
+                                <div style="color:#64748b; font-size: 0.8rem; font-family: monospace;">${safeHTML(i.barcode || 'SIN CÓDIGO')}</div>
                             </div>
                             <div style="text-align:right;">
                                 <div style="font-weight: 900; color: ${mode === 'missing' ? '#b91c1c' : '#047857'};">
-                                    ${mode === 'missing' ? `Faltan ${i.unitsMissing}` : `Sobran ${i.unitsExtra}`}
+                                    ${mode === 'missing' ? `Faltan ${uMissingClean}` : `Sobran ${uExtraClean}`}
                                 </div>
-                                <div style="color:#94a3b8; font-size: 0.8rem;">Real ${i.physicalCount} vs Sys ${i.systemStock}</div>
+                                <div style="color:#94a3b8; font-size: 0.8rem;">Real ${realClean} vs Sys ${sysClean}</div>
                                 <div style="color:#64748b; font-size: 0.8rem;">Impacto: ${formatCLP(i.moneyImpact || 0)}</div>
                             </div>
                         </div>
-                    `).join('')}
+                    `}).join('')}
                 </div>
             `;
         };

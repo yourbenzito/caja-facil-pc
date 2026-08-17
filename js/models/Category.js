@@ -4,33 +4,33 @@
  */
 class Category {
     static async getAll() {
+        let cats = [];
         if (db.mode === 'sqlite') {
             try {
-                const cats = await window.ApiClient.get('categories');
-                return (cats || []).map(c => ({
+                const res = await window.ApiClient.get('categories');
+                cats = (res || []).map(c => ({
                     ...c,
                     name: CategoryHelper.sanitize(c.name)
-                })).sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+                }));
             } catch (_) {
-                // Fallback a categorías extraídas de productos
+                cats = [];
             }
-        }
-
-        const idbCats = await db.getAll('categories');
-        if (idbCats && idbCats.length > 0) {
-            return idbCats.map(c => ({
+        } else {
+            const idbCats = await db.getAll('categories');
+            cats = (idbCats || []).map(c => ({
                 ...c,
                 name: CategoryHelper.sanitize(c.name)
-            })).sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+            }));
         }
 
-        // Fallback: extraer categorías distintas desde los productos
-        const products = await Product.getAll();
-        const uniqueNames = [...new Set(
-            products.map(p => CategoryHelper.sanitize(p.category || 'General'))
-        )].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
+        // Garantizar que la categoría "General" siempre exista en la lista
+        const hasGeneral = cats.some(c => CategoryHelper.areEqual(c.name, 'General'));
+        if (!hasGeneral) {
+            cats.unshift({ id: 0, name: 'General', color: '#6b7280' });
+        }
 
-        return uniqueNames.map((name, index) => ({ id: index + 1, name, color: '#6b7280' }));
+        // Ordenar alfabéticamente
+        return cats.sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
     }
 
     static async getUniqueNames() {
@@ -39,7 +39,7 @@ class Category {
         return [...new Set(names)].sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }));
     }
 
-    static async create(name, color = '#6b7280') {
+    static async create(name, color = '#3b82f6') {
         const cleanName = CategoryHelper.sanitize(name);
         const existing = await this.getUniqueNames();
 
@@ -49,7 +49,7 @@ class Category {
 
         const catData = {
             name: cleanName,
-            color: color || '#6b7280',
+            color: color || '#3b82f6',
             createdAt: new Date().toISOString()
         };
 
@@ -61,45 +61,112 @@ class Category {
         return await db.add('categories', catData);
     }
 
-    static async delete(id) {
-        if (db.mode === 'sqlite') {
-            await window.ApiClient.delete('categories', id);
-            return true;
-        }
-        await db.delete('categories', id);
-        return true;
-    }
-
     /**
-     * Unifica varias categorías bajo una única categoría destino (Target)
-     * Reasigna todos los productos asociados.
+     * Elimina una categoría y reasigna los productos que la tenían a una categoría destino (targetCategory).
+     * Si no se especifica targetCategory, los productos pasan a "General".
      */
-    static async mergeCategories(targetCategory, sourceCategories) {
-        const cleanTarget = CategoryHelper.sanitize(targetCategory);
-        if (!sourceCategories || !Array.isArray(sourceCategories) || sourceCategories.length === 0) {
-            return;
-        }
+    static async deleteAndReassign(id, categoryName, targetCategory = 'General') {
+        const cleanSource = CategoryHelper.sanitize(categoryName);
+        const cleanTarget = CategoryHelper.sanitize(targetCategory || 'General');
 
         if (db.mode === 'sqlite') {
-            await window.ApiClient.post('complex/categories/merge', {
-                targetCategory: cleanTarget,
-                sourceCategories
+            await window.ApiClient.post('complex/categories/delete-and-reassign', {
+                categoryId: id,
+                categoryName: cleanSource,
+                targetCategory: cleanTarget
             });
-            return;
+            return true;
         }
 
         // Modo IndexedDB
         const products = await Product.getAll();
-        const sourcesNormalized = sourceCategories.map(s => CategoryHelper.normalizeKey(s));
+        const sourceNorm = CategoryHelper.normalizeKey(cleanSource);
 
+        for (const p of products) {
+            if (CategoryHelper.normalizeKey(p.category || '') === sourceNorm) {
+                await Product.update(p.id, { category: cleanTarget });
+            }
+        }
+
+        if (id) {
+            await db.delete('categories', id);
+        } else {
+            const allCats = await db.getAll('categories');
+            for (const c of allCats) {
+                if (CategoryHelper.normalizeKey(c.name) === sourceNorm) {
+                    await db.delete('categories', c.id);
+                }
+            }
+        }
+
+        // Asegurar que la categoría destino existe si no era General
+        if (cleanTarget !== 'General') {
+            const existingTarget = await this.getUniqueNames();
+            if (!existingTarget.some(t => CategoryHelper.areEqual(t, cleanTarget))) {
+                await this.create(cleanTarget);
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Renombra una categoría existente y actualiza todos sus productos asociados.
+     */
+    static async rename(id, oldName, newName) {
+        const cleanOld = CategoryHelper.sanitize(oldName);
+        const cleanNew = CategoryHelper.sanitize(newName);
+
+        if (CategoryHelper.areEqual(cleanOld, cleanNew)) return;
+
+        if (db.mode === 'sqlite') {
+            await window.ApiClient.post('complex/categories/rename', {
+                categoryId: id,
+                oldName: cleanOld,
+                newName: cleanNew
+            });
+            return true;
+        }
+
+        // Modo IndexedDB
+        const products = await Product.getAll();
+        const oldNorm = CategoryHelper.normalizeKey(cleanOld);
+
+        for (const p of products) {
+            if (CategoryHelper.normalizeKey(p.category || '') === oldNorm) {
+                await Product.update(p.id, { category: cleanNew });
+            }
+        }
+
+        if (id) {
+            await db.update('categories', { id, name: cleanNew });
+        } else {
+            const allCats = await db.getAll('categories');
+            for (const c of allCats) {
+                if (CategoryHelper.normalizeKey(c.name) === oldNorm) {
+                    await db.update('categories', { ...c, name: cleanNew });
+                }
+            }
+        }
+
+        return true;
+    }
+
+    static async mergeCategories(targetCategory, sourceCategories) {
+        const cleanTarget = CategoryHelper.sanitize(targetCategory);
+        if (!sourceCategories || !Array.isArray(sourceCategories) || sourceCategories.length === 0) return;
+        if (db.mode === 'sqlite') {
+            await window.ApiClient.post('complex/categories/merge', { targetCategory: cleanTarget, sourceCategories });
+            return;
+        }
+        const products = await Product.getAll();
+        const sourcesNormalized = sourceCategories.map(s => CategoryHelper.normalizeKey(s));
         for (const p of products) {
             const pNorm = CategoryHelper.normalizeKey(p.category || '');
             if (sourcesNormalized.includes(pNorm)) {
                 await Product.update(p.id, { category: cleanTarget });
             }
         }
-
-        // Eliminar categorías sobrantes en la tabla categories
         const idbCats = await db.getAll('categories');
         for (const c of idbCats) {
             if (sourcesNormalized.includes(CategoryHelper.normalizeKey(c.name)) && c.name !== cleanTarget) {
@@ -108,9 +175,6 @@ class Category {
         }
     }
 
-    /**
-     * Normaliza todas las categorías existentes de productos en la base de datos a Title Case.
-     */
     static async normalizeAll() {
         if (db.mode === 'sqlite') {
             try {
@@ -120,8 +184,6 @@ class Category {
             }
             return;
         }
-
-        // Modo IndexedDB
         const products = await Product.getAll();
         for (const p of products) {
             const rawCat = p.category || 'General';
@@ -130,5 +192,9 @@ class Category {
                 await db.update('products', { ...p, category: cleanCat });
             }
         }
+    }
+
+    static async delete(id, categoryName) {
+        return await this.deleteAndReassign(id, categoryName, 'General');
     }
 }

@@ -262,8 +262,12 @@ class CashRegister {
         ivaDebito = Math.round(ivaDebito);
 
         // Obtener solo las compras en el periodo de esta caja para el IVA Crédito
-        const startTime = new Date(cashRegister.openDate);
-        const endTime = cashRegister.closeDate ? new Date(cashRegister.closeDate) : new Date();
+        const rawOpenDate = cashRegister.openDate || cashRegister.openedAt || cashRegister.created_at;
+        const rawCloseDate = cashRegister.closeDate || cashRegister.closedAt;
+        const dStart = rawOpenDate ? new Date(rawOpenDate) : new Date(0);
+        const dEnd = rawCloseDate ? new Date(rawCloseDate) : new Date();
+        const startTime = isNaN(dStart.getTime()) ? new Date(0) : dStart;
+        const endTime = isNaN(dEnd.getTime()) ? new Date() : dEnd;
 
         const sessionPurchases = await Purchase.getByDateRange(startTime, endTime);
         // CORRECCIÓN: uses includes('factura') para capturar 'factura_neto' y 'factura_bruto'

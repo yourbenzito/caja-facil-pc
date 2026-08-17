@@ -81,32 +81,46 @@ const roundPrice = (price) => {
 const roundQuantity = (qty) => {
     return Math.round((parseFloat(qty) || 0) * 1000) / 1000;
 };
+window.roundQuantity = roundQuantity;
 
 const formatNumber = (number) => {
     return new Intl.NumberFormat('es-CL').format(number);
 };
 
-const formatStock = (value, maxDecimals = 3) => {
-    let decimals = parseInt(maxDecimals, 10);
-    if (isNaN(decimals) || decimals < 0) decimals = 3;
-    if (decimals > 20) decimals = 20;
+const formatStock = (value, isWeightOrMaxDecimals = 3) => {
+    let isWeight = false;
+    let maxDecimals = 3;
 
-    const parsed = parseFloat(value);
-    if (Number.isNaN(parsed)) return '0';
+    if (typeof isWeightOrMaxDecimals === 'boolean') {
+        isWeight = isWeightOrMaxDecimals;
+        maxDecimals = isWeight ? 3 : 0;
+    } else if (typeof isWeightOrMaxDecimals === 'string') {
+        isWeight = isWeightOrMaxDecimals === 'weight';
+        maxDecimals = isWeight ? 3 : 0;
+    } else {
+        maxDecimals = parseInt(isWeightOrMaxDecimals, 10);
+        if (isNaN(maxDecimals) || maxDecimals < 0) maxDecimals = 3;
+    }
 
-    // Si es entero, no mostramos decimales, de lo contrario mostramos hasta el mínimo entre decimals y 3 por defecto
-    const fractionDigits = parsed % 1 === 0 ? 0 : Math.min(decimals, 3);
+    const raw = parseFloat(value);
+    if (Number.isNaN(raw)) return '0';
+
+    // Redondear primero a máximo 3 decimales para eliminar residuos de punto flotante (ej: 0.39999999999999997 -> 0.4)
+    const rounded = Math.round(raw * 1000) / 1000;
+
+    let fractionDigits = rounded % 1 === 0 ? 0 : Math.min(maxDecimals, 3);
+    if (maxDecimals === 0) fractionDigits = 0;
 
     try {
         return new Intl.NumberFormat('es-CL', {
             minimumFractionDigits: fractionDigits,
-            maximumFractionDigits: decimals
-        }).format(parsed);
+            maximumFractionDigits: fractionDigits
+        }).format(rounded);
     } catch (e) {
-        console.error('formatStock error:', e, { value, decimals, fractionDigits });
-        return parsed.toString();
+        return rounded.toString();
     }
 };
+window.formatStock = formatStock;
 
 const formatDate = (date) => {
     try {

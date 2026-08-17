@@ -10,3 +10,6 @@ dist/
 
 # Gemini / IDE scratch
 .gemini/
+
+# Base de Datos Local
+backend/data/*.sqlite*

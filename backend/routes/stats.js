@@ -24,7 +24,7 @@ router.get('/api/purchases/max-purchase-number', async (req, res) => {
 router.get('/api/products/stats/categories', async (req, res) => {
     const bid = req.business_id;
     try { 
-        res.json(await dbAll("SELECT category, COUNT(*) as total, SUM(CASE WHEN stock <= 0 THEN 1 ELSE 0 END) as out, SUM(CASE WHEN stock > 0 AND stock <= minStock THEN 1 ELSE 0 END) as low FROM products WHERE business_id = ? AND isActive = 1 GROUP BY category", [bid])); 
+        res.json(await dbAll("SELECT category, COUNT(*) as total, SUM(CASE WHEN stock <= 0 THEN 1 ELSE 0 END) as out, SUM(CASE WHEN stock > 0 AND stock <= minStock THEN 1 ELSE 0 END) as low, SUM(CASE WHEN stock < 0 THEN 1 ELSE 0 END) as negative FROM products WHERE business_id = ? AND isActive = 1 GROUP BY category", [bid])); 
     } catch (err) { 
         res.status(500).json({ error: err.message }); 
     }
@@ -264,9 +264,10 @@ router.get('/api/sale-returns/list/latest', async (req, res) => {
     const bid = req.business_id;
     try {
         let query = `
-            SELECT r.*, s.customerId, s.clientName, s.documentType as saleDocumentType
+            SELECT r.*, s.customerId, c.name as clientName
             FROM saleReturns r
             LEFT JOIN sales s ON r.saleId = s.id AND r.business_id = s.business_id
+            LEFT JOIN customers c ON s.customerId = c.id AND s.business_id = c.business_id
             WHERE r.business_id = ?
         `;
         const params = [bid];

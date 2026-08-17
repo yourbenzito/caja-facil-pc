@@ -78,7 +78,7 @@ const CashView = {
                         <div class="form-group" style="margin-bottom: 2.5rem;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem;">
                                 <label style="margin: 0; font-weight: 800; color: #cbd5e1; text-transform: uppercase; letter-spacing: 2px; font-size: 0.8rem;">Monto inicial en efectivo</label>
-                                <button type="button" class="btn btn-sm" onclick="CashView.showDenominationCalculator('quickAmount')" style="background:rgba(56,189,248,0.15); color:#38bdf8; border:1px solid rgba(56,189,248,0.4); font-weight:800; border-radius:0.75rem; padding:0.4rem 0.8rem; font-size:0.78rem; cursor:pointer;">🧮 Usar Calculadora</button>
+                                <button type="button" class="btn btn-sm" onclick="CashView.showPartialSumsCalculator('quickAmount')" style="background:rgba(56,189,248,0.15); color:#38bdf8; border:1px solid rgba(56,189,248,0.4); font-weight:800; border-radius:0.75rem; padding:0.4rem 0.8rem; font-size:0.78rem; cursor:pointer;">🧮 Sumar Montos Separados</button>
                             </div>
                             <div style="position: relative;">
                                 <span style="position: absolute; left: 1.5rem; top: 50%; transform: translateY(-50%); font-size: 2rem; font-weight: 900; color: #10b981;">$</span>
@@ -184,14 +184,16 @@ const CashView = {
             sales: [], debtPayments: [], creditSales: [], cashMovementsOut: [], cashMovementsIn: []
         };
 
-        // Ganancia Neta Estimada = (Ventas Neto sin IVA 19%) - (Costo Neto Vendido)
-        // NOTA: Cumpliendo directiva explícita del usuario, los gastos del turno NO se restan de las ganancias.
         let totalNetSales = 0;
         let totalCostNet = 0;
+        let totalTodaySales = 0;
+        let totalTodayDeudas = 0;
+
         if (todayDetail && todayDetail.sales) {
             todayDetail.sales.forEach(s => {
                 if (s.status === 'cancelled') return;
                 const total = parseFloat(s.total) || 0;
+                totalTodaySales += total;
                 const net = s.documentType === 'boleta' ? total : Math.round(total / 1.19);
                 totalNetSales += net;
                 if (s.items && Array.isArray(s.items)) {
@@ -203,11 +205,41 @@ const CashView = {
                 }
             });
         }
+
+        if (todayDetail && todayDetail.creditSales) {
+            todayDetail.creditSales.forEach(s => {
+                if (s.status === 'cancelled') return;
+                totalTodayDeudas += (parseFloat(s.total) || 0);
+            });
+        }
+
+        let totalSessionAnotados = 0;
+        if (summary && summary.totalCreditSalesAmount !== undefined) {
+            totalSessionAnotados = parseFloat(summary.totalCreditSalesAmount) || 0;
+        } else if (Array.isArray(dailyDetail)) {
+            dailyDetail.forEach(d => {
+                if (d.creditSales && Array.isArray(d.creditSales)) {
+                    d.creditSales.forEach(s => {
+                        if (s.status !== 'cancelled') {
+                            totalSessionAnotados += (parseFloat(s.total) || 0);
+                        }
+                    });
+                }
+            });
+        }
+
         const estimatedNetProfit = Math.max(0, Math.round(totalNetSales - totalCostNet));
 
         // Límite de Efectivo Sugerido en Caja (Por defecto $150.000 CLP)
         const maxCashLimit = parseFloat(localStorage.getItem('cashRegisterMaxCashLimit') || '150000');
         const showCashLimitAlert = (summary.expectedCash >= maxCashLimit);
+
+        const rawOpenDate = cashRegister.openDate || cashRegister.openedAt || cashRegister.created_at;
+        const openDateObj = rawOpenDate ? new Date(rawOpenDate) : new Date();
+        const diffMinutes = Math.max(0, Math.floor((new Date() - openDateObj) / 60000));
+        const durationDisplay = isNaN(diffMinutes)
+            ? 'Turno Activo'
+            : (diffMinutes < 60 ? `${diffMinutes} min transcurridos` : `${Math.floor(diffMinutes / 60)}h ${diffMinutes % 60}m transcurridos`);
 
         return `
             <style>
@@ -410,43 +442,35 @@ const CashView = {
 
             </div>
 
-            <!-- ===== KPIs: VENTAS Y EFECTIVO ===== -->
-            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:1rem; margin-bottom:1.5rem;">
+            <!-- ===== KPIs: VENTAS Y EFECTIVO (4 KPIs ÚNICOS) ===== -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:1rem; margin-bottom:1.5rem;">
 
-                <!-- Ventas del día -->
-                <div class="cx-kpi" style="border-left-color:#4f46e5; cursor:pointer; animation-delay:0s;" onclick="CashView.showVentasHoy()" title="Total vendido SOLAMENTE durante el turno actual (desde que abriste la caja).">
+                <!-- Ventas del turno -->
+                <div class="cx-kpi" style="border-left-color:#4f46e5; cursor:pointer; animation-delay:0s;" onclick="CashView.showHistorialVentasSesion()" title="Total vendido en el turno actual. Haz clic para ver todos los tickets.">
                     <div class="cx-kpi-bg">🛍️</div>
-                    <div class="cx-kpi-lbl" style="color:#4f46e5;">Ventas Hoy</div>
+                    <div class="cx-kpi-lbl" style="color:#4f46e5;">Ventas Turno</div>
                     <div class="cx-kpi-val">${formatCLP(totalTodaySales)}</div>
-                    <div class="cx-kpi-sub">${todayDetail.sales.length} ventas · click para ver</div>
+                    <div class="cx-kpi-sub">${summary.totalSales || todayDetail.sales.length} tickets · click para ver</div>
                 </div>
 
-                <!-- Deudas del día -->
-                <div class="cx-kpi" style="border-left-color:#ef4444; cursor:pointer; animation-delay:0.06s;" onclick="CashView.showDeudasHoy()">
+                <!-- Deudas / Fiados del turno -->
+                <div class="cx-kpi" style="border-left-color:#ef4444; cursor:pointer; animation-delay:0.06s;" onclick="CashView.showDeudasHoy()" title="Ventas anotadas a crédito durante el turno.">
                     <div class="cx-kpi-bg">📝</div>
-                    <div class="cx-kpi-lbl" style="color:#ef4444;">Fiados Hoy</div>
+                    <div class="cx-kpi-lbl" style="color:#ef4444;">Fiados Turno</div>
                     <div class="cx-kpi-val" style="color:#dc2626;">${formatCLP(totalTodayDeudas)}</div>
-                    <div class="cx-kpi-sub">${todayDetail.creditSales.length} ventas anotadas</div>
+                    <div class="cx-kpi-sub">${todayDetail.creditSales.length} anotados · click para ver</div>
                 </div>
 
                 <!-- Efectivo esperado -->
-                <div class="cx-kpi" style="border-left-color:#10b981; animation-delay:0.10s;">
+                <div class="cx-kpi" style="border-left-color:#10b981; animation-delay:0.10s;" title="Total de dinero físico que debe haber en la caja.">
                     <div class="cx-kpi-bg">💵</div>
                     <div class="cx-kpi-lbl" style="color:#10b981;">Efectivo Esperado</div>
                     <div class="cx-kpi-val" style="color:#059669;">${formatCLP(summary.expectedCash)}</div>
-                    <div class="cx-kpi-sub">Incluye inicial + ingresos</div>
-                </div>
-
-                <!-- Total ventas sesión -->
-                <div class="cx-kpi" style="border-left-color:#f59e0b; cursor:pointer; animation-delay:0.14s;" onclick="CashView.showHistorialVentasSesion()">
-                    <div class="cx-kpi-bg">📈</div>
-                    <div class="cx-kpi-lbl" style="color:#f59e0b;">Total Sesión</div>
-                    <div class="cx-kpi-val">${formatCLP(summary.totalSalesAmount)}</div>
-                    <div class="cx-kpi-sub">${summary.totalSales} tickets · click para ver</div>
+                    <div class="cx-kpi-sub">Inicial + ventas en efectivo</div>
                 </div>
 
                 <!-- Ganancia Neta Estimada -->
-                <div class="cx-kpi" style="border-left-color:#8b5cf6; animation-delay:0.18s;" title="Ganancia neta estimada del turno = (Ventas Neto sin IVA 19%) - (Costo Neto de los Productos Vendidos). Los gastos no se restan.">
+                <div class="cx-kpi" style="border-left-color:#8b5cf6; animation-delay:0.14s;" title="Ganancia neta estimada del turno = (Ventas Neto sin IVA 19%) - (Costo Neto de los Productos Vendidos).">
                     <div class="cx-kpi-bg">💎</div>
                     <div class="cx-kpi-lbl" style="color:#8b5cf6;">Ganancia Neta Turno</div>
                     <div class="cx-kpi-val" style="color:#7c3aed;">${formatCLP(estimatedNetProfit)}</div>
@@ -512,20 +536,11 @@ const CashView = {
                 </div>
             </div>
 
-            <!-- ===== TOTALES DE SESIÓN ===== -->
+            <!-- ===== OPERACIONES DE LA SESIÓN ===== -->
             <div style="font-size:0.88rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:1px; margin-bottom:0.875rem; display:flex; align-items:center; gap:0.5rem; animation: cxFadeUp 0.3s ease both; animation-delay:0.25s;">
-                📈 Totales Acumulados de la Sesión
+                📋 Operaciones Complementarias del Turno
             </div>
-            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:1rem;">
-
-                <div class="cx-total-card" onclick="CashView.showHistorialVentasSesion()">
-                    <div class="cx-total-icon" style="background:#eff6ff;">🛍️</div>
-                    <div style="flex:1;">
-                        <div class="cx-total-lbl">Total Ventas</div>
-                        <div class="cx-total-val">${formatCLP(summary.totalSalesAmount)}</div>
-                        <div class="cx-total-foot">${summary.totalSales} tickets emitidos</div>
-                    </div>
-                </div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:1rem;">
 
                 <div class="cx-total-card" onclick="CashView.showClientesPagaron()">
                     <div class="cx-total-icon" style="background:#ecfdf5;">💰</div>
@@ -536,14 +551,28 @@ const CashView = {
                     </div>
                 </div>
 
-                <div class="cx-total-card" onclick="CashView.showAnotadosSesion()">
-                    <div class="cx-total-icon" style="background:#fef2f2;">📝</div>
+                <div class="cx-total-card" onclick="CashView.showMovimientosManuales()">
+                    <div class="cx-total-icon" style="background:#fffbeb;">🔁</div>
                     <div style="flex:1;">
-                        <div class="cx-total-lbl">Total Fiados</div>
-                        <div class="cx-total-val" style="color:#dc2626;">${formatCLP(totalSessionAnotados)}</div>
-                        <div class="cx-total-foot">Ventas anotadas / deuda</div>
+                        <div class="cx-total-lbl">Ingresos y Retiros</div>
+                        <div style="display:flex; gap:0.75rem; margin-top:0.2rem;">
+                            <span style="font-size:1rem; font-weight:800; color:#059669;">+${formatCLP(summary.totalCashIn)}</span>
+                            <span style="font-size:1rem; font-weight:800; color:#dc2626;">-${formatCLP(summary.totalRetiros)}</span>
+                        </div>
+                        <div class="cx-total-foot">Gestión manual de efectivo</div>
                     </div>
                 </div>
+
+                <div class="cx-total-card" onclick="CashView.showHistorialVentasSesion()">
+                    <div class="cx-total-icon" style="background:#eff6ff;">📜</div>
+                    <div style="flex:1;">
+                        <div class="cx-total-lbl">Historial de Tickets</div>
+                        <div class="cx-total-val" style="color:#3b82f6;">${summary.totalSales} tickets</div>
+                        <div class="cx-total-foot">Ver detalle completo</div>
+                    </div>
+                </div>
+
+            </div>
 
                 <div class="cx-total-card" onclick="CashView.showMovimientosManuales()">
                     <div class="cx-total-icon" style="background:#fffbeb;">🔁</div>
@@ -2772,5 +2801,115 @@ const CashView = {
         } catch (e) {
             showNotification(e.message, 'error');
         }
+    },
+
+    _partialSums: [],
+    showPartialSumsCalculator(targetInputId) {
+        this._partialSums = [];
+        const renderSumsList = () => {
+            const listEl = document.getElementById('partialSumsList');
+            const totalEl = document.getElementById('partialSumsTotal');
+            if (!listEl || !totalEl) return;
+            const total = this._partialSums.reduce((a, b) => a + b, 0);
+            totalEl.innerText = formatCLP(total);
+            if (this._partialSums.length === 0) {
+                listEl.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:1.5rem; font-weight:600;">No has agregado montos aún. Ingresa un valor abajo y haz clic en ➕ Agregar.</div>';
+                return;
+            }
+            listEl.innerHTML = this._partialSums.map((amt, idx) => `
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; border:1.5px solid #e2e8f0; padding:0.6rem 1rem; border-radius:0.75rem; margin-bottom:0.5rem;">
+                    <span style="font-weight:800; color:#1e293b; font-size:1.1rem;">#${idx + 1} &nbsp; ${formatCLP(amt)}</span>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="CashView.removePartialSum(${idx})" style="font-weight:900; font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:0.5rem;">✕ Borrar</button>
+                </div>
+            `).join('');
+        };
+
+        const content = `
+            <div style="background:#0f172a; padding:1.25rem; border-radius:1rem; color:#fff; text-align:center; margin-bottom:1.25rem;">
+                <span style="color:#94a3b8; font-size:0.75rem; font-weight:900; text-transform:uppercase; letter-spacing:1px; display:block; margin-bottom:0.25rem;">Suma Total Acumulada</span>
+                <div id="partialSumsTotal" style="font-size:2.4rem; font-weight:950; color:#10b981; letter-spacing:-1px;">$0</div>
+            </div>
+
+            <div style="margin-bottom:1rem;">
+                <label style="font-weight:800; color:#475569; font-size:0.8rem; text-transform:uppercase; display:block; margin-bottom:0.4rem;">💡 Ingresa un Monto Contado (ej: 50000):</label>
+                <div style="display:flex; gap:0.5rem;">
+                    <input type="number" id="partialInput" class="form-control" placeholder="Monto parcial..." style="height:50px; font-size:1.4rem; font-weight:900; border-radius:0.75rem; border:2px solid #cbd5e1; flex:1;" onkeydown="if(event.key==='Enter'){ event.preventDefault(); CashView.addPartialSum();}">
+                    <button type="button" class="btn btn-primary" onclick="CashView.addPartialSum()" style="height:50px; font-weight:900; padding:0 1.25rem; border-radius:0.75rem;">➕ Agregar</button>
+                </div>
+            </div>
+
+            <div style="font-weight:800; color:#64748b; font-size:0.8rem; text-transform:uppercase; margin-bottom:0.5rem;">📋 Lista de Montos Agregados:</div>
+            <div id="partialSumsList" style="max-height:200px; overflow-y:auto; padding-right:0.25rem;"></div>
+        `;
+
+        const footer = `
+            <div style="display:flex; justify-content:space-between; gap:1rem; width:100%;">
+                <button class="btn btn-secondary" onclick="closeModal()" style="font-weight:800; border-radius:0.75rem;">Cancelar</button>
+                <button class="btn btn-success" onclick="CashView.applyPartialSumsTotal('${targetInputId}')" style="font-weight:900; font-size:1rem; padding:0.6rem 1.5rem; border-radius:0.75rem;">
+                    ✅ Usar Cifra Total en Caja
+                </button>
+            </div>
+        `;
+
+        showModal(content, { title: '🧮 Calculadora de Sumas Parciales', footer, width: '480px' });
+        setTimeout(() => {
+            renderSumsList();
+            const input = document.getElementById('partialInput');
+            if (input) input.focus();
+        }, 100);
+    },
+
+    addPartialSum() {
+        const input = document.getElementById('partialInput');
+        if (!input) return;
+        const val = parseFloat(input.value) || 0;
+        if (val > 0) {
+            this._partialSums.push(val);
+            input.value = '';
+            input.focus();
+            const listEl = document.getElementById('partialSumsList');
+            const totalEl = document.getElementById('partialSumsTotal');
+            if (listEl && totalEl) {
+                const total = this._partialSums.reduce((a, b) => a + b, 0);
+                totalEl.innerText = formatCLP(total);
+                listEl.innerHTML = this._partialSums.map((amt, idx) => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; border:1.5px solid #e2e8f0; padding:0.6rem 1rem; border-radius:0.75rem; margin-bottom:0.5rem;">
+                        <span style="font-weight:800; color:#1e293b; font-size:1.1rem;">#${idx + 1} &nbsp; ${formatCLP(amt)}</span>
+                        <button type="button" class="btn btn-sm btn-danger" onclick="CashView.removePartialSum(${idx})" style="font-weight:900; font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:0.5rem;">✕ Borrar</button>
+                    </div>
+                `).join('');
+            }
+        }
+    },
+
+    removePartialSum(idx) {
+        this._partialSums.splice(idx, 1);
+        const listEl = document.getElementById('partialSumsList');
+        const totalEl = document.getElementById('partialSumsTotal');
+        if (listEl && totalEl) {
+            const total = this._partialSums.reduce((a, b) => a + b, 0);
+            totalEl.innerText = formatCLP(total);
+            if (this._partialSums.length === 0) {
+                listEl.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:1.5rem; font-weight:600;">No has agregado montos aún. Ingresa un valor abajo y haz clic en ➕ Agregar.</div>';
+                return;
+            }
+            listEl.innerHTML = this._partialSums.map((amt, idx) => `
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; border:1.5px solid #e2e8f0; padding:0.6rem 1rem; border-radius:0.75rem; margin-bottom:0.5rem;">
+                    <span style="font-weight:800; color:#1e293b; font-size:1.1rem;">#${idx + 1} &nbsp; ${formatCLP(amt)}</span>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="CashView.removePartialSum(${idx})" style="font-weight:900; font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:0.5rem;">✕ Borrar</button>
+                </div>
+            `).join('');
+        }
+    },
+
+    applyPartialSumsTotal(targetInputId) {
+        const total = this._partialSums.reduce((a, b) => a + b, 0);
+        const input = document.getElementById(targetInputId);
+        if (input) {
+            input.value = total;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        closeModal();
     }
 };

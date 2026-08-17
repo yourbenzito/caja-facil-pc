@@ -1883,11 +1883,25 @@ const POSView = {
     },
 
     startNewSale() {
-        posController.clearCart();
+        if (typeof posController !== 'undefined') {
+            if (typeof posController.clearCart === 'function') posController.clearCart();
+            else if (typeof posController.resetCart === 'function') posController.resetCart();
+        }
         this.removeCustomer();
+        this.selectedCustomer = null;
+        this.customerResults = [];
+        this.selectedDocType = 'boleta';
         this.updateCart();
-        this.updateRecentSalesUI();
-        setTimeout(() => this.focusSearch(), 150);
+        if (typeof this.updateRecentSalesUI === 'function') {
+            this.updateRecentSalesUI();
+        }
+        const searchInput = document.getElementById('productSearch');
+        if (searchInput) {
+            searchInput.value = '';
+            setTimeout(() => { searchInput.focus(); }, 150);
+        } else if (typeof this.focusSearch === 'function') {
+            setTimeout(() => this.focusSearch(), 150);
+        }
     },
 
     showCreateCustomerForm() {
@@ -2267,24 +2281,6 @@ const POSView = {
 
         } catch (error) {
             console.error('[POS] Error cargando sugerencias:', error);
-        }
-    },
-
-    startNewSale() {
-        if (typeof posController !== 'undefined' && posController.resetCart) {
-            posController.resetCart();
-        } else if (typeof cart !== 'undefined' && cart.clear) {
-            cart.clear();
-        }
-        this.selectedCustomer = null;
-        this.customerResults = [];
-        this.selectedDocType = 'boleta';
-        this.updateCart();
-        this.updateCustomerUI();
-        const searchInput = document.getElementById('productSearch');
-        if (searchInput) {
-            searchInput.value = '';
-            setTimeout(() => { searchInput.focus(); }, 150);
         }
     },
 

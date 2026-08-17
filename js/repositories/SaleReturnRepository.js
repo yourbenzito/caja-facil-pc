@@ -31,8 +31,11 @@ class SaleReturnRepository extends BaseRepository {
      */
     async findByDateRange(startDate, endDate) {
         try {
-            const start = new Date(startDate).toISOString();
-            const end = new Date(endDate).toISOString();
+            const dStart = startDate ? new Date(startDate) : new Date(0);
+            const dEnd = endDate ? new Date(endDate) : new Date();
+            if (isNaN(dStart.getTime()) || isNaN(dEnd.getTime())) return [];
+            const start = dStart.toISOString();
+            const end = dEnd.toISOString();
             return await this.findByIndexRange('date', start, end);
         } catch (indexError) {
             console.warn('SaleReturnRepository.findByDateRange: index fallback', indexError);

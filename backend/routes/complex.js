@@ -280,6 +280,77 @@ router.post('/api/complex/categories/normalize-all', async (req, res) => {
     }
 });
 
+// Eliminar categoría y reasignar sus productos a una categoría de destino (o 'General')
+router.post('/api/complex/categories/delete-and-reassign', async (req, res) => {
+    const { categoryId, categoryName, targetCategory } = req.body;
+    const bid = req.business_id;
+
+    if (!categoryName) {
+        return res.status(400).json({ error: 'categoryName es requerido' });
+    }
+
+    const cleanSource = formatTitleCase(categoryName);
+    const cleanTarget = targetCategory ? formatTitleCase(targetCategory) : 'General';
+
+    try {
+        await withTransaction(async () => {
+            // 1. Reasignar productos que tenían la categoría a eliminar
+            await dbRun(
+                `UPDATE products SET category = ? WHERE category = ? AND business_id = ?`,
+                [cleanTarget, cleanSource, bid]
+            );
+
+            // 2. Eliminar la categoría de la tabla categories por ID o por Nombre
+            if (categoryId) {
+                await dbRun(`DELETE FROM categories WHERE id = ? AND business_id = ?`, [categoryId, bid]);
+            }
+            await dbRun(`DELETE FROM categories WHERE name = ? AND business_id = ?`, [cleanSource, bid]);
+
+            // 3. Garantizar que la categoría destino exista en la tabla categories
+            const existing = await dbGet(`SELECT id FROM categories WHERE name = ? AND business_id = ?`, [cleanTarget, bid]);
+            if (!existing) {
+                await dbRun(`INSERT INTO categories (name, color, business_id) VALUES (?, '#6b7280', ?)`, [cleanTarget, bid]);
+            }
+        });
+        res.json({ success: true, message: `Categoría "${cleanSource}" eliminada y productos reasignados a "${cleanTarget}"` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Renombrar categoría en la tabla categories y en los productos
+router.post('/api/complex/categories/rename', async (req, res) => {
+    const { categoryId, oldName, newName } = req.body;
+    const bid = req.business_id;
+
+    if (!oldName || !newName) {
+        return res.status(400).json({ error: 'oldName y newName son requeridos' });
+    }
+
+    const cleanOld = formatTitleCase(oldName);
+    const cleanNew = formatTitleCase(newName);
+
+    try {
+        await withTransaction(async () => {
+            // Actualizar productos
+            await dbRun(
+                `UPDATE products SET category = ? WHERE category = ? AND business_id = ?`,
+                [cleanNew, cleanOld, bid]
+            );
+
+            // Actualizar o renombrar en tabla categories
+            if (categoryId) {
+                await dbRun(`UPDATE categories SET name = ? WHERE id = ? AND business_id = ?`, [cleanNew, categoryId, bid]);
+            } else {
+                await dbRun(`UPDATE categories SET name = ? WHERE name = ? AND business_id = ?`, [cleanNew, cleanOld, bid]);
+            }
+        });
+        res.json({ success: true, message: `Categoría renombrada de "${cleanOld}" a "${cleanNew}"` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Alias de actualización de productos para compatibilidad
 router.put('/api/products/:id', async (req, res) => {
     const { id } = req.params; 

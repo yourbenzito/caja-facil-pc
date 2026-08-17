@@ -234,8 +234,8 @@ async function runSchemaMigrations() {
         const genericSupplier = await dbGet("SELECT id FROM suppliers WHERE (name LIKE '%Genérico%' OR name LIKE '%Varios%' OR id = 1) LIMIT 1");
         if (!genericSupplier) {
             await dbRun(`
-                INSERT OR IGNORE INTO suppliers (id, name, contactName, phone, email, address, taxId, business_id)
-                VALUES (1, 'Proveedor Genérico / Varios', 'Varios', '', '', '', '66666666-6', 1)
+                INSERT OR IGNORE INTO suppliers (id, name, contact, phone, email, address, business_id)
+                VALUES (1, 'Proveedor Genérico / Varios', 'Varios', '', '', '', 1)
             `);
             console.log('[Schema] Proveedor Genérico / Varios creado automáticamente.');
         }

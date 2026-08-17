@@ -277,11 +277,13 @@ const ReportsView = {
                 </div>
                 
                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                    <div style="display: flex; gap: 0.35rem;">
+                    <div style="display: flex; gap: 0.35rem; align-items: center;">
+                        <button class="btn btn-sm btn-secondary" onclick="ReportsView.navigateDailyDate(-1)" title="Día Anterior" style="font-size: 0.9rem; padding: 0.3rem 0.65rem; border-radius: 0.5rem; font-weight: 900; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #1e293b; cursor: pointer;">◀</button>
                         <button class="btn btn-sm ${dateStr === todayStr ? 'btn-primary' : 'btn-secondary'}" 
                                 onclick="ReportsView.handleDailyDateChange('${todayStr}')">Hoy</button>
                         <button class="btn btn-sm ${dateStr === yesterdayStr ? 'btn-primary' : 'btn-secondary'}" 
                                 onclick="ReportsView.handleDailyDateChange('${yesterdayStr}')">Ayer</button>
+                        <button class="btn btn-sm btn-secondary" onclick="ReportsView.navigateDailyDate(1)" title="Día Siguiente" style="font-size: 0.9rem; padding: 0.3rem 0.65rem; border-radius: 0.5rem; font-weight: 900; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #1e293b; cursor: pointer;">▶</button>
                     </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem; background: var(--surface-content); padding: 0.4rem 0.85rem; border-radius: 0.75rem; border: 1px solid var(--border);">
                         <label for="dailyDatePicker" style="font-size: 0.8rem; font-weight: 700; color: var(--secondary); white-space: nowrap;">Fecha:</label>
@@ -337,59 +339,40 @@ const ReportsView = {
                 </div>
             </div>
 
-            <!-- FILA 2: MÉTODOS DE PAGO Y ANULACIONES + SECCIONES DE RELEVANCIA -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;">
-                <!-- Desglose Métodos de Pago del Día -->
-                <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem;">
-                    <h4 style="margin-bottom: 1rem; font-size: 0.95rem; display: flex; justify-content: space-between; align-items: center;">
-                        <span>💳 Métodos de Pago e Ingresos</span>
-                        <span style="font-size: 0.75rem; color: var(--secondary);">Haz clic en Fiados o Cobros para ver detalles</span>
-                    </h4>
-                    <div class="grid grid-2" style="gap: 0.75rem;">
-                        <div style="text-align: center; padding: 0.65rem; background: rgba(16, 185, 129, 0.08); border-radius: 0.75rem; border: 1px solid rgba(16, 185, 129, 0.2);">
-                            <div style="font-size: 0.75rem; color: #059669; font-weight: 700;">💵 Efectivo Recibido</div>
-                            <div style="font-size: 1.1rem; font-weight: 900; color: #059669;">${formatCLP(paymentMethods.cash)}</div>
-                        </div>
-                        <div style="text-align: center; padding: 0.65rem; background: rgba(59, 130, 246, 0.08); border-radius: 0.75rem; border: 1px solid rgba(59, 130, 246, 0.2);">
-                            <div style="font-size: 0.75rem; color: #2563eb; font-weight: 700;">💳 Tarjeta Recibida</div>
-                            <div style="font-size: 1.1rem; font-weight: 900; color: #2563eb;">${formatCLP(paymentMethods.card)}</div>
-                        </div>
-                        <div style="text-align: center; padding: 0.65rem; background: rgba(139, 92, 246, 0.08); border-radius: 0.75rem; border: 1px solid rgba(139, 92, 246, 0.2);">
-                            <div style="font-size: 0.75rem; color: #7c3aed; font-weight: 700;">📱 QR / Digital</div>
-                            <div style="font-size: 1.1rem; font-weight: 900; color: #7c3aed;">${formatCLP(paymentMethods.qr)}</div>
-                        </div>
-                        <!-- Clickeable: Fiados anotados hoy -->
-                        <div style="text-align: center; padding: 0.65rem; background: rgba(239, 68, 68, 0.08); border-radius: 0.75rem; border: 1px solid rgba(239, 68, 68, 0.25); cursor: pointer;" 
-                             onclick="ReportsView.showDailyFiadosModal('${dateStr}')" title="Ver deudas otorgadas hoy">
-                            <div style="font-size: 0.75rem; color: #dc2626; font-weight: 800;">📝 Fiados Anotados Hoy 🔍</div>
-                            <div style="font-size: 1.1rem; font-weight: 900; color: #dc2626;">${formatCLP(paymentMethods.pending)}</div>
-                        </div>
-                    </div>
-                </div>
-
+            <!-- FILA 2: COBROS, DEVOLUCIONES Y ANULACIONES DE LA JORNADA -->
+            <div style="margin-bottom: 1.5rem;">
                 <!-- Cobros de Deudas + Devoluciones y Anulaciones -->
-                <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; display: flex; flex-direction: column; justify-content: space-between;">
-                    <div>
-                        <h4 style="margin-bottom: 1rem; font-size: 0.95rem;">🤝 Cobros y Devoluciones</h4>
-                        
+                <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem;">
+                    <h4 style="margin-bottom: 1rem; font-size: 0.95rem;">🤝 Movimientos Financieros Especiales de la Jornada</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+                        <!-- Clickeable: Fiados anotados hoy -->
+                        <div style="padding: 0.85rem 1rem; background: rgba(239, 68, 68, 0.08); border-radius: 0.75rem; border: 1.5px solid rgba(239, 68, 68, 0.25); cursor: pointer; display: flex; justify-content: space-between; align-items: center;" 
+                             onclick="ReportsView.showDailyFiadosModal('${dateStr}')" title="Ver deudas otorgadas hoy">
+                            <div>
+                                <div style="font-weight: 800; color: #dc2626; font-size: 0.85rem;">📝 Fiados Anotados Hoy 🔍</div>
+                                <div style="font-size: 0.75rem; color: var(--secondary);">Nuevas deudas del día</div>
+                            </div>
+                            <div style="font-size: 1.25rem; font-weight: 900; color: #dc2626;">${formatCLP(paymentMethods.pending)}</div>
+                        </div>
+
                         <!-- Clickeable: Abonos recibidos hoy -->
-                        <div style="padding: 0.75rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem; margin-bottom: 0.75rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center;"
+                        <div style="padding: 0.85rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center;"
                              onclick="ReportsView.showDailyPaymentsModal('${dateStr}')"
                              title="Haz clic para ver qué clientes abonaron/pagaron deudas hoy">
                             <div>
                                 <div style="font-weight: 800; color: #059669; font-size: 0.85rem;">🤝 Deudas Cobradas Hoy (${paymentsReceivedToday.length}) 🔍</div>
                                 <div style="font-size: 0.75rem; color: var(--secondary);">Abonos recuperados hoy</div>
                             </div>
-                            <div style="font-size: 1.15rem; font-weight: 900; color: #059669;">+${formatCLP(totalDebtPaymentsToday)}</div>
+                            <div style="font-size: 1.25rem; font-weight: 900; color: #059669;">+${formatCLP(totalDebtPaymentsToday)}</div>
                         </div>
 
                         <!-- Devoluciones y Anulaciones -->
-                        <div style="padding: 0.75rem 1rem; background: rgba(239, 68, 68, 0.05); border: 1px dashed rgba(239, 68, 68, 0.3); border-radius: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="padding: 0.85rem 1rem; background: rgba(239, 68, 68, 0.05); border: 1px dashed rgba(239, 68, 68, 0.3); border-radius: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
                             <div>
                                 <div style="font-weight: 800; color: #dc2626; font-size: 0.85rem;">🔄 Ventas Anuladas / Devoluciones (${cancelledCount})</div>
                                 <div style="font-size: 0.75rem; color: var(--secondary);">Ventas canceladas en el día</div>
                             </div>
-                            <div style="font-size: 1.15rem; font-weight: 900; color: #dc2626;">-${formatCLP(cancelledAmount)}</div>
+                            <div style="font-size: 1.25rem; font-weight: 900; color: #dc2626;">-${formatCLP(cancelledAmount)}</div>
                         </div>
                     </div>
                 </div>
@@ -2723,6 +2706,20 @@ const ReportsView = {
         } catch (error) {
             showNotification(error.message, 'error');
         }
+    },
+
+    handleDailyDateChange(dateStr) {
+        if (!dateStr) return;
+        this.selectedDailyDate = dateStr;
+        this.showReport('daily');
+    },
+
+    navigateDailyDate(offsetDays) {
+        const currentDateStr = this.selectedDailyDate || new Date().toISOString().slice(0, 10);
+        const d = new Date(`${currentDateStr}T12:00:00`);
+        d.setDate(d.getDate() + offsetDays);
+        const newDateStr = d.toISOString().slice(0, 10);
+        this.handleDailyDateChange(newDateStr);
     },
 
     async handleMonthChange(value) {

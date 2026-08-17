@@ -3,6 +3,17 @@ class Product {
 
     static async create(data) {
         const categoryName = (typeof CategoryHelper !== 'undefined') ? CategoryHelper.sanitize(data.category) : (data.category ? data.category.trim() : 'General');
+        
+        // Auto-registrar categoría en la lista oficial si aún no existe
+        if (typeof Category !== 'undefined' && categoryName) {
+            try {
+                const uniqueCats = await Category.getUniqueNames();
+                if (!uniqueCats.some(c => (typeof CategoryHelper !== 'undefined') ? CategoryHelper.areEqual(c, categoryName) : c.toLowerCase() === categoryName.toLowerCase())) {
+                    await Category.create(categoryName);
+                }
+            } catch (_) {}
+        }
+
         const product = {
             barcode: data.barcode || '',
             name: data.name,
@@ -463,12 +474,18 @@ class Product {
         const stats = {};
         products.forEach(p => {
             const cat = p.category || 'General';
-            if (!stats[cat]) stats[cat] = { category: cat, total: 0, low: 0, out: 0 };
+            if (!stats[cat]) stats[cat] = { category: cat, total: 0, low: 0, out: 0, negative: 0 };
             stats[cat].total++;
             const stock = parseFloat(p.stock) || 0;
             const minStock = parseFloat(p.minStock) || 0;
-            if (stock <= 0) stats[cat].out++;
-            else if (stock <= minStock) stats[cat].low++;
+            if (stock < 0) {
+                stats[cat].negative++;
+                stats[cat].out++;
+            } else if (stock === 0) {
+                stats[cat].out++;
+            } else if (stock <= minStock) {
+                stats[cat].low++;
+            }
         });
         return Object.values(stats);
     }
