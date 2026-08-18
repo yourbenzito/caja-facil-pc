@@ -1430,17 +1430,16 @@ const PurchasesView = {
                     height: 100% !important;
                     overflow: hidden !important;
                 }
-                .purchase-stepper { display: flex; justify-content: space-between; position: relative; margin-bottom: 1.25rem; padding: 0 3rem; flex-shrink: 0; }
-                .purchase-stepper::before { content: ''; position: absolute; top: 20px; left: 10%; right: 10%; height: 3px; background: rgba(255,255,255,0.05); z-index: 1; border-radius: 4px; }
-                .step-item { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; flex: 1; cursor: pointer; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
-                .step-dot { width: 40px; height: 40px; border-radius: 50%; background: #0f172a; border: 3px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; font-weight: 900; color: #475569; position: relative; }
-                .step-item.active .step-dot { background: var(--primary); border-color: #fff; color: white; transform: scale(1.15); box-shadow: 0 0 30px rgba(79, 70, 229, 0.5); }
-                .step-item.completed .step-dot { background: #059669; border-color: #fff; color: white; }
-                .step-item.completed .step-dot::after { content: '✓'; font-size: 0.9rem; position: absolute; top: -5px; right: -5px; background: #fff; color: #059669; border-radius: 50%; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; border: 2px solid #059669; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
-                .step-item.completed .step-dot span { display: block !important; }
-                .step-label { font-size: 0.78rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 1px; text-align: center; }
-                .step-item.active .step-label { color: #1e293b; }
-                .step-item.completed .step-label { color: #059669; }
+                .purchase-stepper { display: flex; justify-content: space-around; align-items: center; background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 0.85rem; padding: 0.4rem 0.75rem; margin-bottom: 0.65rem; flex-shrink: 0; }
+                .step-item { display: flex; align-items: center; gap: 0.45rem; cursor: pointer; padding: 0.3rem 0.85rem; border-radius: 0.6rem; transition: all 0.2s; border: 1.5px solid transparent; }
+                .step-dot { width: 26px; height: 26px; border-radius: 50%; background: #cbd5e1; border: 2px solid #94a3b8; display: flex; align-items: center; justify-content: center; font-weight: 950; font-size: 0.85rem; color: #1e293b; position: relative; }
+                .step-item.active { background: #eff6ff; border-color: #3b82f6; box-shadow: 0 2px 8px rgba(59,130,246,0.15); }
+                .step-item.active .step-dot { background: #3b82f6; border-color: #2563eb; color: #ffffff; }
+                .step-item.active .step-label { color: #1e3a8a; font-weight: 950; }
+                .step-item.completed { background: #f0fdf4; border-color: #10b981; }
+                .step-item.completed .step-dot { background: #10b981; border-color: #059669; color: #ffffff; }
+                .step-item.completed .step-label { color: #065f46; font-weight: 900; }
+                .step-label { font-size: 0.85rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
                 
                 .step-content { display: none; animation: slideVertical 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; overflow: hidden; flex: 1; min-height: 0; }
                 .step-content.active { display: flex !important; flex-direction: column !important; flex: 1 !important; min-height: 0 !important; height: 100% !important; overflow: hidden !important; }
@@ -1623,7 +1622,7 @@ const PurchasesView = {
                 </div>
 
                 <!-- PASO 2: PRODUCTOS -->
-                <div id="step-content-2" class="step-content" style="max-height: calc(82vh - 160px); overflow-y: auto; padding-right: 0.3rem;">
+                <div id="step-content-2" class="step-content" style="max-height: calc(85vh - 120px); overflow-y: auto; padding-right: 0.3rem;">
                     <div style="background: #ffffff; border: 3px solid #3b82f6; border-radius: 1.25rem; padding: 1rem; margin-bottom: 0.75rem; box-shadow: 0 4px 15px rgba(0,0,0,0.05); flex-shrink: 0;">
                         <label style="font-size: 1rem; color: #1e293b; font-weight: 950; margin-bottom: 0.4rem; display: block; text-transform: uppercase; letter-spacing: 0.5px;">🔍 BUSCAR O ESCANEAR PRODUCTO</label>
                         <div class="search-box" style="position: relative;">
@@ -1646,7 +1645,7 @@ const PurchasesView = {
                         </button>
                     </div>
                     
-                    <div id="purchaseItemsList" class="mobile-scroll-container" style="background: #ffffff; border-radius: 1.25rem; border: 3px solid #1e293b; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow-y: auto; min-height: 180px; max-height: 260px;">
+                    <div id="purchaseItemsList" class="mobile-scroll-container" style="background: #ffffff; border-radius: 1.25rem; border: 3px solid #1e293b; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow-y: auto; min-height: 220px; max-height: 380px; flex: 1;">
                         ${this.renderPurchaseItems()}
                     </div>
 
