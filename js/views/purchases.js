@@ -1430,16 +1430,16 @@ const PurchasesView = {
                     height: 100% !important;
                     overflow: hidden !important;
                 }
-                .purchase-stepper { display: flex; justify-content: space-around; align-items: center; background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 0.85rem; padding: 0.4rem 0.75rem; margin-bottom: 0.65rem; flex-shrink: 0; }
-                .step-item { display: flex; align-items: center; gap: 0.45rem; cursor: pointer; padding: 0.3rem 0.85rem; border-radius: 0.6rem; transition: all 0.2s; border: 1.5px solid transparent; }
-                .step-dot { width: 26px; height: 26px; border-radius: 50%; background: #cbd5e1; border: 2px solid #94a3b8; display: flex; align-items: center; justify-content: center; font-weight: 950; font-size: 0.85rem; color: #1e293b; position: relative; }
-                .step-item.active { background: #eff6ff; border-color: #3b82f6; box-shadow: 0 2px 8px rgba(59,130,246,0.15); }
+                .purchase-stepper { display: flex; justify-content: space-around; align-items: center; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 0.6rem; padding: 0.25rem 0.5rem; margin-bottom: 0.4rem; flex-shrink: 0; height: 36px; }
+                .step-item { display: flex; align-items: center; gap: 0.35rem; cursor: pointer; padding: 0.2rem 0.6rem; border-radius: 0.4rem; transition: all 0.2s; border: 1px solid transparent; }
+                .step-dot { width: 22px; height: 22px; border-radius: 50%; background: #cbd5e1; border: 1.5px solid #94a3b8; display: flex; align-items: center; justify-content: center; font-weight: 950; font-size: 0.75rem; color: #1e293b; position: relative; }
+                .step-item.active { background: #eff6ff; border-color: #3b82f6; box-shadow: 0 1px 5px rgba(59,130,246,0.12); }
                 .step-item.active .step-dot { background: #3b82f6; border-color: #2563eb; color: #ffffff; }
                 .step-item.active .step-label { color: #1e3a8a; font-weight: 950; }
                 .step-item.completed { background: #f0fdf4; border-color: #10b981; }
                 .step-item.completed .step-dot { background: #10b981; border-color: #059669; color: #ffffff; }
                 .step-item.completed .step-label { color: #065f46; font-weight: 900; }
-                .step-label { font-size: 0.85rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+                .step-label { font-size: 0.78rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
                 
                 .step-content { display: none; animation: slideVertical 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; overflow: hidden; flex: 1; min-height: 0; }
                 .step-content.active { display: flex !important; flex-direction: column !important; flex: 1 !important; min-height: 0 !important; height: 100% !important; overflow: hidden !important; }
@@ -1622,15 +1622,15 @@ const PurchasesView = {
                 </div>
 
                 <!-- PASO 2: PRODUCTOS -->
-                <div id="step-content-2" class="step-content" style="max-height: calc(85vh - 120px); overflow-y: auto; padding-right: 0.3rem;">
-                    <div style="background: #ffffff; border: 3px solid #3b82f6; border-radius: 1.25rem; padding: 1rem; margin-bottom: 0.75rem; box-shadow: 0 4px 15px rgba(0,0,0,0.05); flex-shrink: 0;">
-                        <label style="font-size: 1rem; color: #1e293b; font-weight: 950; margin-bottom: 0.4rem; display: block; text-transform: uppercase; letter-spacing: 0.5px;">🔍 BUSCAR O ESCANEAR PRODUCTO</label>
+                <div id="step-content-2" class="step-content" style="overflow-y: auto; max-height: calc(88vh - 100px); padding-right: 0.2rem;">
+                    <div style="background: #ffffff; border: 2px solid #3b82f6; border-radius: 0.85rem; padding: 0.65rem 0.85rem; margin-bottom: 0.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.03); flex-shrink: 0;">
+                        <label style="font-size: 0.85rem; color: #1e293b; font-weight: 950; margin-bottom: 0.25rem; display: block; text-transform: uppercase; letter-spacing: 0.5px;">🔍 BUSCAR O ESCANEAR PRODUCTO</label>
                         <div class="search-box" style="position: relative;">
                             <input type="text" 
                                    id="productSearchInput" 
                                    class="form-control" 
-                                   placeholder="ESCANEA EL CÓDIGO O ESCRIBE EL NOMBRE AQUÍ..."
-                                   style="height: 54px; border: 3px solid #1e293b; background: #f8fafc; font-size: 1.2rem; font-weight: 900; color: #000; padding-left: 1.25rem; border-radius: 0.75rem;"
+                                   placeholder="ESCANEA CÓDIGO O ESCRIBE EL NOMBRE AQUÍ..."
+                                   style="height: 44px; border: 2px solid #1e293b; background: #f8fafc; font-size: 1rem; font-weight: 900; color: #000; padding-left: 1rem; border-radius: 0.6rem;"
                                    autocomplete="off">
                             <div id="purchaseProductSearchResults" class="pos-search-results"></div>
                         </div>
@@ -1638,27 +1638,27 @@ const PurchasesView = {
 
                     <div id="productSelectionArea"></div>
                     
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; gap: 1rem; flex-wrap: wrap;">
-                        <h5 style="margin: 0; font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.95rem; letter-spacing: 0.5px;">📋 Productos en el Carro</h5>
-                        <button type="button" class="btn btn-danger" onclick="PurchasesView.clearAllItemSpecialTaxes()" style="font-weight: 900; font-size: 0.8rem; padding: 0.4rem 1rem; border-radius: 0.5rem; border: 2px solid #fff; box-shadow: 0 4px 10px rgba(239,68,68,0.2);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem; gap: 0.75rem; flex-wrap: wrap;">
+                        <h5 style="margin: 0; font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.88rem; letter-spacing: 0.5px;">📋 Productos en el Carro</h5>
+                        <button type="button" class="btn btn-danger" onclick="PurchasesView.clearAllItemSpecialTaxes()" style="font-weight: 900; font-size: 0.75rem; padding: 0.3rem 0.75rem; border-radius: 0.4rem; border: 1.5px solid #fff; box-shadow: 0 2px 6px rgba(239,68,68,0.2);">
                             ❌ QUITAR IMPUESTOS ESPECIALES
                         </button>
                     </div>
                     
-                    <div id="purchaseItemsList" class="mobile-scroll-container" style="background: #ffffff; border-radius: 1.25rem; border: 3px solid #1e293b; box-shadow: 0 10px 25px rgba(0,0,0,0.1); overflow-y: auto; min-height: 220px; max-height: 380px; flex: 1;">
+                    <div id="purchaseItemsList" class="mobile-scroll-container" style="background: #ffffff; border-radius: 1rem; border: 2.5px solid #1e293b; box-shadow: 0 4px 15px rgba(0,0,0,0.08); overflow-y: auto; min-height: 180px; max-height: 320px; flex: 1;">
                         ${this.renderPurchaseItems()}
                     </div>
 
                     <!-- RESUMEN INLINE DE TOTALES PARA PASO 2 -->
-                    <div id="inlineTotalsContainerPaso2" style="background: #0f172a; border: 3px solid #1e293b; border-radius: 1rem; padding: 0.75rem 1.25rem; display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; margin-top: 0.5rem; flex-shrink: 0; flex-wrap: wrap; box-shadow: 0 5px 15px rgba(0,0,0,0.15);">
-                        <div style="display: flex; gap: 1.5rem; flex-wrap: wrap; align-items: center;">
+                    <div id="inlineTotalsContainerPaso2" style="background: #0f172a; border: 2.5px solid #1e293b; border-radius: 0.85rem; padding: 0.5rem 1rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-top: 0.5rem; flex-shrink: 0; flex-wrap: wrap; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                        <div style="display: flex; gap: 1.25rem; flex-wrap: wrap; align-items: center;">
                             <div>
-                                <span style="color: #94a3b8; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; display: block; letter-spacing: 0.5px;">Neto Total:</span>
-                                <strong id="step2Neto" style="font-size: 1.15rem; font-weight: 950; color: #ffffff;">$0</strong>
+                                <span style="color: #94a3b8; font-size: 0.68rem; font-weight: 900; text-transform: uppercase; display: block; letter-spacing: 0.5px;">Neto Total:</span>
+                                <strong id="step2Neto" style="font-size: 1.05rem; font-weight: 950; color: #ffffff;">$0</strong>
                             </div>
                             <div id="step2IvaGroup">
-                                <span style="color: #94a3b8; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; display: block; letter-spacing: 0.5px;">IVA (19%):</span>
-                                <strong id="step2Iva" style="font-size: 1.15rem; font-weight: 950; color: #ffffff;">$0</strong>
+                                <span style="color: #94a3b8; font-size: 0.68rem; font-weight: 900; text-transform: uppercase; display: block; letter-spacing: 0.5px;">IVA (19%):</span>
+                                <strong id="step2Iva" style="font-size: 1.05rem; font-weight: 950; color: #ffffff;">$0</strong>
                             </div>
                             <div id="step2ExtraTaxGroup" style="display: none;">
                                 <span style="color: #f59e0b; font-size: 0.7rem; font-weight: 900; text-transform: uppercase; display: block; letter-spacing: 0.5px;">Imp. Especiales:</span>
@@ -2131,55 +2131,49 @@ const PurchasesView = {
         this.tempProductTaxes = existingItem ? [...(existingItem.additionalTaxesConfig || [])] : [];
         
         selectionArea.innerHTML = `
-            <div class="purchase-add-card" style="background: #ffffff; border: 4px solid #3b82f6; border-radius: 1.5rem; padding: clamp(1rem, 5vw, 2.5rem); margin-top: 1.5rem; position: relative; box-shadow: 0 15px 35px rgba(0,0,0,0.25);">
+            <div class="purchase-add-card" style="background: #ffffff; border: 3px solid #3b82f6; border-radius: 1rem; padding: 1rem 1.25rem; margin-top: 0.5rem; margin-bottom: 0.75rem; position: relative; box-shadow: 0 8px 20px rgba(0,0,0,0.12);">
                 <style>
-                    .add-product-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2rem; margin-bottom: 1.5rem; }
+                    .add-product-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem; }
                     @media (max-width: 800px) {
-                        .add-product-grid { grid-template-columns: 1fr; gap: 1rem; }
-                        .purchase-add-card h4 { font-size: 1.3rem !important; }
+                        .add-product-grid { grid-template-columns: 1fr; gap: 0.5rem; }
                     }
                 </style>
-                <div style="position: absolute; top: -15px; right: 2rem; background: #3b82f6; color: #fff; padding: 0.5rem 1.5rem; border-radius: 2rem; font-size: 0.85rem; font-weight: 900; box-shadow: 0 5px 15px rgba(59,130,246,0.4); border: 2px solid #fff;">
-                    ${product.type === 'weight' ? 'ESCALABLE (PESO / GRANEL)' : 'UNITARIO (UNIDAD)'}
+                <div style="position: absolute; top: -10px; right: 1rem; background: #3b82f6; color: #fff; padding: 0.2rem 0.8rem; border-radius: 1rem; font-size: 0.72rem; font-weight: 900; box-shadow: 0 2px 8px rgba(59,130,246,0.3); border: 1.5px solid #fff;">
+                    ${product.type === 'weight' ? 'PESO / GRANEL' : 'UNITARIO'}
                 </div>
                 
-                <h4 style="margin: 0 0 2rem 0; font-size: 1.8rem; color: #1e293b; font-weight: 950; text-transform: uppercase;">
+                <h4 style="margin: 0 0 0.6rem 0; font-size: 1.15rem; color: #1e293b; font-weight: 950; text-transform: uppercase;">
                     ${product.name}
                 </h4>
                 
                 ${lastCostNeto !== null ? `
-                <div style="background: #fef3c7; border: 2px solid #f59e0b; border-radius: 0.75rem; padding: 1rem; margin-bottom: 1.5rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
-                        <span style="color: #92400e; font-weight: 950; font-size: 0.95rem; text-transform: uppercase;">📊 Última Compra:</span>
-                        <div style="text-align: right;">
-                            <div style="color: #92400e; font-weight: 950; font-size: 1.1rem;">
-                                Neto: $${lastCostNeto.toFixed(2)} | Bruto: $${lastCostGross.toFixed(2)}
-                            </div>
-                            ${lastCostDate ? `<div style="color: #92400e; font-size: 0.8rem; font-weight: 700;">${new Date(lastCostDate).toLocaleDateString()}</div>` : ''}
-                        </div>
-                    </div>
+                <div style="background: #fef3c7; border: 1.5px solid #f59e0b; border-radius: 0.6rem; padding: 0.4rem 0.8rem; margin-bottom: 0.6rem; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="color: #92400e; font-weight: 900; font-size: 0.8rem; text-transform: uppercase;">📊 Última Compra:</span>
+                    <span style="color: #92400e; font-weight: 950; font-size: 0.9rem;">
+                        Neto: $${lastCostNeto.toFixed(2)} | Bruto: $${lastCostGross.toFixed(2)} ${lastCostDate ? `(${new Date(lastCostDate).toLocaleDateString()})` : ''}
+                    </span>
                 </div>
                 ` : ''}
                 
                 <div class="add-product-grid">
-                    <div class="form-group">
-                        <label style="display: block; font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.85rem; margin-bottom: 0.8rem; letter-spacing: 1px;">🛒 Cantidad a Comprar</label>
-                        <div style="display: flex; gap: 0.5rem; width: 100%;">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="display: block; font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.75rem; margin-bottom: 0.25rem;">🛒 Cantidad a Comprar</label>
+                        <div style="display: flex; gap: 0.35rem; width: 100%;">
                             <input type="number" 
                                    id="addQuantity" 
                                    step="any"
                                    class="form-control" 
                                    placeholder="${product.type === 'weight' ? '0.000' : '1'}"
                                    onfocus="this.select()"
-                                   style="height: 70px; font-size: 2rem; font-weight: 950; border-radius: 1rem; text-align: center; border: 3px solid #cbd5e1; background: #f8fafc; color: #000; width: 100%;">
+                                   style="height: 44px; font-size: 1.25rem; font-weight: 950; border-radius: 0.6rem; text-align: center; border: 2px solid #cbd5e1; background: #f8fafc; color: #000; width: 100%;">
                         </div>
                     </div>
                     
-                    <div class="form-group" style="${this.lastVatMode === 'gross' ? 'display:none;' : ''}">
-                        <label id="costInputLabel" style="display: block; font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.85rem; margin-bottom: 0.8rem; letter-spacing: 1px;">
+                    <div class="form-group" style="margin: 0; ${this.lastVatMode === 'gross' ? 'display:none;' : ''}">
+                        <label id="costInputLabel" style="display: block; font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.75rem; margin-bottom: 0.25rem;">
                             ${isBoleta ? '💰 Costo Real Neto' : '💰 Costo Neto'}
                         </label>
-                        <div style="display: flex; gap: 0.5rem; width: 100%;">
+                        <div style="display: flex; gap: 0.35rem; width: 100%;">
                             <input type="number" 
                                    id="addCost" 
                                    step="any"
@@ -2187,21 +2181,21 @@ const PurchasesView = {
                                    value="${lastCostNeto !== null ? lastCostNeto : ((product.costNeto !== undefined && product.costNeto !== null && product.costNeto !== 0) ? product.costNeto : ((product.cost || 0) / 1.19).toFixed(2))}"
                                    placeholder="${lastCostNeto !== null ? `Último: ${lastCostNeto.toFixed(2)}` : ''}"
                                    onfocus="this.select()"
-                                   style="height: 70px; font-size: 2rem; font-weight: 950; border-radius: 1rem; text-align: center; border: 3px solid #10b981; background: #f8fafc; color: #000; flex: 1;">
+                                   style="height: 44px; font-size: 1.25rem; font-weight: 950; border-radius: 0.6rem; text-align: center; border: 2px solid #10b981; background: #f8fafc; color: #000; flex: 1;">
                             <button type="button" 
                                     class="btn btn-secondary" 
                                     onclick="PurchasesView.openCalculatorModal('addCost')" 
-                                    style="width: 70px; height: 70px; font-size: 1.8rem; border-radius: 1rem; display: flex; align-items: center; justify-content: center; background: #e2e8f0; border: 3px solid #cbd5e1; color: #1e293b;" 
+                                    style="width: 44px; height: 44px; font-size: 1.2rem; border-radius: 0.6rem; display: flex; align-items: center; justify-content: center; background: #e2e8f0; border: 2px solid #cbd5e1; color: #1e293b;" 
                                     title="Abrir Calculadora">🧮</button>
                         </div>
-                        <div id="costDiffIndicatorNet" style="font-size: 0.85rem; font-weight: 900; margin-top: 0.4rem; display: none;"></div>
+                        <div id="costDiffIndicatorNet" style="font-size: 0.75rem; font-weight: 900; margin-top: 0.2rem; display: none;"></div>
                     </div>
 
-                    <div class="form-group" style="${this.lastVatMode === 'net' ? 'display:none;' : ''}">
-                        <label id="grossCostInputLabel" style="display: block; font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.85rem; margin-bottom: 0.8rem; letter-spacing: 1px;">
+                    <div class="form-group" style="margin: 0; ${this.lastVatMode === 'net' ? 'display:none;' : ''}">
+                        <label id="grossCostInputLabel" style="display: block; font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.75rem; margin-bottom: 0.25rem;">
                             💰 Costo Bruto
                         </label>
-                        <div style="display: flex; gap: 0.5rem; width: 100%;">
+                        <div style="display: flex; gap: 0.35rem; width: 100%;">
                             <input type="number" 
                                    id="addGrossCost" 
                                    step="any"
@@ -2209,63 +2203,64 @@ const PurchasesView = {
                                    value="${lastCostGross !== null ? lastCostGross : ((product.cost !== undefined && product.cost !== null && product.cost !== 0) ? product.cost : parseFloat((product.costNeto || 0) * 1.19).toFixed(2))}"
                                    placeholder="${lastCostGross !== null ? `Último: ${lastCostGross.toFixed(2)}` : ''}"
                                    onfocus="this.select()"
-                                   style="height: 70px; font-size: 2rem; font-weight: 950; border-radius: 1rem; text-align: center; border: 3px solid #10b981; background: #f8fafc; color: #000; flex: 1;">
+                                   style="height: 44px; font-size: 1.25rem; font-weight: 950; border-radius: 0.6rem; text-align: center; border: 2px solid #10b981; background: #f8fafc; color: #000; flex: 1;">
                             <button type="button" 
                                     class="btn btn-secondary" 
                                     onclick="PurchasesView.openCalculatorModal('addGrossCost')" 
-                                    style="width: 70px; height: 70px; font-size: 1.8rem; border-radius: 1rem; display: flex; align-items: center; justify-content: center; background: #e2e8f0; border: 3px solid #cbd5e1; color: #1e293b;" 
+                                    style="width: 44px; height: 44px; font-size: 1.2rem; border-radius: 0.6rem; display: flex; align-items: center; justify-content: center; background: #e2e8f0; border: 2px solid #cbd5e1; color: #1e293b;" 
                                     title="Abrir Calculadora">🧮</button>
                         </div>
-                        <div id="costDiffIndicatorGross" style="font-size: 0.85rem; font-weight: 900; margin-top: 0.4rem; display: none;"></div>
+                        <div id="costDiffIndicatorGross" style="font-size: 0.75rem; font-weight: 900; margin-top: 0.2rem; display: none;"></div>
                     </div>
                     
-                    <div class="form-group">
-                        <label style="display: block; font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.85rem; margin-bottom: 0.8rem; letter-spacing: 1px;">🏷️ Precio Venta</label>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="display: block; font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.75rem; margin-bottom: 0.25rem;">🏷️ Precio Venta</label>
                         <input type="number" 
                                id="addPrice" 
                                step="any"
                                class="form-control" 
                                value="${product.price || 0}"
                                onfocus="this.select()"
-                               style="height: 70px; font-size: 2rem; font-weight: 950; border-radius: 1rem; text-align: center; border: 3px solid #6366f1; background: #f8fafc; color: #000;">
+                               style="height: 44px; font-size: 1.25rem; font-weight: 950; border-radius: 0.6rem; text-align: center; border: 2px solid #6366f1; background: #f8fafc; color: #000;">
                     </div>
                 </div>
 
-                <div id="pricePreview" style="background: #f1f5f9; padding: 1.5rem 2.5rem; border-radius: 1.25rem; margin-bottom: 2rem; border: 3px solid #e2e8f0; display: flex; flex-direction: column; gap: 0.75rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="color: #475569; font-weight: 950; font-size: 1rem; text-transform: uppercase;">🛒 Neto de la Línea:</span>
-                        <strong id="previewSubtotal" style="font-size: 1.8rem; color: #0f172a;">$0</strong>
+                <!-- Resumen de Margen y Precios Compacto en Grilla -->
+                <div id="pricePreview" style="background: #f8fafc; padding: 0.6rem 0.85rem; border-radius: 0.75rem; margin-bottom: 0.75rem; border: 2px solid #cbd5e1; display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 0.5rem; text-align: center;">
+                    <div style="background: #ffffff; padding: 0.35rem; border-radius: 0.5rem; border: 1px solid #e2e8f0;">
+                        <span style="color: #64748b; font-weight: 800; font-size: 0.65rem; display: block; text-transform: uppercase;">Neto Línea</span>
+                        <strong id="previewSubtotal" style="font-size: 1rem; color: #0f172a; font-weight: 950;">$0</strong>
                     </div>
                     ${!isBoleta ? `
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="color: #475569; font-weight: 950; font-size: 1rem; text-transform: uppercase;">📈 IVA de la Línea (19%):</span>
-                        <strong id="previewIva" style="font-size: 1.6rem; color: #0f172a;">$0</strong>
+                    <div style="background: #ffffff; padding: 0.35rem; border-radius: 0.5rem; border: 1px solid #e2e8f0;">
+                        <span style="color: #64748b; font-weight: 800; font-size: 0.65rem; display: block; text-transform: uppercase;">IVA (19%)</span>
+                        <strong id="previewIva" style="font-size: 1rem; color: #0f172a; font-weight: 950;">$0</strong>
                     </div>
                     ` : ''}
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="color: #475569; font-weight: 950; font-size: 1rem; text-transform: uppercase;">💰 Bruto de la Línea:</span>
-                        <strong id="previewBrutoTotal" style="font-size: 1.8rem; color: #0f172a;">$0</strong>
+                    <div style="background: #ffffff; padding: 0.35rem; border-radius: 0.5rem; border: 1px solid #e2e8f0;">
+                        <span style="color: #64748b; font-weight: 800; font-size: 0.65rem; display: block; text-transform: uppercase;">Bruto Línea</span>
+                        <strong id="previewBrutoTotal" style="font-size: 1rem; color: #0f172a; font-weight: 950;">$0</strong>
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; border-top: 2px solid #cbd5e1; padding-top: 0.5rem;">
-                        <span style="color: #475569; font-weight: 950; font-size: 1rem; text-transform: uppercase;">Margen Real (%) :</span>
-                        <strong id="previewMargin" style="font-size: 1.8rem; font-weight: 950;">0%</strong>
+                    <div style="background: #eff6ff; padding: 0.35rem; border-radius: 0.5rem; border: 1.5px solid #3b82f6;">
+                        <span style="color: #1d4ed8; font-weight: 900; font-size: 0.65rem; display: block; text-transform: uppercase;">Margen Real</span>
+                        <strong id="previewMargin" style="font-size: 1rem; color: #1d4ed8; font-weight: 950;">0%</strong>
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="color: #475569; font-weight: 950; font-size: 1rem; text-transform: uppercase;">Ganancia por Unidad:</span>
-                        <strong id="previewUnitProfit" style="font-size: 1.6rem; color: #10b981;">$0</strong>
+                    <div style="background: #f0fdf4; padding: 0.35rem; border-radius: 0.5rem; border: 1.5px solid #10b981;">
+                        <span style="color: #047857; font-weight: 900; font-size: 0.65rem; display: block; text-transform: uppercase;">Ganancia/Unid</span>
+                        <strong id="previewUnitProfit" style="font-size: 1rem; color: #10b981; font-weight: 950;">$0</strong>
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="color: #475569; font-weight: 950; font-size: 1rem; text-transform: uppercase;">Ganancia Total Esperada:</span>
-                        <strong id="previewProfit" style="font-size: 1.8rem; color: #10b981;">$0</strong>
+                    <div style="background: #f0fdf4; padding: 0.35rem; border-radius: 0.5rem; border: 1.5px solid #10b981;">
+                        <span style="color: #047857; font-weight: 900; font-size: 0.65rem; display: block; text-transform: uppercase;">Ganancia Total</span>
+                        <strong id="previewProfit" style="font-size: 1rem; color: #10b981; font-weight: 950;">$0</strong>
                     </div>
                 </div>
                 
-                <div style="display: flex; gap: 1.5rem;">
-                    <button type="button" class="btn btn-xl btn-primary" onclick="PurchasesView.addProductToPurchase(${product.id})" style="flex: 2; height: 75px; font-weight: 950; font-size: 1.3rem; border-radius: 1.25rem; border: 3px solid #fff; box-shadow: 0 10px 20px rgba(59,130,246,0.3);">
+                <div style="display: flex; gap: 0.75rem;">
+                    <button type="button" class="btn btn-primary" onclick="PurchasesView.addProductToPurchase(${product.id})" style="flex: 2; height: 48px; font-weight: 950; font-size: 1rem; border-radius: 0.6rem; border: 2px solid #fff; box-shadow: 0 4px 12px rgba(59,130,246,0.3);">
                         ✅ AGREGAR AL LISTADO DE COMPRA
                     </button>
-                    <button type="button" class="btn btn-xl btn-secondary" onclick="PurchasesView.cancelAddProduct()" style="flex: 1; height: 75px; font-weight: 950; border-radius: 1.25rem; background: #e2e8f0; color: #475569; border: 3px solid #cbd5e1;">
-                        ❌ DESCARCARTAR
+                    <button type="button" class="btn btn-secondary" onclick="PurchasesView.cancelAddProduct()" style="flex: 1; height: 48px; font-weight: 950; font-size: 0.95rem; border-radius: 0.6rem; background: #e2e8f0; color: #475569; border: 2px solid #cbd5e1;">
+                        ❌ DESCARTAR
                     </button>
                 </div>
             </div>
