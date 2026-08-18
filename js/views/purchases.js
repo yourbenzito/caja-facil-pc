@@ -2232,40 +2232,6 @@ const PurchasesView = {
                     </div>
                 </div>
 
-                <!-- Sección de Impuestos Especiales/Adicionales -->
-                <div style="background: #fffbeb; border: 3px solid #f59e0b; border-radius: 1.25rem; padding: 1.25rem; margin-bottom: 1.5rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
-                        <span style="color: #b45309; font-weight: 950; font-size: 1rem; text-transform: uppercase; display: flex; align-items: center; gap: 0.5rem;">📝 Impuestos Adicionales / Especiales</span>
-                        <button type="button" class="btn btn-secondary" onclick="document.getElementById('manualTaxFormGroup').style.display = document.getElementById('manualTaxFormGroup').style.display === 'none' ? 'flex' : 'none'" style="font-weight: 900; font-size: 0.8rem; padding: 0.4rem 1rem; border-radius: 0.5rem; background: #fef3c7; color: #b45309; border: 2px solid #f59e0b;">
-                            ➕ AGREGAR IMPUESTO
-                        </button>
-                    </div>
-                    
-                    <!-- Inputs para agregar impuesto manual -->
-                    <div id="manualTaxFormGroup" style="display: none; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; padding: 1rem; background: #ffffff; border-radius: 0.75rem; border: 2px dashed #f59e0b;">
-                        <div style="flex: 2; min-width: 150px;">
-                            <label style="display: block; font-size: 0.75rem; font-weight: 900; color: #475569; text-transform: uppercase; margin-bottom: 0.25rem;">Nombre/Tipo</label>
-                            <input type="text" id="manualTaxName" class="form-control" placeholder="Ej: IABA" style="height: 42px; font-size: 1rem; font-weight: 900; border-radius: 0.5rem; border: 2px solid #cbd5e1;">
-                        </div>
-                        <div style="flex: 1; min-width: 80px;">
-                            <label style="display: block; font-size: 0.75rem; font-weight: 900; color: #475569; text-transform: uppercase; margin-bottom: 0.25rem;">Tasa %</label>
-                            <input type="number" id="manualTaxRate" class="form-control" placeholder="Ej: 18" style="height: 42px; font-size: 1rem; font-weight: 900; border-radius: 0.5rem; border: 2px solid #cbd5e1; text-align: center;">
-                        </div>
-                        <div style="flex: 1.5; min-width: 100px;">
-                            <label style="display: block; font-size: 0.75rem; font-weight: 900; color: #475569; text-transform: uppercase; margin-bottom: 0.25rem;">Monto Dinero ($)</label>
-                            <input type="number" id="manualTaxAmount" class="form-control" placeholder="Ej: 2932" style="height: 42px; font-size: 1rem; font-weight: 900; border-radius: 0.5rem; border: 2px solid #cbd5e1; text-align: right;">
-                        </div>
-                        <div style="display: flex; align-items: flex-end;">
-                            <button type="button" class="btn btn-primary" onclick="PurchasesView.addManualTaxToProductForm()" style="height: 42px; font-weight: 900; border-radius: 0.5rem; padding: 0 1.25rem;">Agregar</button>
-                        </div>
-                    </div>
-                    
-                    <!-- Lista de impuestos actualmente agregados a este producto -->
-                    <div id="addedFormTaxesList" style="display: flex; flex-wrap: wrap; gap: 0.5rem;">
-                        <!-- Se poblará dinámicamente -->
-                    </div>
-                </div>
-                
                 <div id="pricePreview" style="background: #f1f5f9; padding: 1.5rem 2.5rem; border-radius: 1.25rem; margin-bottom: 2rem; border: 3px solid #e2e8f0; display: flex; flex-direction: column; gap: 0.75rem;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <span style="color: #475569; font-weight: 950; font-size: 1rem; text-transform: uppercase;">🛒 Neto de la Línea:</span>
