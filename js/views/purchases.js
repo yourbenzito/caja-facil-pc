@@ -1445,15 +1445,15 @@ const PurchasesView = {
 
         const content = `
             <style>
-                /* Force modal window to fit cleanly with dynamic comfortable height */
-                .modal {
+                /* Force only purchase wizard modal window to fit cleanly with dynamic comfortable height */
+                .modal:has(.purchase-wizard), .purchase-wizard-modal {
                     height: min(88vh, 740px) !important;
                     max-height: 88vh !important;
                     display: flex !important;
                     flex-direction: column !important;
                     overflow: hidden !important;
                 }
-                .modal-body {
+                .modal:has(.purchase-wizard) .modal-body, .purchase-wizard-modal .modal-body {
                     flex: 1 !important;
                     overflow: hidden !important;
                     display: flex !important;
@@ -1699,82 +1699,95 @@ const PurchasesView = {
 
                 <!-- PASO 3: PAGO Y CIERRE -->
                 <div id="step-content-3" class="step-content">
-                    <div style="display: flex; flex-direction: column; gap: 0.75rem; padding: 0.25rem 0;">
-                        <!-- Total Destacado -->
-                        <div style="background: linear-gradient(135deg, #064e3b, #065f46); border: 3px solid #10b981; border-radius: 1rem; padding: 1rem 1.5rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 8px 25px rgba(16,185,129,0.3); flex-shrink: 0;">
-                            <div>
-                                <div style="color: #6ee7b7; font-size: 0.75rem; font-weight: 900; text-transform: uppercase; letter-spacing: 1px;">💰 TOTAL A PAGAR</div>
-                                <div id="step3TotalDisplay" style="font-size: 2.2rem; font-weight: 950; color: #ffffff; line-height: 1; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">$0</div>
+                    <div style="display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 1rem; padding: 0.25rem 0; align-items: start;">
+                        <!-- COLUMNA IZQUIERDA: CONFIGURACIÓN DE PAGO -->
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                            <!-- Método de Pago -->
+                            <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 0.85rem; padding: 0.85rem; box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+                                <label style="display: block; font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.78rem; margin-bottom: 0.5rem; letter-spacing: 0.5px;">💳 MÉTODO DE PAGO</label>
+                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;">
+                                    <button type="button" id="payMethodCredit" class="btn btn-primary" onclick="PurchasesView.setPaymentMethod('credit')" style="height: 48px; font-weight: 950; font-size: 0.82rem; border-radius: 0.65rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1rem; line-height: 1.1;">
+                                        <span style="font-size: 1.1rem;">📋</span>A Crédito
+                                    </button>
+                                    <button type="button" id="payMethodCash" class="btn btn-secondary" onclick="PurchasesView.setPaymentMethod('cash')" style="height: 48px; font-weight: 950; font-size: 0.82rem; border-radius: 0.65rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1rem; line-height: 1.1;">
+                                        <span style="font-size: 1.1rem;">💵</span>Efectivo
+                                    </button>
+                                    <button type="button" id="payMethodTransfer" class="btn btn-secondary" onclick="PurchasesView.setPaymentMethod('transfer')" style="height: 48px; font-weight: 950; font-size: 0.82rem; border-radius: 0.65rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1rem; line-height: 1.1;">
+                                        <span style="font-size: 1.1rem;">🏦</span>Transferencia
+                                    </button>
+                                </div>
+                                <input type="hidden" name="paymentMethod" id="purchasePaymentMethod" value="${editingPurchase ? (editingPurchase.paymentMethod || 'credit') : 'credit'}">
                             </div>
-                            <div style="text-align: right;">
-                                <div id="directAvgMarginBadge" style="font-size: 1.1rem; font-weight: 950; color: #10b981;">0%</div>
-                                <div style="color: #6ee7b7; font-size: 0.72rem; font-weight: 700; text-transform: uppercase;">Margen Prom.</div>
+
+                            <!-- Monto Pagado (visible solo si no es crédito) -->
+                            <div id="paidAmountSection" style="display: ${editingPurchase ? 'block' : 'none'}; background: #ffffff; border: 2px solid #10b981; border-radius: 0.85rem; padding: 0.75rem 0.85rem; box-shadow: 0 2px 6px rgba(16,185,129,0.08);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                                    <label style="font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.78rem; margin: 0;">💰 MONTO PAGADO HOY (CLP)</label>
+                                    <button type="button" onclick="PurchasesView.setQuickPayment('full')" style="background: rgba(16,185,129,0.15); color: #059669; border: 1px solid #10b981; border-radius: 0.4rem; font-size: 0.7rem; font-weight: 900; padding: 2px 8px; cursor: pointer;">Pagar Total</button>
+                                </div>
+                                <div style="position: relative;">
+                                    <span style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); font-size: 1.3rem; color: #10b981; font-weight: 950;">$</span>
+                                    <input type="number"
+                                           name="paidAmount"
+                                           id="purchasePaidAmount"
+                                           class="form-control"
+                                           style="height: 42px; padding-left: 1.8rem; font-size: 1.25rem; font-weight: 950; color: #000; text-align: right; border-radius: 0.5rem; background: #f8fafc; border: 2px solid #10b981;"
+                                           value="${editingPurchase ? editingPurchase.paidAmount : 0}"
+                                           min="0"
+                                           ${editingPurchase ? 'disabled' : ''}
+                                           oninput="PurchasesView.handlePaidAmountChange(this.value)">
+                                </div>
+                                
+                                <!-- Opción para descontar de caja (Opcional, desmarcado por defecto) -->
+                                <div id="deductCashOptionGroup" style="display: none; margin-top: 0.5rem;">
+                                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.45rem 0.65rem; background: #fffbeb; border: 1.5px solid #f59e0b; border-radius: 0.5rem; font-weight: 800; font-size: 0.78rem; color: #92400e; margin: 0;">
+                                        <input type="checkbox" name="deductFromCashRegister" id="deductFromCashRegisterInput" value="true" style="width: 18px; height: 18px; accent-color: #2563eb; cursor: pointer;">
+                                        <span>📉 ¿Descontar este pago de la <strong>Caja Registradora</strong> del turno actual?</span>
+                                    </label>
+                                </div>
+
+                                <div id="purchase-debt-warning" style="display: none; margin-top: 0.4rem; padding: 0.4rem 0.65rem; border-radius: 0.5rem; background: rgba(239,68,68,0.1); border: 1.5px solid #ef4444;">
+                                    <span style="color: #dc2626; font-size: 0.8rem; font-weight: 950;">🚨 Saldo pendiente: <span id="purchase-debt-amount" style="background: #ef4444; color: #fff; padding: 2px 6px; border-radius: 0.35rem; font-weight: 950;">$0</span></span>
+                                </div>
+                            </div>
+
+                            <!-- Fecha Vencimiento -->
+                            <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 0.85rem; padding: 0.65rem 0.85rem;">
+                                <label style="font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.75rem; margin-bottom: 0.25rem; display: block;">📅 FECHA DE VENCIMIENTO (Opcional)</label>
+                                <input type="date" name="dueDate" class="form-control" value="${editingPurchase && editingPurchase.dueDate ? editingPurchase.dueDate.split('T')[0] : ''}" style="height: 36px; font-size: 0.88rem; font-weight: 900; border-radius: 0.5rem; background: #f8fafc; text-align: center; border: 1.5px solid #cbd5e1; color: #000; width: 100%; padding: 0.2rem;">
                             </div>
                         </div>
 
-                        <!-- Método de Pago -->
-                        <div style="background: #ffffff; border: 2px solid #1e293b; border-radius: 0.85rem; padding: 0.85rem; flex-shrink: 0;">
-                            <label style="display: block; font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.78rem; margin-bottom: 0.5rem; letter-spacing: 0.5px;">💳 MÉTODO DE PAGO</label>
-                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 0.5rem;">
-                                <button type="button" id="payMethodCredit" class="btn btn-primary" onclick="PurchasesView.setPaymentMethod('credit')" style="height: 50px; font-weight: 950; font-size: 0.82rem; border-radius: 0.65rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1rem; line-height: 1.1;">
-                                    <span style="font-size: 1.1rem;">📋</span>A Crédito
-                                </button>
-                                <button type="button" id="payMethodCash" class="btn btn-secondary" onclick="PurchasesView.setPaymentMethod('cash')" style="height: 50px; font-weight: 950; font-size: 0.82rem; border-radius: 0.65rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1rem; line-height: 1.1;">
-                                    <span style="font-size: 1.1rem;">💵</span>Efectivo
-                                </button>
-                                <button type="button" id="payMethodTransfer" class="btn btn-secondary" onclick="PurchasesView.setPaymentMethod('transfer')" style="height: 50px; font-weight: 950; font-size: 0.82rem; border-radius: 0.65rem; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.1rem; line-height: 1.1;">
-                                    <span style="font-size: 1.1rem;">🏦</span>Transferencia
-                                </button>
+                        <!-- COLUMNA DERECHA: TOTAL Y ESTADO FINANCIERO -->
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                            <!-- Total Destacado -->
+                            <div style="background: linear-gradient(135deg, #064e3b, #065f46); border: 3px solid #10b981; border-radius: 1rem; padding: 1.1rem 1.25rem; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 8px 25px rgba(16,185,129,0.25);">
+                                <div>
+                                    <div style="color: #6ee7b7; font-size: 0.72rem; font-weight: 900; text-transform: uppercase; letter-spacing: 1px;">💰 TOTAL A PAGAR</div>
+                                    <div id="step3TotalDisplay" style="font-size: 2.2rem; font-weight: 950; color: #ffffff; line-height: 1.1; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">$0</div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div id="directAvgMarginBadge" style="font-size: 1.1rem; font-weight: 950; color: #10b981;">0%</div>
+                                    <div style="color: #6ee7b7; font-size: 0.7rem; font-weight: 700; text-transform: uppercase;">Margen Prom.</div>
+                                </div>
                             </div>
-                            <input type="hidden" name="paymentMethod" id="purchasePaymentMethod" value="${editingPurchase ? (editingPurchase.paymentMethod || 'credit') : 'credit'}">
-                            <div id="paymentMethodInfo" style="background: #f0fdf4; border: 1.5px solid #10b981; border-radius: 0.6rem; padding: 0.6rem 0.85rem; font-size: 0.82rem; font-weight: 700; color: #166534;">
+
+                            <!-- Explicación del Método -->
+                            <div id="paymentMethodInfo" style="background: #f0fdf4; border: 1.5px solid #10b981; border-radius: 0.75rem; padding: 0.75rem 0.85rem; font-size: 0.82rem; font-weight: 700; color: #166534; line-height: 1.4;">
                                 📋 Sin pago inicial hoy — 100% a Crédito. Sin movimiento de caja ni banco.
                             </div>
-                        </div>
 
-                        <!-- Monto Pagado (visible solo si no es crédito) -->
-                        <div id="paidAmountSection" style="display: ${editingPurchase ? 'block' : 'none'}; background: #ffffff; border: 2px solid #10b981; border-radius: 0.85rem; padding: 0.75rem 0.85rem; flex-shrink: 0;">
-                            <label style="display: block; font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.78rem; margin-bottom: 0.35rem;">💰 MONTO PAGADO HOY (CLP)</label>
-                            <div style="position: relative;">
-                                <span style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); font-size: 1.3rem; color: #10b981; font-weight: 950;">$</span>
-                                <input type="number"
-                                       name="paidAmount"
-                                       id="purchasePaidAmount"
-                                       class="form-control"
-                                       style="height: 44px; padding-left: 1.8rem; font-size: 1.3rem; font-weight: 950; color: #000; text-align: right; border-radius: 0.5rem; background: #f8fafc; border: 2px solid #10b981;"
-                                       value="${editingPurchase ? editingPurchase.paidAmount : 0}"
-                                       min="0"
-                                       ${editingPurchase ? 'disabled' : ''}
-                                       oninput="PurchasesView.handlePaidAmountChange(this.value)">
-                            </div>
-                            
-                            <!-- Opción para descontar de caja (Opcional) -->
-                            <div id="deductCashOptionGroup" style="display: none; margin-top: 0.4rem;">
-                                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; padding: 0.4rem 0.65rem; background: #fffbeb; border: 1.5px solid #f59e0b; border-radius: 0.5rem; font-weight: 800; font-size: 0.8rem; color: #92400e; margin: 0;">
-                                    <input type="checkbox" name="deductFromCashRegister" id="deductFromCashRegisterInput" value="true" checked style="width: 18px; height: 18px; accent-color: #2563eb; cursor: pointer;">
-                                    <span>📉 ¿Descontar este pago de la <strong>Caja Registradora</strong> del turno actual?</span>
-                                </label>
-                            </div>
-
-                            <div id="purchase-debt-warning" style="display: none; margin-top: 0.4rem; padding: 0.4rem 0.65rem; border-radius: 0.5rem; background: rgba(239,68,68,0.1); border: 1.5px solid #ef4444;">
-                                <span style="color: #dc2626; font-size: 0.82rem; font-weight: 950;">🚨 Saldo pendiente: <span id="purchase-debt-amount" style="background: #ef4444; color: #fff; padding: 2px 6px; border-radius: 0.35rem; font-weight: 950;">$0</span></span>
+                            <!-- Widget: Deuda con Proveedor -->
+                            <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 0.85rem; padding: 0.75rem 0.85rem;">
+                                <div style="font-weight: 950; color: #1e293b; font-size: 0.78rem; text-transform: uppercase; margin-bottom: 0.35rem; display: flex; align-items: center; gap: 0.35rem;">
+                                    <span>🤝</span> Deuda con Proveedor
+                                </div>
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <span style="font-size: 0.78rem; color: #64748b; font-weight: 700;">Saldo pendiente histórico:</span>
+                                    <strong id="directSupplierDebtBadge" style="font-size: 1.05rem; font-weight: 950; color: #ef4444;">$0</strong>
+                                </div>
                             </div>
                         </div>
-
-                        <!-- Fecha Vencimiento -->
-                        <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 0.85rem; padding: 0.6rem 0.85rem; flex-shrink: 0;">
-                            <label style="font-weight: 950; color: #1e293b; text-transform: uppercase; font-size: 0.75rem; margin-bottom: 0.25rem; display: block;">📅 FECHA DE VENCIMIENTO (Opcional)</label>
-                            <input type="date" name="dueDate" class="form-control" value="${editingPurchase && editingPurchase.dueDate ? editingPurchase.dueDate.split('T')[0] : ''}" style="height: 38px; font-size: 0.9rem; font-weight: 900; border-radius: 0.5rem; background: #f8fafc; text-align: center; border: 2px solid #cbd5e1; color: #000; width: 100%; padding: 0.2rem;">
-                        </div>
-
-                        <!-- Widget: Deuda con Proveedor -->
-                        <details style="background: #ffffff; border: 2px solid #e2e8f0; border-radius: 0.75rem; padding: 0.5rem 0.85rem; flex-shrink: 0;">
-                            <summary style="font-weight: 950; color: #1e293b; cursor: pointer; font-size: 0.82rem; text-transform: uppercase; outline: none; list-style: none;">🤝 Deuda Acumulada con Proveedor</summary>
-                            <div style="padding-top: 0.4rem; display: flex; justify-content: space-between; align-items: center;">
-                                <span style="font-size: 0.8rem; color: #64748b; font-weight: 700;">Saldo pendiente histórico:</span>
-                                <strong id="directSupplierDebtBadge" style="font-size: 1.1rem; font-weight: 950; color: #ef4444;">$0</strong>
-                            </div>
-                        </details>
                     </div>
                 </div>
 
@@ -2132,6 +2145,7 @@ const PurchasesView = {
             }
         }
         
+        this._currentLastPurchaseCost = lastPurchaseCost;
         const lastCostNeto = lastPurchaseCost?.costNeto || null;
         const lastCostGross = lastPurchaseCost?.cost || null;
         const lastCostDate = lastPurchaseCost?.date || null;
@@ -2160,7 +2174,7 @@ const PurchasesView = {
                 <div style="background: #fef3c7; border: 1.5px solid #f59e0b; border-radius: 0.5rem; padding: 0.3rem 0.65rem; margin-bottom: 0.4rem; display: flex; justify-content: space-between; align-items: center;">
                     <span style="color: #92400e; font-weight: 900; font-size: 0.75rem; text-transform: uppercase;">📊 Última Compra:</span>
                     <span style="color: #92400e; font-weight: 950; font-size: 0.82rem;">
-                        Neto: $${lastCostNeto.toFixed(2)} | Bruto: $${lastCostGross.toFixed(2)} ${lastCostDate ? `(${new Date(lastCostDate).toLocaleDateString()})` : ''}
+                        Neto: $${parseFloat(Number(lastCostNeto).toFixed(3))} | Bruto: $${parseFloat(Number(lastCostGross).toFixed(3))} ${lastCostDate ? `(${new Date(lastCostDate).toLocaleDateString()})` : ''}
                     </span>
                 </div>
                 ` : ''}
@@ -2171,7 +2185,7 @@ const PurchasesView = {
                         <div style="display: flex; gap: 0.35rem; width: 100%;">
                             <input type="number" 
                                    id="addQuantity" 
-                                   step="any"
+                                   step="0.001"
                                    class="form-control" 
                                    placeholder="${product.type === 'weight' ? '0.000' : '1'}"
                                    onfocus="this.select()"
@@ -2186,10 +2200,10 @@ const PurchasesView = {
                         <div style="display: flex; gap: 0.35rem; width: 100%;">
                             <input type="number" 
                                    id="addCost" 
-                                   step="any"
+                                   step="0.001"
                                    class="form-control" 
-                                   value="${lastCostNeto !== null ? lastCostNeto : ((product.costNeto !== undefined && product.costNeto !== null && product.costNeto !== 0) ? product.costNeto : ((product.cost || 0) / 1.19).toFixed(2))}"
-                                   placeholder="${lastCostNeto !== null ? `Último: ${lastCostNeto.toFixed(2)}` : ''}"
+                                   value="${lastCostNeto !== null ? parseFloat(Number(lastCostNeto).toFixed(3)) : ((product.costNeto !== undefined && product.costNeto !== null && product.costNeto !== 0) ? parseFloat(Number(product.costNeto).toFixed(3)) : parseFloat(((product.cost || 0) / 1.19).toFixed(3)))}"
+                                   placeholder="${lastCostNeto !== null ? `Último: ${parseFloat(Number(lastCostNeto).toFixed(3))}` : ''}"
                                    onfocus="this.select()"
                                    style="height: 40px; font-size: 1.15rem; font-weight: 950; border-radius: 0.5rem; text-align: center; border: 2px solid #10b981; background: #f8fafc; color: #000; flex: 1;">
                             <button type="button" 
@@ -2208,10 +2222,10 @@ const PurchasesView = {
                         <div style="display: flex; gap: 0.35rem; width: 100%;">
                             <input type="number" 
                                    id="addGrossCost" 
-                                   step="any"
+                                   step="0.001"
                                    class="form-control" 
-                                   value="${lastCostGross !== null ? lastCostGross : ((product.cost !== undefined && product.cost !== null && product.cost !== 0) ? product.cost : parseFloat((product.costNeto || 0) * 1.19).toFixed(2))}"
-                                   placeholder="${lastCostGross !== null ? `Último: ${lastCostGross.toFixed(2)}` : ''}"
+                                   value="${lastCostGross !== null ? parseFloat(Number(lastCostGross).toFixed(3)) : ((product.cost !== undefined && product.cost !== null && product.cost !== 0) ? parseFloat(Number(product.cost).toFixed(3)) : parseFloat(((product.costNeto || 0) * 1.19).toFixed(3)))}"
+                                   placeholder="${lastCostGross !== null ? `Último: ${parseFloat(Number(lastCostGross).toFixed(3))}` : ''}"
                                    onfocus="this.select()"
                                    style="height: 40px; font-size: 1.15rem; font-weight: 950; border-radius: 0.5rem; text-align: center; border: 2px solid #10b981; background: #f8fafc; color: #000; flex: 1;">
                             <button type="button" 
@@ -2238,7 +2252,7 @@ const PurchasesView = {
                 <!-- Resumen de Margen y Precios Compacto en Grilla -->
                 <div id="pricePreview" style="background: #f8fafc; padding: 0.4rem 0.65rem; border-radius: 0.6rem; margin-bottom: 0.5rem; border: 1.5px solid #cbd5e1; display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 0.4rem; text-align: center;">
                     <div style="background: #ffffff; padding: 0.25rem; border-radius: 0.4rem; border: 1px solid #e2e8f0;">
-                        <span style="color: #64748b; font-weight: 800; font-size: 0.62rem; display: block; text-transform: uppercase;">Neto Línea</span>
+                        <span style="color: #64748b; font-weight: 800; font-size: 0.62rem; display: block; text-transform: uppercase;">Neto Línea (Sin dec.)</span>
                         <strong id="previewSubtotal" style="font-size: 0.92rem; color: #0f172a; font-weight: 950;">$0</strong>
                     </div>
                     ${!isBoleta ? `
@@ -2291,17 +2305,17 @@ const PurchasesView = {
             const price = parseFloat(priceInput.value) || 0;
 
             if (e && e.target.id === 'addCost') {
-                grossCost = parseFloat((cost * 1.19).toFixed(2));
+                grossCost = parseFloat((cost * 1.19).toFixed(3));
                 if (grossCostInput) grossCostInput.value = grossCost;
             } else if (e && e.target.id === 'addGrossCost') {
-                cost = parseFloat((grossCost / 1.19).toFixed(2));
-                costInput.value = cost.toFixed(2);
+                cost = parseFloat((grossCost / 1.19).toFixed(3));
+                costInput.value = cost;
             } else {
                 if (this.lastVatMode === 'gross') {
-                    cost = parseFloat((grossCost / 1.19).toFixed(2));
-                    costInput.value = cost.toFixed(2);
+                    cost = parseFloat((grossCost / 1.19).toFixed(3));
+                    costInput.value = cost;
                 } else {
-                    grossCost = parseFloat((cost * 1.19).toFixed(2));
+                    grossCost = parseFloat((cost * 1.19).toFixed(3));
                     if (grossCostInput) grossCostInput.value = grossCost;
                 }
             }
@@ -2318,7 +2332,8 @@ const PurchasesView = {
                 });
             }
 
-            const lineNet = parseFloat((quantity * cost).toFixed(2));
+            // ponytail: Total neto de la línea en pesos enteros exactos sin decimales
+            const lineNet = Math.round(quantity * cost);
             const lineIva = isBoleta ? 0 : Math.round(lineNet * 0.19);
             const lineBrutoTotal = lineNet + lineIva + extraTaxesSum;
 
@@ -2328,23 +2343,23 @@ const PurchasesView = {
             const lineProfit = unitProfit * quantity;
             const margin = unitGrossCost > 0 ? (unitProfit / unitGrossCost * 100) : 0;
 
-            // Actualizar textos en la visualización inmediata
-            document.getElementById('previewSubtotal').textContent = formatCLP(lineNet);
+            // Actualizar textos en la visualización inmediata (skipRounding = true para no truncar a decenas)
+            document.getElementById('previewSubtotal').textContent = formatCLP(lineNet, true);
             if (document.getElementById('previewIva')) {
-                document.getElementById('previewIva').textContent = formatCLP(lineIva);
+                document.getElementById('previewIva').textContent = formatCLP(lineIva, true);
             }
-            document.getElementById('previewBrutoTotal').textContent = formatCLP(lineBrutoTotal);
+            document.getElementById('previewBrutoTotal').textContent = formatCLP(lineBrutoTotal, true);
 
             const marginEl = document.getElementById('previewMargin');
             marginEl.innerHTML = `${margin.toFixed(1)}%`;
             marginEl.style.color = margin > 0 ? '#10b981' : (margin < 0 ? '#ef4444' : '#64748b');
 
             const unitProfitEl = document.getElementById('previewUnitProfit');
-            unitProfitEl.textContent = formatCLP(unitProfit);
+            unitProfitEl.textContent = formatCLP(unitProfit, true);
             unitProfitEl.style.color = unitProfit > 0 ? '#10b981' : (unitProfit < 0 ? '#ef4444' : '#64748b');
 
             const profitEl = document.getElementById('previewProfit');
-            profitEl.textContent = formatCLP(lineProfit);
+            profitEl.textContent = formatCLP(lineProfit, true);
             profitEl.style.color = lineProfit > 0 ? '#10b981' : (lineProfit < 0 ? '#ef4444' : '#64748b');
 
             // Comparación en vivo de costo contra última compra
@@ -2355,14 +2370,16 @@ const PurchasesView = {
                 if (!el) return;
                 if (lastCost !== null && lastCost > 0 && currentCost > 0) {
                     const diff = currentCost - lastCost;
-                    if (Math.abs(diff) >= 0.01) {
+                    const cleanDiff = parseFloat(Number(Math.abs(diff)).toFixed(3));
+                    const cleanLast = parseFloat(Number(lastCost).toFixed(3));
+                    if (Math.abs(diff) >= 0.001) {
                         if (diff > 0) {
-                            el.innerHTML = `<span style="color: #10b981; font-weight: 900;">🟢 SUBIÓ COSTO: +$${diff.toFixed(2)} (Último: $${lastCost.toFixed(2)})</span>`;
+                            el.innerHTML = `<span style="color: #10b981; font-weight: 900;">🟢 SUBIÓ COSTO: +$${cleanDiff} (Último: $${cleanLast})</span>`;
                         } else {
-                            el.innerHTML = `<span style="color: #ef4444; font-weight: 900;">🔴 BAJÓ COSTO: -$${Math.abs(diff).toFixed(2)} (Último: $${lastCost.toFixed(2)})</span>`;
+                            el.innerHTML = `<span style="color: #ef4444; font-weight: 900;">🔴 BAJÓ COSTO: -$${cleanDiff} (Último: $${cleanLast})</span>`;
                         }
                     } else {
-                        el.innerHTML = `<span style="color: #64748b; font-weight: 900;">⚖️ MISMO COSTO (Último: $${lastCost.toFixed(2)})</span>`;
+                        el.innerHTML = `<span style="color: #64748b; font-weight: 900;">⚖️ MISMO COSTO (Último: $${cleanLast})</span>`;
                     }
                     el.style.display = 'block';
                 } else {
@@ -2417,6 +2434,65 @@ const PurchasesView = {
         setTimeout(() => { quantityInput.focus(); quantityInput.select(); }, 150);
     },
 
+    showCostAlertModal(productName, prevCostDisplay, newCostDisplay, percentChange, isHigher, vatLabel) {
+        return new Promise((resolve) => {
+            const html = `
+                <div style="background: #0f172a; padding: 1.75rem; border-radius: 1.25rem; color: #f8fafc; text-align: center;">
+                    <div style="font-size: 3.2rem; margin-bottom: 0.5rem; line-height: 1;">⚠️</div>
+                    <h3 style="margin: 0 0 0.5rem 0; font-size: 1.35rem; font-weight: 900; color: #f59e0b; text-transform: uppercase; letter-spacing: 0.5px;">Alerta de Variación de Costo</h3>
+                    <p style="margin: 0 0 1.25rem 0; font-size: 0.95rem; color: #94a3b8; line-height: 1.4;">
+                        El costo <strong style="color: #ffffff;">${vatLabel}</strong> ingresado para <span style="color: #60a5fa; font-weight: 800;">${safeHTML(productName)}</span> presenta una variación superior al <strong>20%</strong>.
+                    </p>
+
+                    <div style="background: rgba(30, 41, 59, 0.75); border: 1.5px solid rgba(255,255,255,0.1); border-radius: 0.85rem; padding: 1.1rem; margin-bottom: 1.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; text-align: left;">
+                        <div style="border-right: 1px solid rgba(255,255,255,0.1); padding-right: 0.5rem;">
+                            <div style="font-size: 0.72rem; color: #94a3b8; font-weight: 800; text-transform: uppercase; margin-bottom: 0.2rem;">Costo Anterior Real</div>
+                            <div style="font-size: 1.35rem; font-weight: 950; color: #e2e8f0;">$${prevCostDisplay}</div>
+                            <small style="color: #64748b; font-size: 0.72rem; font-weight: 600;">Última compra registrada</small>
+                        </div>
+                        <div style="padding-left: 0.5rem;">
+                            <div style="font-size: 0.72rem; color: #f59e0b; font-weight: 800; text-transform: uppercase; margin-bottom: 0.2rem;">Nuevo Costo Ingresado</div>
+                            <div style="font-size: 1.35rem; font-weight: 950; color: #f59e0b;">$${newCostDisplay}</div>
+                            <div style="font-size: 0.8rem; font-weight: 900; color: ${isHigher ? '#ef4444' : '#10b981'}; margin-top: 0.2rem;">
+                                ${isHigher ? '▲ +' : '▼ '}${Math.abs(percentChange)}% de diferencia
+                            </div>
+                        </div>
+                    </div>
+
+                    <p style="margin: 0 0 1.5rem 0; font-size: 0.92rem; color: #cbd5e1; font-weight: 600;">
+                        ¿El valor ingresado es correcto o deseas corregirlo?
+                    </p>
+
+                    <div style="display: flex; gap: 0.75rem; justify-content: center;">
+                        <button id="btnCostAlertCancel" type="button" class="btn" style="flex: 1; padding: 0.8rem 1rem; background: #334155; color: #f8fafc; border: 1.5px solid #475569; border-radius: 0.75rem; font-weight: 800; font-size: 0.92rem; cursor: pointer;">
+                            ✏️ Corregir Costo
+                        </button>
+                        <button id="btnCostAlertConfirm" type="button" class="btn" style="flex: 1; padding: 0.8rem 1rem; background: #2563eb; color: #ffffff; border: 1.5px solid #3b82f6; border-radius: 0.75rem; font-weight: 900; font-size: 0.92rem; cursor: pointer;">
+                            ✅ Confirmar y Agregar
+                        </button>
+                    </div>
+                </div>
+            `;
+            showModal(html, { title: '', width: '560px' });
+
+            const btnCancel = document.getElementById('btnCostAlertCancel');
+            const btnConfirm = document.getElementById('btnCostAlertConfirm');
+
+            if (btnCancel) {
+                btnCancel.onclick = () => {
+                    closeModal();
+                    resolve(false);
+                };
+            }
+            if (btnConfirm) {
+                btnConfirm.onclick = () => {
+                    closeModal();
+                    resolve(true);
+                };
+            }
+        });
+    },
+
     async addProductToPurchase(productId) {
         const searchInput = document.getElementById('productSearchInput');
         const quantity = parseFloat(document.getElementById('addQuantity').value);
@@ -2430,45 +2506,55 @@ const PurchasesView = {
         const product = await Product.getById(productId);
         const existingItem = this.purchaseItems.find(item => item.productId === product.id);
 
-        // Store what user typed + keep NET internally
+        // Store what user typed + keep NET internally con hasta 3 decimales
         let enteredCost;
         let enteredCostMode;
         let cost;
         if (this.lastVatMode === 'gross') {
             enteredCostMode = 'gross';
-            enteredCost = isNaN(grossCostInput) ? parseFloat((netCostInput * 1.19).toFixed(2)) : grossCostInput;
+            enteredCost = isNaN(grossCostInput) ? parseFloat((netCostInput * 1.19).toFixed(3)) : parseFloat(grossCostInput.toFixed(3));
             cost = parseFloat((enteredCost / 1.19).toFixed(4));
         } else {
             enteredCostMode = 'net';
-            enteredCost = parseFloat(netCostInput.toFixed(2));
+            enteredCost = parseFloat(netCostInput.toFixed(3));
             cost = parseFloat(enteredCost.toFixed(4));
         }
 
-        // ⚠️ ALERTA INTELIGENTE DE COSTO IRREAL O EXAGERADO
-        const prevCostNet = (product.costNeto !== undefined && product.costNeto !== null && product.costNeto > 0)
-            ? product.costNeto
-            : (product.cost > 0 ? product.cost / 1.19 : 0);
+        // ⚠️ ALERTA INTELIGENTE DE VARIACIÓN > 20% CONTRA ÚLTIMA COMPRA REAL
+        const lastNet = this._currentLastPurchaseCost?.costNeto;
+        const prevCostNet = (lastNet !== undefined && lastNet !== null && lastNet > 0)
+            ? lastNet
+            : ((product.costNeto !== undefined && product.costNeto !== null && product.costNeto > 0)
+                ? product.costNeto
+                : (product.cost > 0 ? product.cost / 1.19 : 0));
             
         if (prevCostNet > 0) {
             const ratio = cost / prevCostNet;
-            if (ratio >= 2.0 || ratio <= 0.5) {
+            if (ratio >= 1.20 || ratio <= 0.80) {
                 const percentChange = Math.round((ratio - 1) * 100);
                 const isHigher = percentChange > 0;
-                const prevCostDisplay = this.lastVatMode === 'gross' ? (prevCostNet * 1.19).toFixed(2) : prevCostNet.toFixed(2);
-                const newCostDisplay = this.lastVatMode === 'gross' ? (cost * 1.19).toFixed(2) : cost.toFixed(2);
+                const prevCostDisplay = this.lastVatMode === 'gross' ? (prevCostNet * 1.19).toFixed(3) : prevCostNet.toFixed(3);
+                const newCostDisplay = this.lastVatMode === 'gross' ? (cost * 1.19).toFixed(3) : cost.toFixed(3);
                 const vatLabel = this.lastVatMode === 'gross' ? 'Bruto' : 'Neto';
                 
-                const confirmed = confirm(
-                    `⚠️ ALERTA DE COSTO IRREAL O EXAGERADO\n\n` +
-                    `El costo ${vatLabel} ingresado ($${newCostDisplay}) es ${isHigher ? 'un ' + percentChange + '% MAYOR' : 'un ' + Math.abs(percentChange) + '% MENOR'} que el costo anterior ($${prevCostDisplay}).\n\n` +
-                    `¿El costo de este producto es correcto o deseas corregirlo? Presiona ACEPTAR para confirmar o CANCELAR para volver.`
+                const confirmed = await this.showCostAlertModal(
+                    product.name,
+                    prevCostDisplay,
+                    newCostDisplay,
+                    percentChange,
+                    isHigher,
+                    vatLabel
                 );
                 
                 if (!confirmed) {
+                    const costEl = this.lastVatMode === 'gross' ? document.getElementById('addGrossCost') : document.getElementById('addCost');
+                    if (costEl) { costEl.focus(); costEl.select(); }
                     return; // Cancela el ingreso para que el usuario pueda corregir el valor
                 }
             }
         }
+
+        const lineNetTotal = Math.round(quantity * cost); // Peso entero exacto sin decimales
 
         if (existingItem) {
             existingItem.quantity = quantity; // Overwrite to prevent infinite accumulation when editing/clicking again
@@ -2476,7 +2562,7 @@ const PurchasesView = {
             existingItem.enteredCost = enteredCost;
             existingItem.enteredCostMode = enteredCostMode;
             existingItem.price = price;
-            existingItem.total = parseFloat((existingItem.quantity * cost).toFixed(2));
+            existingItem.total = lineNetTotal;
             existingItem.additionalTaxesConfig = [...(this.tempProductTaxes || [])];
         } else {
             this.purchaseItems.push({
@@ -2488,7 +2574,7 @@ const PurchasesView = {
                 enteredCost: enteredCost,
                 enteredCostMode: enteredCostMode,
                 price: price,
-                total: parseFloat((quantity * cost).toFixed(2)),
+                total: lineNetTotal,
                 type: product.type,
                 additionalTaxesConfig: [...(this.tempProductTaxes || [])]
             });
@@ -2641,7 +2727,7 @@ const PurchasesView = {
             grandTotal = Math.round(netSubtotal + extraTaxesSum);
         }
 
-        // Actualizar elementos visuales en Paso 2
+        // Actualizar elementos visuales en Paso 2 (skipRounding = true para no truncar a decenas)
         const netoSpan = document.getElementById('step2Neto');
         const ivaSpan = document.getElementById('step2Iva');
         const ivaGroup = document.getElementById('step2IvaGroup');
@@ -2649,20 +2735,20 @@ const PurchasesView = {
         const extraGroup = document.getElementById('step2ExtraTaxGroup');
         const totalSpan = document.getElementById('purchaseTotal');
 
-        if (netoSpan) netoSpan.textContent = formatCLP(netSubtotal);
-        if (ivaSpan) ivaSpan.textContent = formatCLP(ivaSum);
+        if (netoSpan) netoSpan.textContent = formatCLP(netSubtotal, true);
+        if (ivaSpan) ivaSpan.textContent = formatCLP(ivaSum, true);
         if (ivaGroup) ivaGroup.style.display = isBoleta ? 'none' : 'block';
 
         if (extraSpan && extraGroup) {
             if (extraTaxesSum > 0) {
-                extraSpan.textContent = formatCLP(extraTaxesSum);
+                extraSpan.textContent = formatCLP(extraTaxesSum, true);
                 extraGroup.style.display = 'block';
             } else {
                 extraGroup.style.display = 'none';
             }
         }
 
-        if (totalSpan) totalSpan.textContent = formatCLP(grandTotal);
+        if (totalSpan) totalSpan.textContent = formatCLP(grandTotal, true);
 
         // Actualizar resumen en Paso 3 / Cierre
         const paidInput = document.getElementById('purchasePaidAmount');
@@ -2691,35 +2777,49 @@ const PurchasesView = {
     },
 
     renderPurchaseItems() {
+        const isGrossMode = (this.lastVatMode === 'gross');
         return `
             <div class="table-responsive-wrapper">
                 <table style="width: 100%; border-collapse: separate; border-spacing: 0 6px; margin-top: -5px;">
                 <thead>
                     <tr style="background: #1e293b; box-shadow: 0 4px 15px rgba(0,0,0,0.15);">
                         <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.75rem 1rem; text-align: left; font-weight: 900; font-size: 0.82rem; text-transform: uppercase; border-radius: 0.6rem 0 0 0.6rem; letter-spacing: 1px; border-bottom: 3px solid #3b82f6;">Producto</th>
-                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.75rem 6px; text-align: center; font-weight: 900; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px; width: 80px; border-bottom: 3px solid #3b82f6;">Cant.</th>
-                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.75rem 6px; text-align: center; font-weight: 900; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px; width: 110px; border-bottom: 3px solid #3b82f6;">Costo Neto</th>
-                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.75rem 6px; text-align: center; font-weight: 900; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px; width: 90px; border-bottom: 3px solid #3b82f6;">IVA (19%)</th>
-                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.75rem 6px; text-align: center; font-weight: 900; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px; width: 110px; border-bottom: 3px solid #3b82f6;">Costo Bruto</th>
-                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.75rem 6px; text-align: center; font-weight: 900; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px; width: 105px; border-bottom: 3px solid #3b82f6;">P. Venta</th>
-                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.75rem 1rem; text-align: right; font-weight: 900; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px; width: 120px; border-bottom: 3px solid #3b82f6;">Total Neto</th>
+                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.75rem 6px; text-align: center; font-weight: 900; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px; width: 75px; border-bottom: 3px solid #3b82f6;">Cant.</th>
+                        <th style="background: ${isGrossMode ? '#1e293b' : '#1e3a8a'} !important; color: ${isGrossMode ? '#94a3b8' : '#60a5fa'} !important; padding: 0.75rem 6px; text-align: center; font-weight: 900; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px; width: 110px; border-bottom: 3px solid ${isGrossMode ? '#3b82f6' : '#60a5fa'};">
+                            Costo Neto
+                        </th>
+                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.75rem 6px; text-align: center; font-weight: 900; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px; width: 85px; border-bottom: 3px solid #3b82f6;">IVA (19%)</th>
+                        <th style="background: ${isGrossMode ? '#064e3b' : '#1e293b'} !important; color: ${isGrossMode ? '#34d399' : '#94a3b8'} !important; padding: 0.75rem 6px; text-align: center; font-weight: 900; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px; width: 110px; border-bottom: 3px solid ${isGrossMode ? '#10b981' : '#3b82f6'};">
+                            Costo Bruto
+                        </th>
+                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.75rem 6px; text-align: center; font-weight: 900; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px; width: 100px; border-bottom: 3px solid #3b82f6;">P. Venta</th>
+                        <th style="background: #1e293b !important; color: #38bdf8 !important; padding: 0.75rem 6px; text-align: center; font-weight: 900; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px; width: 80px; border-bottom: 3px solid #3b82f6;">Margen</th>
+                        <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.75rem 1rem; text-align: right; font-weight: 900; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 1px; width: 120px; border-bottom: 3px solid #3b82f6;">
+                            ${isGrossMode ? 'Total Bruto' : 'Total Neto'}
+                        </th>
                         <th style="background: #1e293b !important; color: #ffffff !important; padding: 0.75rem; text-align: center; border-radius: 0 0.6rem 0.6rem 0; border-bottom: 3px solid #3b82f6; width: 45px;"></th>
                     </tr>
                 </thead>
                 <tbody style="background: transparent;">
                     ${this.purchaseItems.length === 0 ? `
                         <tr>
-                            <td colspan="8" style="padding: 1.5rem 1rem; text-align: center; color: #64748b; font-weight: 900; font-size: 1rem; background: #ffffff; border-radius: 0.85rem; border: 2px dashed #cbd5e1;">
+                            <td colspan="9" style="padding: 1.5rem 1rem; text-align: center; color: #64748b; font-weight: 900; font-size: 1rem; background: #ffffff; border-radius: 0.85rem; border: 2px dashed #cbd5e1;">
                                 <div style="font-size: 2rem; margin-bottom: 0.35rem; filter: grayscale(1); opacity: 0.5;">🛒</div>
                                 EL CARRO ESTÁ VACÍO.<br><span style="font-weight: 600; font-size: 0.82rem; opacity: 0.8;">Busca o escanea productos en el buscador superior para comenzar.</span>
                             </td>
                         </tr>
                     ` : this.purchaseItems.map((item, index) => {
-            const displayNet = item.enteredCostMode === 'net' ? Number((item.cost || 0).toFixed(2)) : Number(((item.cost || 0)).toFixed(2));
-            const displayGross = item.enteredCostMode === 'gross' ? (Number.isInteger(item.enteredCost) ? item.enteredCost : Number((item.enteredCost || 0).toFixed(2))) : Math.round((item.cost || 0) * 1.19);
-            const displayIva = Number((displayGross - displayNet).toFixed(2));
-            const lineNetTotal = item.total || 0;
+            const displayNet = Number((item.cost || 0).toFixed(3));
+            const displayGross = Number(((item.cost || 0) * 1.19).toFixed(3));
+            const displayIva = Number((displayGross - displayNet).toFixed(3));
+            const lineNetTotal = item.total || Math.round((item.quantity || 0) * (item.cost || 0));
+            const lineDisplayTotal = isGrossMode ? Math.round(lineNetTotal * 1.19) : lineNetTotal;
             const inputStyle = "height: 40px; border: 2px solid #cbd5e1; background: #ffffff; color: #000; font-size: 1rem; font-weight: 900; border-radius: 0.55rem; text-align: center; width: 100%; transition: all 0.2s; padding: 0 0.35rem; box-shadow: 0 2px 4px rgba(0,0,0,0.04);";
+
+            // Margen %
+            const unitGross = (item.cost || 0) * 1.19;
+            const margin = unitGross > 0 ? (((item.price - unitGross) / unitGross) * 100) : 0;
+            const marginColor = margin > 0 ? '#10b981' : (margin < 0 ? '#ef4444' : '#64748b');
 
             // Trend Indicator calculations
             let trendNetHtml = '';
@@ -2727,11 +2827,11 @@ const PurchasesView = {
             
             if (typeof item.lastCostNeto === 'number' && item.lastCostNeto > 0) {
                 const diff = item.cost - item.lastCostNeto;
-                if (Math.abs(diff) >= 0.01) {
+                if (Math.abs(diff) >= 0.001) {
                     if (diff > 0) {
-                        trendNetHtml = `<div style="color: #10b981; font-size: 0.7rem; font-weight: 900; margin-top: 2px; text-align: center; line-height: 1.1;">🟢 +$${diff.toFixed(1)}</div>`;
+                        trendNetHtml = `<div style="color: #10b981; font-size: 0.7rem; font-weight: 900; margin-top: 2px; text-align: center; line-height: 1.1;">🟢 +$${diff.toFixed(2)}</div>`;
                     } else {
-                        trendNetHtml = `<div style="color: #ef4444; font-size: 0.7rem; font-weight: 900; margin-top: 2px; text-align: center; line-height: 1.1;">🔴 -$${Math.abs(diff).toFixed(1)}</div>`;
+                        trendNetHtml = `<div style="color: #ef4444; font-size: 0.7rem; font-weight: 900; margin-top: 2px; text-align: center; line-height: 1.1;">🔴 -$${Math.abs(diff).toFixed(2)}</div>`;
                     }
                 }
             }
@@ -2739,16 +2839,15 @@ const PurchasesView = {
             const itemGross = item.cost * 1.19;
             if (typeof item.lastCostGross === 'number' && item.lastCostGross > 0) {
                 const diff = itemGross - item.lastCostGross;
-                if (Math.abs(diff) >= 0.01) {
+                if (Math.abs(diff) >= 0.001) {
                     if (diff > 0) {
-                        trendGrossHtml = `<div style="color: #10b981; font-size: 0.7rem; font-weight: 900; margin-top: 2px; text-align: center; line-height: 1.1;">🟢 +$${diff.toFixed(1)}</div>`;
+                        trendGrossHtml = `<div style="color: #10b981; font-size: 0.7rem; font-weight: 900; margin-top: 2px; text-align: center; line-height: 1.1;">🟢 +$${diff.toFixed(2)}</div>`;
                     } else {
-                        trendGrossHtml = `<div style="color: #ef4444; font-size: 0.7rem; font-weight: 900; margin-top: 2px; text-align: center; line-height: 1.1;">🔴 -$${Math.abs(diff).toFixed(1)}</div>`;
+                        trendGrossHtml = `<div style="color: #ef4444; font-size: 0.7rem; font-weight: 900; margin-top: 2px; text-align: center; line-height: 1.1;">🔴 -$${Math.abs(diff).toFixed(2)}</div>`;
                     }
                 }
             }
 
-            const isGrossMode = (this.lastVatMode === 'gross');
             const costNetTrend = isGrossMode ? '' : trendNetHtml;
             const costGrossTrend = isGrossMode ? trendGrossHtml : '';
 
@@ -2768,28 +2867,33 @@ const PurchasesView = {
                                     </div>
                                 ` : ''}
                             </td>
-                            <td style="padding: 0.4rem 4px; width: 85px;">
-                                <input type="number" step="any" value="${item.quantity}" class="form-control" onfocus="this.select()" style="${inputStyle}" onchange="PurchasesView.updateItemQuantity(${index}, this.value)">
+                            <td style="padding: 0.4rem 4px; width: 75px;">
+                                <input type="number" step="0.001" value="${item.quantity}" class="form-control" onfocus="this.select()" style="${inputStyle}" onchange="PurchasesView.updateItemQuantity(${index}, this.value)">
                             </td>
-                            <td style="padding: 0.4rem 4px; width: 120px;">
-                                <input type="number" step="any" value="${displayNet}" class="form-control" onfocus="this.select()" style="${inputStyle} text-align: right;" onchange="PurchasesView.updateItemCost(${index}, this.value)">
+                            <td style="padding: 0.4rem 4px; width: 110px; ${!isGrossMode ? 'background: rgba(59,130,246,0.04);' : ''}">
+                                <input type="number" step="0.001" value="${displayNet}" class="form-control" onfocus="this.select()" style="${inputStyle} text-align: right; ${!isGrossMode ? 'border-color: #3b82f6;' : ''}" onchange="PurchasesView.updateItemCost(${index}, this.value)">
                                 ${costNetTrend}
                             </td>
-                            <td style="padding: 0.4rem 4px; width: 95px;">
-                                <input type="number" step="any" value="${displayIva}" class="form-control" disabled style="${inputStyle} text-align: right; background: #f8fafc; border-color: #e2e8f0; color: #64748b;">
+                            <td style="padding: 0.4rem 4px; width: 85px;">
+                                <input type="number" step="0.001" value="${displayIva}" class="form-control" disabled style="${inputStyle} text-align: right; background: #f8fafc; border-color: #e2e8f0; color: #64748b;">
                             </td>
-                            <td style="padding: 0.4rem 4px; width: 120px;">
-                                <input type="number" step="any" value="${displayGross}" class="form-control" onfocus="this.select()" style="${inputStyle} text-align: right;" onchange="PurchasesView.updateItemGrossCost(${index}, this.value)">
+                            <td style="padding: 0.4rem 4px; width: 110px; ${isGrossMode ? 'background: rgba(16,185,129,0.04);' : ''}">
+                                <input type="number" step="0.001" value="${displayGross}" class="form-control" onfocus="this.select()" style="${inputStyle} text-align: right; ${isGrossMode ? 'border-color: #10b981;' : ''}" onchange="PurchasesView.updateItemGrossCost(${index}, this.value)">
                                 ${costGrossTrend}
                             </td>
-                            <td style="padding: 0.4rem 4px; width: 110px;">
+                            <td style="padding: 0.4rem 4px; width: 100px;">
                                 <input type="number" step="any" value="${item.price}" class="form-control" onfocus="this.select()" style="${inputStyle} text-align: right; border-color: #6366f1; color: #4338ca;" onchange="PurchasesView.updateItemPrice(${index}, this.value)">
                             </td>
-                            <td style="padding: 0.6rem 1rem; text-align: right; font-weight: 950; color: #0f172a; font-size: 1.2rem; min-width: 130px; background: rgba(79, 70, 229, 0.03); border-left: 1px solid #f1f5f9;">
-                                ${formatCLP(lineNetTotal)}
+                            <td style="padding: 0.4rem 4px; width: 80px; text-align: center;">
+                                <span style="display: inline-block; padding: 0.25rem 0.5rem; border-radius: 0.45rem; font-size: 0.85rem; font-weight: 950; color: ${marginColor}; background: #f8fafc; border: 1px solid #e2e8f0;">
+                                    ${margin.toFixed(1)}%
+                                </span>
                             </td>
-                            <td style="padding: 0.6rem; text-align: center; border-radius: 0 1rem 1rem 0; width: 50px;">
-                                <button type="button" class="btn btn-danger" onclick="PurchasesView.removeItem(${index})" style="height: 42px; width: 42px; padding: 0; border-radius: 0.65rem; border: 2px solid #fff; font-weight: 950; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);" title="Eliminar">🗑️</button>
+                            <td style="padding: 0.6rem 1rem; text-align: right; font-weight: 950; color: #0f172a; font-size: 1.15rem; min-width: 120px; background: rgba(79, 70, 229, 0.03); border-left: 1px solid #f1f5f9;">
+                                ${formatCLP(lineDisplayTotal, true)}
+                            </td>
+                            <td style="padding: 0.6rem; text-align: center; border-radius: 0 1rem 1rem 0; width: 45px;">
+                                <button type="button" class="btn btn-danger" onclick="PurchasesView.removeItem(${index})" style="height: 38px; width: 38px; padding: 0; border-radius: 0.55rem; border: 2px solid #fff; font-weight: 950; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);" title="Eliminar">🗑️</button>
                             </td>
                         </tr>
                     `;
@@ -2904,7 +3008,7 @@ const PurchasesView = {
                 item.price = price;
 
                 if (this.lastVatMode === 'gross') {
-                    item.cost = parseFloat((gross / 1.19).toFixed(2));
+                    item.cost = parseFloat((gross / 1.19).toFixed(4));
                     item.enteredCost = gross;
                     item.enteredCostMode = 'gross';
                 } else {
@@ -2912,7 +3016,7 @@ const PurchasesView = {
                     item.enteredCost = net;
                     item.enteredCostMode = 'net';
                 }
-                item.total = parseFloat((qty * item.cost).toFixed(2));
+                item.total = Math.round(qty * item.cost);
             }
         });
     },
@@ -2920,7 +3024,7 @@ const PurchasesView = {
     updateItemQuantity(index, quantity) {
         const q = parseFloat(quantity) || 0;
         this.purchaseItems[index].quantity = q;
-        this.purchaseItems[index].total = parseFloat((q * this.purchaseItems[index].cost).toFixed(2));
+        this.purchaseItems[index].total = Math.round(q * (this.purchaseItems[index].cost || 0));
         this.updatePurchaseItems();
         this.autosaveDraft();
     },
@@ -2931,7 +3035,7 @@ const PurchasesView = {
         this.purchaseItems[index].enteredCost = val;
         this.purchaseItems[index].enteredCostMode = 'net';
         this.purchaseItems[index].cost = val;
-        this.purchaseItems[index].total = parseFloat((this.purchaseItems[index].quantity * (this.purchaseItems[index].cost || 0)).toFixed(2));
+        this.purchaseItems[index].total = Math.round((this.purchaseItems[index].quantity || 0) * (this.purchaseItems[index].cost || 0));
         this.updatePurchaseItems();
         this.autosaveDraft();
     },
@@ -2943,7 +3047,7 @@ const PurchasesView = {
         this.purchaseItems[index].enteredCostMode = 'gross';
         const netCost = parseFloat((val / 1.19).toFixed(4));
         this.purchaseItems[index].cost = netCost;
-        this.purchaseItems[index].total = parseFloat((this.purchaseItems[index].quantity * (this.purchaseItems[index].cost || 0)).toFixed(2));
+        this.purchaseItems[index].total = Math.round((this.purchaseItems[index].quantity || 0) * (this.purchaseItems[index].cost || 0));
         this.updatePurchaseItems();
         this.autosaveDraft();
     },
@@ -2985,10 +3089,10 @@ const PurchasesView = {
         }
 
         const confirmSave = await showConfirm(
-            "¿ESTÁS SEGURO QUE LA COMPRA ESTÁ BIEN HECHA?",
-            "Revisa los montos finales, el IVA y la deuda antes de confirmar. Esta acción registrará el inventario y movimientos de caja.",
-            "SÍ, GUARDAR TODO",
-            "REVISAR NUEVAMENTE"
+            "¿Deseas registrar esta compra y actualizar el inventario de productos?",
+            "💼 Confirmar Compra",
+            "SÍ, GUARDAR COMPRA",
+            "REVISAR"
         );
 
         if (!confirmSave) return;
@@ -3053,7 +3157,8 @@ const PurchasesView = {
 
         console.log('📦 DATOS DE COMPRA A ENVIAR:', data);
 
-        if ((data.total - data.paidAmount) < 1.0) {
+        // ponytail: Tolerancia de $2 pesos para sincronización exacta de redondeos en facturas brutas
+        if (Math.abs(data.total - data.paidAmount) <= 2) {
             data.status = 'paid';
             data.paidAmount = data.total;
         }

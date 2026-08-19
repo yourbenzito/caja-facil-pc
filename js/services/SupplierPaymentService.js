@@ -238,16 +238,17 @@ class SupplierPaymentService {
                     const legacyPaid = parseFloat(p.paidAmount) || 0;
                     const registeredPaid = paymentsByPurchase[p.id] || 0;
                     const diff = total - Math.max(legacyPaid, registeredPaid);
-                    const balance = (diff >= 1.0) ? Math.round(diff) : 0;
+                    // ponytail: Diferencias residuales <= $2 se consideran saldo saldado
+                    const balance = (diff > 2.0) ? Math.round(diff) : 0;
                     totalDebt += balance;
-                    if (balance >= 1.0) pendingCount++;
+                    if (balance > 0) pendingCount++;
                 }
 
                 const netDebt = Math.round(totalDebt - generalPayments);
-                totalDebt = Math.max(0, netDebt >= 1.0 ? netDebt : 0);
+                totalDebt = Math.max(0, netDebt > 2.0 ? netDebt : 0);
                 const totalPaid = totalPurchases - totalDebt;
 
-                if (totalDebt >= 1.0) {
+                if (totalDebt > 0) {
                     result.push({
                         supplier,
                         totalPurchases,

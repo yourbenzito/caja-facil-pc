@@ -743,7 +743,8 @@ router.post('/api/complex/supplier-payment', async (req, res) => {
                 if (purchase) {
                     const newPaid = (parseFloat(purchase.paidAmount) || 0) + amount;
                     const total = parseFloat(purchase.total) || 0;
-                    const isFullyPaid = (total - newPaid) < 1.0;
+                    // ponytail: Tolerancia de 2 pesos para evitar deudas residuales por redondeo de IVA
+                    const isFullyPaid = (total - newPaid) <= 2.0;
                     await dbRun(
                         "UPDATE purchases SET paidAmount = ?, status = ?, updatedAt = ? WHERE id = ? AND business_id = ?",
                         [isFullyPaid ? total : newPaid, isFullyPaid ? 'paid' : 'pending', date, payment.purchaseId, bid]

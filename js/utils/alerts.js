@@ -241,8 +241,11 @@ const showConfirm = (message, titleOrCallback = 'Confirmación', confirmText = '
         const modal = showModal(content, {
             title: title,
             footer: `<div style="display: flex; gap: 1rem; width: 100%; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 1rem;">${footer}</div>`,
-            width: '450px'
+            width: '460px'
         });
+        modal.style.setProperty('height', 'auto', 'important');
+        modal.style.setProperty('min-height', 'auto', 'important');
+        modal.style.setProperty('max-height', '90vh', 'important');
 
         const confirmBtn = modal.querySelector('#confirmActionBtn');
         const cancelBtn = modal.querySelector('#confirmCancelBtn');

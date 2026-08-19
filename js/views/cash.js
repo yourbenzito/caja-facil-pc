@@ -194,13 +194,17 @@ const CashView = {
                 if (s.status === 'cancelled') return;
                 const total = parseFloat(s.total) || 0;
                 totalTodaySales += total;
-                const net = s.documentType === 'boleta' ? total : Math.round(total / 1.19);
+                // ponytail: Venta Neta descontando el 19% de IVA (salvo exentos explícitos)
+                const isExento = (s.ivaType === 'Exento' || s.documentType === 'factura_exenta');
+                const net = isExento ? total : Math.round(total / 1.19);
                 totalNetSales += net;
                 if (s.items && Array.isArray(s.items)) {
                     s.items.forEach(i => {
                         const qty = parseFloat(i.quantity) || 1;
-                        const c = parseFloat(i.cost) || 0;
-                        totalCostNet += (c * qty);
+                        const costNet = (i.costNeto !== undefined && i.costNeto !== null)
+                            ? parseFloat(i.costNeto)
+                            : ((parseFloat(i.cost) || 0) / 1.19);
+                        totalCostNet += Math.round(costNet * qty);
                     });
                 }
             });
@@ -228,7 +232,8 @@ const CashView = {
             });
         }
 
-        const estimatedNetProfit = Math.max(0, Math.round(totalNetSales - totalCostNet));
+        // ponytail: Ganancia real del turno considerando Ventas sin IVA menos Costos Netos de compra
+        const estimatedNetProfit = summary.netProfit !== undefined ? summary.netProfit : Math.round(totalNetSales - totalCostNet);
 
         // Límite de Efectivo Sugerido en Caja (Por defecto $150.000 CLP)
         const maxCashLimit = parseFloat(localStorage.getItem('cashRegisterMaxCashLimit') || '150000');
@@ -656,55 +661,72 @@ const CashView = {
 
     showHistorialVentasSesion() {
         // Agrupar todas las ventas de la sesión
-        const allSales = this._dailyDetail.flatMap(d => d.sales).sort((a, b) => new Date(b.date) - new Date(a.date));
+        const allSales = (this._dailyDetail || []).flatMap(d => d.sales || []).sort((a, b) => new Date(b.date || b.created_at || 0) - new Date(a.date || a.created_at || 0));
 
         const html = `
-            <div style="background: #0f172a; padding: 1.5rem; border-radius: 1.5rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; background: rgba(30, 41, 59, 0.4); padding: 1.5rem; border-radius: 1.25rem; border: 1px solid rgba(255,255,255,0.05);">
+            <div style="background: #0f172a; padding: 1.5rem; border-radius: 1.5rem; color: #f8fafc;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; background: rgba(30, 41, 59, 0.6); padding: 1.25rem 1.5rem; border-radius: 1rem; border: 1px solid rgba(255,255,255,0.08);">
                     <div>
-                        <h3 style="margin: 0; color: white; size: 1.25rem; font-weight: 800;">🛍️ Todas las Ventas de la Sesión</h3>
-                        <p style="margin: 0.25rem 0 0 0; color: #94a3b8; font-size: 0.85rem;">Listado completo de tickets emitidos</p>
+                        <h3 style="margin: 0; color: #ffffff; font-size: 1.25rem; font-weight: 800;">🛍️ Todas las Ventas de la Sesión</h3>
+                        <p style="margin: 0.25rem 0 0 0; color: #94a3b8; font-size: 0.82rem;">Listado completo de tickets emitidos en este turno</p>
                     </div>
                     <div style="text-align: right;">
-                        <div style="color: #10b981; font-size: 1.5rem; font-weight: 900;">${formatCLP(this._activeSummary.totalSalesAmount)}</div>
-                        <div style="color: #64748b; font-size: 0.75rem; font-weight: 700; text-transform: uppercase;">Total Acumulado</div>
+                        <div style="color: #10b981; font-size: 1.5rem; font-weight: 900;">${formatCLP(this._activeSummary?.totalSalesAmount || 0)}</div>
+                        <div style="color: #64748b; font-size: 0.72rem; font-weight: 800; text-transform: uppercase;">Total Acumulado</div>
                     </div>
                 </div>
                 
-                <div style="max-height: 60vh; overflow-y: auto; padding-right: 0.5rem; scrollbar-width: thin;">
-                    <table class="table" style="width: 100%; border-collapse: separate; border-spacing: 0;">
-                        <thead style="position: sticky; top: 0; background: #1e293b; z-index: 10;">
+                <div style="max-height: 60vh; overflow-y: auto; overflow-x: hidden; padding-right: 0.25rem; scrollbar-width: thin;">
+                    <table style="width: 100%; border-collapse: collapse; background: #0f172a;">
+                        <thead style="position: sticky; top: 0; background: #1e293b; z-index: 10; border-radius: 0.5rem;">
                             <tr>
-                                <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800;">Fecha / Hora</th>
-                                <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800;">Nº Ticket</th>
-                                <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800;">Método</th>
-                                <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; text-align: right;">Total</th>
-                                <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 800; text-align: center;">Acción</th>
+                                <th style="padding: 0.85rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 900; text-align: left;">Fecha / Hora</th>
+                                <th style="padding: 0.85rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 900; text-align: center;">Nº Ticket</th>
+                                <th style="padding: 0.85rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 900; text-align: center;">Método</th>
+                                <th style="padding: 0.85rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 900; text-align: right;">Total</th>
+                                <th style="padding: 0.85rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 900; text-align: center;">Acción</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${allSales.map(s => `
-                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
-                                    <td style="padding: 1rem; color: #f1f5f9;">
-                                        <div style="font-weight: 700;">${formatDateTime(s.date).split(' ')[1]}</div>
-                                        <div style="font-size: 0.75rem; color: #64748b;">${formatDateTime(s.date).split(' ')[0]}</div>
+                            ${allSales.map((s, idx) => {
+                                const rawDate = s.date || s.created_at;
+                                const formatted = rawDate ? formatDateTime(rawDate) : '--';
+                                const parts = formatted.includes(' ') ? formatted.split(' ') : [formatted, ''];
+                                const timeStr = parts.length > 1 ? parts.slice(1).join(' ') : (parts[0] || '--:--');
+                                const dateStr = parts[0] || '';
+                                const ticketNum = (s.saleNumber !== undefined && s.saleNumber !== null && s.saleNumber !== '') ? `#${s.saleNumber}` : `#${s.id || idx + 1}`;
+                                const isMixed = s.paymentMethod === 'mixed';
+                                const methodLabel = isMixed ? '🔀 Mixto' : this.getPaymentMethodName(s.paymentMethod || 'cash');
+
+                                return `
+                                <tr style="background: ${idx % 2 === 0 ? 'rgba(30, 41, 59, 0.5)' : 'rgba(15, 23, 42, 0.7)'}; border-bottom: 1px solid rgba(255,255,255,0.06); transition: background 0.15s;">
+                                    <td style="padding: 0.75rem 1rem; color: #f1f5f9; vertical-align: middle;">
+                                        <div style="font-weight: 800; font-size: 0.95rem; color: #f8fafc;">${timeStr}</div>
+                                        <div style="font-size: 0.72rem; color: #64748b; font-weight: 600;">${dateStr}</div>
                                     </td>
-                                    <td style="padding: 1rem; color: #f1f5f9; font-weight: 800;">#${s.saleNumber}</td>
-                                    <td style="padding: 1rem;">
-                                        <span style="background: rgba(255,255,255,0.05); color: #94a3b8; padding: 0.3rem 0.6rem; border-radius: 0.5rem; font-size: 0.75rem; font-weight: 700;">${this.getPaymentMethodName(s.paymentMethod)}</span>
+                                    <td style="padding: 0.75rem 1rem; text-align: center; color: #ffffff; font-weight: 900; font-size: 1rem; vertical-align: middle;">
+                                        <span style="background: rgba(255,255,255,0.08); padding: 0.25rem 0.6rem; border-radius: 0.4rem; border: 1px solid rgba(255,255,255,0.1);">${ticketNum}</span>
                                     </td>
-                                    <td style="padding: 1rem; text-align: right; color: #10b981; font-weight: 900; font-size: 1.1rem;">${formatCLP(s.total)}</td>
-                                    <td style="padding: 1rem; text-align: center;">
-                                        <button class="btn" style="background: rgba(99, 102, 241, 0.1); color: #818cf8; padding: 0.4rem 0.8rem; border-radius: 0.6rem; font-size: 0.75rem; font-weight: 800;" onclick="CashView.showSaleDetail(${s.id})">🔍 Detalle</button>
+                                    <td style="padding: 0.75rem 1rem; text-align: center; vertical-align: middle;">
+                                        <span style="background: ${isMixed ? 'rgba(245, 158, 11, 0.15)' : 'rgba(99, 102, 241, 0.15)'}; color: ${isMixed ? '#fbbf24' : '#a5b4fc'}; border: 1px solid ${isMixed ? 'rgba(245, 158, 11, 0.3)' : 'rgba(99, 102, 241, 0.3)'}; padding: 0.3rem 0.65rem; border-radius: 0.5rem; font-size: 0.78rem; font-weight: 800;">
+                                            ${methodLabel}
+                                        </span>
+                                    </td>
+                                    <td style="padding: 0.75rem 1rem; text-align: right; color: #10b981; font-weight: 950; font-size: 1.15rem; vertical-align: middle;">
+                                        ${formatCLP(s.total)}
+                                    </td>
+                                    <td style="padding: 0.75rem 1rem; text-align: center; vertical-align: middle;">
+                                        <button class="btn" style="background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.35); padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-size: 0.75rem; font-weight: 800; cursor: pointer;" onclick="CashView.showSaleDetail(${s.id})">🔍 Detalle</button>
                                     </td>
                                 </tr>
-                            `).join('')}
+                                `;
+                            }).join('')}
                         </tbody>
                     </table>
                 </div>
             </div>
         `;
-        showModal(html, { title: '', footer: `<button class="btn" style="background: #1e293b; color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); padding: 0.75rem 2rem; border-radius: 0.75rem;" onclick="closeModal()">Cerrar</button>`, width: '850px' });
+        showModal(html, { title: '', footer: `<button class="btn" style="background: #1e293b; color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); padding: 0.75rem 2rem; border-radius: 0.75rem; font-weight: 800; cursor: pointer;" onclick="closeModal()">Cerrar</button>`, width: '820px' });
     },
 
     showClientesPagaron() {
@@ -1459,6 +1481,7 @@ const CashView = {
             cash: 'Efectivo',
             card: 'Tarjeta',
             qr: 'QR',
+            mixed: 'Pago Mixto',
             other: 'Otro',
             pending: 'Anotado',
             debt: 'Anotado',

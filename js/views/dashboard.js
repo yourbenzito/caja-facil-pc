@@ -477,16 +477,18 @@ const DashboardView = {
 
             todaySales.forEach(sale => {
                 const total = sale.total || 0;
-                const isReceipt = sale.receiptType === 'boleta' || sale.documentType === 'boleta';
-                const saleNet = isReceipt ? Math.round(total / 1.19) : total;
+                const isExento = sale.ivaType === 'Exento' || sale.documentType === 'factura_exenta';
+                const saleNet = isExento ? total : Math.round(total / 1.19);
                 todaySalesNet += saleNet;
 
                 if (sale.items && Array.isArray(sale.items)) {
                     sale.items.forEach(item => {
                         const name = item.name || 'Sin nombre';
                         const qty = parseFloat(item.quantity || item.qty || 1);
-                        const cost = parseFloat(item.costNeto || item.cost || 0);
-                        todayCostNet += Math.round(cost * qty);
+                        const costNet = (item.costNeto !== undefined && item.costNeto !== null)
+                            ? parseFloat(item.costNeto)
+                            : ((parseFloat(item.cost) || 0) / 1.19);
+                        todayCostNet += Math.round(costNet * qty);
                         productSales[name] = (productSales[name] || 0) + qty;
                     });
                 }

@@ -99,13 +99,13 @@ async function runSchemaMigrations() {
         console.warn('[Schema] Error asegurando índices de saleReturns:', e.message);
     }
 
-    // Migración: Autolimpieza de compras con saldos residuales decimales/insignificantes (< $1 CLP)
+    // Migración: Autolimpieza de compras con saldos residuales decimales/insignificantes (<= $2.5 CLP)
     try {
         const residualPurchases = await dbAll(
-            "SELECT id, total, paidAmount FROM purchases WHERE status = 'pending' AND (CAST(total AS REAL) - CAST(paidAmount AS REAL)) < 1.0"
+            "SELECT id, total, paidAmount FROM purchases WHERE status = 'pending' AND (CAST(total AS REAL) - CAST(paidAmount AS REAL)) <= 2.5 AND (CAST(total AS REAL) - CAST(paidAmount AS REAL)) >= 0"
         );
         if (residualPurchases && residualPurchases.length > 0) {
-            console.log(`[Schema] Autolimpiando ${residualPurchases.length} compras con saldo residual < $1 CLP...`);
+            console.log(`[Schema] Autolimpiando ${residualPurchases.length} compras con saldo residual <= $2.5 CLP...`);
             for (const p of residualPurchases) {
                 await dbRun(
                     "UPDATE purchases SET paidAmount = total, status = 'paid' WHERE id = ?",

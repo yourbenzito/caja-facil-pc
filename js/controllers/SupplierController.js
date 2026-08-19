@@ -155,24 +155,42 @@ class SupplierController {
                     productOpsObj[pid] = o;
                 }
 
-                // C6 FIX: Recalcular paidAmount y status basado en pagos REALES antes de actualizar
+                // Obtener pagos registrados previamente en la tabla de pagos a proveedores
                 const registeredPaid = await SupplierPayment.getTotalPaidForPurchase(purchaseId);
                 const legacyPaid = parseFloat(old.paidAmount) || 0;
-                const effectivePaid = Math.max(registeredPaid, legacyPaid);
-                const totalAmt = parseFloat(data.total) || 0;
-                const isFullyPaid = (totalAmt - effectivePaid) < 1.0;
-                
-                data.paidAmount = isFullyPaid ? totalAmt : effectivePaid;
-                data.status = isFullyPaid ? 'paid' : 'pending';
+                const previousPaid = Math.max(registeredPaid, legacyPaid);
+                const requestedPaid = parseFloat(data.paidAmount) || 0;
+                const deductFromCash = data.deductFromCashRegister === true;
+
+                // Calcular si hay un nuevo monto a registrar
+                const deltaPaid = Math.max(0, requestedPaid - previousPaid);
+                const isFirstPaymentFromCaja = (requestedPaid > 0 && deductFromCash && registeredPaid === 0);
 
                 const cleanPurchaseData = { ...data };
                 delete cleanPurchaseData.deductFromCashRegister;
+                cleanPurchaseData.paidAmount = previousPaid;
+                cleanPurchaseData.status = (parseFloat(data.total) - previousPaid) < 1.0 ? 'paid' : 'pending';
 
                 const result = await ApiClient.put('complex/purchase', purchaseId, {
                     purchaseData: cleanPurchaseData,
                     productOps: productOpsObj
                 });
                 if (!result.success) throw new Error(result.error || 'Error en edición de compra SQLite');
+
+                // Si se solicitó un nuevo abono o se marcó egresar de caja
+                if (deltaPaid > 0 || isFirstPaymentFromCaja) {
+                    const amountToRegister = deltaPaid > 0 ? deltaPaid : requestedPaid;
+                    await SupplierPaymentService.registerPayment({
+                        supplierId: data.supplierId,
+                        purchaseId: purchaseId,
+                        amount: amountToRegister,
+                        method: deductFromCash ? 'cash' : (data.paymentMethod || 'other'),
+                        reference: deductFromCash ? 'Pago al editar compra (descontado de caja)' : 'Abono registrado al editar compra',
+                        notes: '',
+                        deductFromCashRegister: deductFromCash
+                    });
+                }
+
                 showNotification('Compra actualizada', 'success');
                 return;
             }

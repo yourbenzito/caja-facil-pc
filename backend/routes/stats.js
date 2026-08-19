@@ -72,9 +72,9 @@ router.get('/api/purchases/stats/summary', async (req, res) => {
             SELECT 
                 COUNT(*) as totalCount, 
                 SUM(total) as totalAmount, 
-                SUM(CASE WHEN status = 'pending' THEN (total - paidAmount) ELSE 0 END) as totalDebt,
+                SUM(CASE WHEN status = 'pending' AND (total - paidAmount) > 2.0 THEN (total - paidAmount) ELSE 0 END) as totalDebt,
                 SUM(CASE WHEN date >= ? THEN total ELSE 0 END) as monthTotal,
-                SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pendingCount
+                SUM(CASE WHEN status = 'pending' AND (total - paidAmount) > 2.0 THEN 1 ELSE 0 END) as pendingCount
             FROM purchases 
             WHERE business_id = ?`, [startOfMonth, bid]);
         res.json({ summary: stats });
@@ -140,21 +140,21 @@ router.get('/api/products/:id/last-purchase-cost', async (req, res) => {
             return;
         }
         
+        let costNeto = 0;
         let costGross = 0;
         if (productItem.enteredCostMode === 'gross') {
-            costGross = parseFloat(productItem.enteredCost) || 0;
+            costGross = parseFloat(productItem.enteredCost) || (parseFloat(productItem.cost) * 1.19) || 0;
+            costNeto = parseFloat((costGross / 1.19).toFixed(3));
         } else {
-            const costNeto = parseFloat(productItem.enteredCost) || 0;
-            costGross = parseFloat((costNeto * 1.19).toFixed(2));
+            costNeto = parseFloat(productItem.costNeto) || parseFloat(productItem.enteredCost) || parseFloat(productItem.cost) || 0;
+            costGross = parseFloat((costNeto * 1.19).toFixed(3));
         }
         
-        const costNeto = parseFloat((costGross / 1.19).toFixed(2));
-        
         res.json({
-            cost: costGross,
-            costNeto: costNeto,
+            cost: parseFloat(costGross.toFixed(3)),
+            costNeto: parseFloat(costNeto.toFixed(3)),
             date: lastPurchase.date,
-            reason: `Compra #${lastPurchase.purchaseNumber}`,
+            reason: `Compra #${lastPurchase.purchaseNumber || lastPurchase.id}`,
             referenceId: lastPurchase.id
         });
     } catch (err) { 
