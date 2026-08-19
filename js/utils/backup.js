@@ -14,53 +14,26 @@ window.BACKUP_ENTITY_CONFIG = ENTITY_EXPORTS;
 class BackupManager {
     static async exportAllData() {
         try {
-            const data = {
-                version: '1.0.0',
-                exportDate: new Date().toISOString(),
-                products: await db.getAll('products'),
-                categories: await db.getAll('categories'),
-                sales: await db.getAll('sales'),
-                customers: await db.getAll('customers'),
-                suppliers: await db.getAll('suppliers'),
-                purchases: await db.getAll('purchases'),
-                expenses: await db.getAll('expenses'),
-                cashRegisters: await db.getAll('cashRegisters'),
-                cashMovements: await db.getAll('cashMovements'),
-                stockMovements: await db.getAll('stockMovements'),
-                settings: await db.getAll('settings'),
-                users: await db.getAll('users'),
-                payments: await db.getAll('payments'),
-                businesses: await db.getAll('businesses'),
-
-                customerCreditDeposits: await db.getAll('customerCreditDeposits'),
-                customerCreditUses: await db.getAll('customerCreditUses'),
-                auditLogs: await db.getAll('auditLogs'),
-                productPriceHistory: await db.getAll('productPriceHistory'),
-                productCostHistory: await db.getAll('productCostHistory'),
-                supplierPayments: await db.getAll('supplierPayments'),
-                saleReturns: await db.getAll('saleReturns'),
-                passwordResets: await db.getAll('passwordResets'),
-                debtPaymentSessions: await db.getAll('debtPaymentSessions')
-            };
+            const data = await this.getBackupData();
 
             const json = JSON.stringify(data); // Sin espacios para máxima velocidad
             const blob = new Blob([json], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `pos-backup-${formatDate(new Date())}.json`;
+            a.download = `respaldo-negocio-${formatDate(new Date())}.json`;
             a.click();
             URL.revokeObjectURL(url);
 
-            showNotification('Backup creado exitosamente', 'success');
+            showNotification('Respaldo del negocio creado exitosamente', 'success');
         } catch (error) {
             console.error('Error creating backup:', error);
-            showNotification('Error al crear backup: ' + error.message, 'error');
+            showNotification('Error al crear respaldo: ' + error.message, 'error');
         }
     }
 
     /**
-     * Obtiene el objeto de backup (sin descargar). Usado por backup automático y por cierre.
+     * Obtiene el objeto de backup del negocio (sin usuarios ni contraseñas por seguridad).
      */
     static async getBackupData() {
         const products = await db.getAll('products');
@@ -74,7 +47,6 @@ class BackupManager {
         const cashMovements = await db.getAll('cashMovements');
         const stockMovements = await db.getAll('stockMovements');
         const settings = await db.getAll('settings');
-        const users = await db.getAll('users');
         const payments = await db.getAll('payments');
         const businesses = await db.getAll('businesses');
 
@@ -85,7 +57,6 @@ class BackupManager {
         const productCostHistory = await db.getAll('productCostHistory');
         const supplierPayments = await db.getAll('supplierPayments');
         const saleReturns = await db.getAll('saleReturns');
-        const passwordResets = await db.getAll('passwordResets');
         const debtPaymentSessions = await db.getAll('debtPaymentSessions');
 
         // CORRECCIÓN: Validar y corregir foreign keys antes de exportar
@@ -196,11 +167,11 @@ class BackupManager {
 
     static async importData(jsonData) {
         try {
-            const data = JSON.parse(jsonData);
+            const rawData = JSON.parse(jsonData);
+            const data = (rawData && rawData.tables) ? rawData.tables : rawData;
 
-            // La confirmación ahora se maneja antes de llamar a esta función para evitar bloqueos
             console.log('Iniciando importación certificada...');
-            console.log('Tablas en el archivo:', Object.keys(data).filter(k => !['version', 'exportDate'].includes(k)));
+            console.log('Tablas en el archivo:', Object.keys(data).filter(k => !['version', 'exportDate', 'exportedAt', 'businessId'].includes(k)));
 
             if (db.mode === 'sqlite') {
                 showNotification('🚀 Iniciando transferencia inmediata...', 'success');
@@ -212,8 +183,8 @@ class BackupManager {
                 }
             } else {
                 showNotification('2/3: Guardando datos en navegador...', 'info');
-                // Modo IndexedDB: Importación secuencial tradicional
-                const stores = ['products', 'categories', 'sales', 'customers', 'suppliers', 'purchases', 'expenses', 'cashRegisters', 'cashMovements', 'stockMovements', 'settings', 'users', 'payments', 'businesses', 'customerCreditDeposits', 'customerCreditUses', 'auditLogs', 'productPriceHistory', 'productCostHistory', 'supplierPayments', 'saleReturns', 'passwordResets', 'debtPaymentSessions'];
+                // Modo IndexedDB: Importación de tablas operativas (excluyendo users y passwordResets)
+                const stores = ['products', 'categories', 'sales', 'customers', 'suppliers', 'purchases', 'expenses', 'cashRegisters', 'cashMovements', 'stockMovements', 'settings', 'payments', 'businesses', 'customerCreditDeposits', 'customerCreditUses', 'auditLogs', 'productPriceHistory', 'productCostHistory', 'supplierPayments', 'saleReturns', 'debtPaymentSessions'];
 
                 for (const store of stores) {
                     if (data[store] && Array.isArray(data[store])) {

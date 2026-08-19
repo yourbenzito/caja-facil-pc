@@ -647,24 +647,23 @@ const SettingsView = {
                                     Descarga una copia completa de tu negocio para respaldar en la nube o en un pendrive. También puedes restaurar una copia previa.
                                 </p>
                                 <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                                    <button class="btn btn-primary" style="width: 100%; justify-content: center; background: #4f46e5;" onclick="BackupManager.exportAllData()">
-                                        📤 Generar Backup Completo (.JSON)
-                                    </button>
-                                    <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #8b5cf6; color: #5b21b6; background: #f5f3ff;" onclick="SettingsView.exportBusinessData()">
-                                        🏢 Exportar Negocio Completo (Sin Usuarios)
+                                    <button class="btn btn-primary" style="width: 100%; justify-content: center; background: #4f46e5; font-weight: 800; padding: 0.75rem 1rem; border-radius: 0.65rem;" onclick="BackupManager.exportAllData()">
+                                        📤 Exportar Respaldo del Negocio (.JSON)
                                     </button>
                                     <div style="position: relative;">
-                                        <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #d1d5db;" onclick="document.getElementById('importFile').click()">
-                                            📥 Restaurar desde Backup
+                                        <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 2px solid #3b82f6; color: #1e40af; background: #eff6ff; font-weight: 800; padding: 0.75rem 1rem; border-radius: 0.65rem;" onclick="document.getElementById('importFile').click()">
+                                            📥 Restaurar Respaldo del Negocio
                                         </button>
                                         <input type="file" id="importFile" style="display: none;" accept=".json" onchange="SettingsView.handleImport(event)">
                                     </div>
-                                    <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #fbbf24; color: #92400e; background: #fffbeb;" onclick="SettingsView.deduplicateSuppliers()">
-                                        🧹 Limpiar Proveedores Duplicados
-                                    </button>
-                                    <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #10b981; color: #065f46; background: #ecfdf5;" onclick="SettingsView.deduplicateCustomers()">
-                                        👥 Fusión Maestra de Clientes
-                                    </button>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-top: 0.25rem;">
+                                        <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #fbbf24; color: #92400e; background: #fffbeb; font-size: 0.8rem; font-weight: 700;" onclick="SettingsView.deduplicateSuppliers()">
+                                            🧹 Proveedores Dup.
+                                        </button>
+                                        <button class="btn btn-secondary" style="width: 100%; justify-content: center; border: 1.5px solid #10b981; color: #065f46; background: #ecfdf5; font-size: 0.8rem; font-weight: 700;" onclick="SettingsView.deduplicateCustomers()">
+                                            👥 Fusión Clientes
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                             <div>

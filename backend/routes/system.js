@@ -200,8 +200,9 @@ router.post('/api/migration/deduplicate-suppliers', requireRole('owner', 'admin'
 });
 
 router.post('/api/migration/import', requireRole('owner'), async (req, res) => {
-    const data = req.body;
-    const bid = req.business_id;
+    const rawData = req.body || {};
+    const data = rawData.tables ? rawData.tables : rawData;
+    const bid = req.business_id || 1;
     try {
         // ponytail: Configurar PRAGMAs de SQLite de máxima velocidad ANTES de abrir la transacción
         await dbRun('PRAGMA synchronous = OFF;');
@@ -209,11 +210,12 @@ router.post('/api/migration/import', requireRole('owner'), async (req, res) => {
 
         try {
             await withTransaction(async () => {
+                // Tablas exclusivas del negocio (users y passwordResets quedan intactas por seguridad)
                 const tables = [
                     'products', 'categories', 'sales', 'customers', 'suppliers', 'purchases', 
-                    'expenses', 'cashRegisters', 'cashMovements', 'stockMovements', 'settings', 'users', 
+                    'expenses', 'cashRegisters', 'cashMovements', 'stockMovements', 'settings', 
                     'payments', 'customerCreditDeposits', 'customerCreditUses', 'auditLogs', 
-                    'productPriceHistory', 'productCostHistory', 'supplierPayments', 'saleReturns', 'passwordResets',
+                    'productPriceHistory', 'productCostHistory', 'supplierPayments', 'saleReturns',
                     'businesses', 'debtPaymentSessions'
                 ];
 
@@ -237,21 +239,27 @@ router.post('/api/migration/import', requireRole('owner'), async (req, res) => {
                     if (items && Array.isArray(items) && items.length > 0) {
                         const tableInfo = await dbAll(`PRAGMA table_info(${table})`);
                         const dbColumns = tableInfo.map(info => info.name);
+                        const hasBusinessId = dbColumns.includes('business_id');
                         
-                        // ponytail: Pre-compilar el SQL una única vez por tabla para no sobrecargar el compilador de SQLite
-                        const sampleItem = items[0];
+                        // ponytail: Pre-compilar el SQL una única vez por tabla
+                        const sampleItem = items[0] || {};
                         const itemColumns = Object.keys(sampleItem).filter(col => dbColumns.includes(col));
+                        
+                        // Asegurar que business_id esté presente en el INSERT si la tabla lo soporta
+                        if (hasBusinessId && !itemColumns.includes('business_id')) {
+                            itemColumns.push('business_id');
+                        }
                         
                         if (itemColumns.length === 0) continue;
                         
                         const placeholders = itemColumns.map(() => '?').join(',');
-                        const sql = `INSERT INTO ${table} (${itemColumns.join(',')}) VALUES (${placeholders})`;
+                        const sql = `INSERT OR REPLACE INTO ${table} (${itemColumns.join(',')}) VALUES (${placeholders})`;
 
                         for (const item of items) {
                             const values = itemColumns.map(col => {
-                                let val = item[col];
                                 if (col === 'business_id') return bid;
-                                if (val === 'null' || val === 'undefined') return null; // Limpiar 'null' strings a NULL de base de datos
+                                let val = item[col];
+                                if (val === 'null' || val === 'undefined') return null; // Limpiar 'null' strings a NULL
                                 if (typeof val === 'object' && val !== null) return JSON.stringify(val);
                                 return val;
                             });
@@ -266,7 +274,7 @@ router.post('/api/migration/import', requireRole('owner'), async (req, res) => {
                 }
             });
         } finally {
-            // ponytail: Restaurar PRAGMAs a su estado optimizado de producción (WAL) DESPUÉS de que la transacción se haya cerrado
+            // ponytail: Restaurar PRAGMAs a su estado optimizado de producción (WAL)
             await dbRun('PRAGMA synchronous = NORMAL;');
             await dbRun('PRAGMA journal_mode = WAL;');
         }
