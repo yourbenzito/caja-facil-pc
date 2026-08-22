@@ -72,16 +72,31 @@ const dbRun = (sql, params = []) => new Promise((resolve, reject) => {
     }); 
 });
 
+let txQueue = Promise.resolve();
+
+// ponytail: Cola de transacciones para serializar escrituras en SQLite y evitar errores de colisión
 async function withTransaction(callback) {
-    await dbRun('BEGIN IMMEDIATE');
-    try { 
-        const result = await callback(); 
-        await dbRun('COMMIT'); 
-        return result; 
-    } catch (err) { 
-        await dbRun('ROLLBACK'); 
-        throw err; 
-    }
+    const runInQueue = () => new Promise((resolve, reject) => {
+        (async () => {
+            try {
+                await dbRun('BEGIN IMMEDIATE');
+                try { 
+                    const result = await callback(); 
+                    await dbRun('COMMIT'); 
+                    resolve(result); 
+                } catch (err) { 
+                    try { await dbRun('ROLLBACK'); } catch (_) {}
+                    reject(err); 
+                }
+            } catch (beginErr) {
+                reject(beginErr);
+            }
+        })();
+    });
+
+    const current = txQueue.then(runInQueue, runInQueue);
+    txQueue = current.catch(() => {});
+    return current;
 }
 
 async function getTableColumns(table) {

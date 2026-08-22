@@ -2,6 +2,7 @@ class ReportController {
     static getSaleFiscalDetails(sale) {
         const total = parseFloat(sale.total) || 0;
         const documentType = sale.documentType || 'boleta';
+        const isBoleta = documentType === 'boleta';
 
         // Neto e IVA según ley Chile y tipo de documento
         const fiscal = Sale.computeFiscalFromTotal(total, documentType);
@@ -11,8 +12,9 @@ class ReportController {
         (sale.items || []).forEach(item => {
             const qty = parseFloat(item.quantity) || 0;
             const unitCost = parseFloat(item.costAtSale) || 0;
-            costGross += qty * unitCost;
-            costNet += Math.round((qty * unitCost) / 1.19);
+            const lineCost = qty * unitCost;
+            costGross += lineCost;
+            costNet += isBoleta ? Math.round(lineCost / 1.19) : lineCost;
         });
 
         return {
@@ -64,7 +66,7 @@ class ReportController {
         totalNeto -= returnedNeto;
         ivaDebito -= returnedIVA;
 
-        // Gastos Operativos reales del periodo
+        // Gastos Operativos reales del periodo (separados de las ventas)
         let operationalExpenses = 0;
         try {
             const expenses = await Expense.getByDateRange(startDate, endDate);
@@ -75,19 +77,19 @@ class ReportController {
             console.warn('Error al calcular gastos en getFiscalSummary:', e);
         }
 
+        // Margen comercial puro de los productos vendidos
+        const grossCommercialProfit = totalNeto - totalCostNet;
+        const commercialMarginPerc = totalNeto > 0 ? ((grossCommercialProfit / totalNeto) * 100).toFixed(1) : '0';
+
         const pocketProfit = totalAmount - totalCostGross - operationalExpenses;
         const realProfit = totalNeto - totalCostNet - Math.round(operationalExpenses / 1.19);
 
         // IVA Crédito (Compras tipo Factura en el periodo)
-        // CORRECCIÓN: documentType puede ser 'factura', 'factura_neto' o 'factura_bruto'
-        // El filtro === 'factura' antes nunca encontraba nada → IVA Crédito siempre $0
         const purchases = await Purchase.getByDateRange(startDate, endDate);
         const ivaCredito = purchases
             .filter(p => p.documentType && p.documentType.includes('factura'))
             .reduce((sum, p) => {
                 const stored = parseFloat(p.ivaAmount) || 0;
-                // Si ivaAmount fue guardado como 0 en un registro con subtotal,
-                // recalcular como verificación de respaldo
                 if (stored > 0) return sum + stored;
                 const sub = parseFloat(p.subtotal) || 0;
                 if (sub <= 0) return sum;
@@ -102,11 +104,14 @@ class ReportController {
             endDate,
             totalSales: sales.length,
             totalAmount,
+            totalNeto,
             totalReturned,
             sales,
             purchases,
             ivaDebito,
             ivaCredito,
+            grossCommercialProfit,
+            commercialMarginPerc,
             pocketProfit,
             realProfit,
             totalCostGross,
@@ -214,16 +219,22 @@ class ReportController {
                 return sum + recalc;
             }, 0);
 
+        const grossCommercialProfit = totalNeto - totalCostNet;
+        const commercialMarginPerc = totalNeto > 0 ? ((grossCommercialProfit / totalNeto) * 100).toFixed(1) : '0';
+
         return {
             startDate: start,
             endDate: end,
             totalSales: sales.length,
             totalAmount: totalAmount,
+            totalNeto: totalNeto,
             totalReturned: totalReturned,
             dailyBreakdown: Object.values(dailyBreakdown),
             sales: sales,
             ivaDebito: ivaDebito,
             ivaCredito: ivaCredito,
+            grossCommercialProfit,
+            commercialMarginPerc,
             pocketProfit,
             realProfit,
             totalCostGross,
@@ -272,18 +283,24 @@ class ReportController {
         const rawSales = await Sale.getByDateRange(startDate, endDate) || [];
         const sales = rawSales.filter(s => s.status !== 'cancelled');
         const returns = await SaleReturn.getByDateRange(startDate, endDate) || [];
+        const allProducts = await Product.getAll();
+        const prodMap = new Map(allProducts.map(p => [String(p.id), p]));
 
         const productStats = {};
 
         sales.forEach(sale => {
-            // Usamos un Set por venta para no contar 2 veces el mismo ticket si hay items repetidos del mismo producto (que no debería, pero por seguridad)
             const productsInThisTicket = new Set();
             
-            sale.items.forEach(item => {
-                const pid = item.productId;
+            (sale.items || []).forEach(item => {
+                const pid = item.productId || item.id;
                 if (!productStats[pid]) {
+                    const originalProd = prodMap.get(String(pid)) || {};
                     productStats[pid] = {
-                        name: item.name,
+                        name: item.name || originalProd.name || 'Producto',
+                        barcode: originalProd.barcode || '',
+                        currentStock: originalProd.stock !== undefined ? originalProd.stock : null,
+                        minStock: originalProd.minStock || 5,
+                        type: originalProd.type || 'unit',
                         quantity: 0,
                         total: 0,
                         costTotal: 0,
@@ -304,14 +321,13 @@ class ReportController {
 
         returns.forEach(ret => {
             (ret.items || []).forEach(item => {
-                const pid = item.productId;
+                const pid = item.productId || item.id;
                 if (productStats[pid]) {
                     const qty      = parseFloat(item.quantity) || 0;
                     const unitCost = parseFloat(item.costAtSale) || parseFloat(item.cost) || 0;
                     productStats[pid].quantity  -= qty;
                     productStats[pid].total     -= parseFloat(item.total) || 0;
                     productStats[pid].costTotal -= unitCost * qty;
-                    // Las devoluciones no restan ticketCount para mantener la estadistica de interes original
                 }
             });
         });
@@ -515,23 +531,99 @@ class ReportController {
     }
 
     static async getStockReport() {
-        const products = await Product.getAll();
+        const products = await Product.getAll() || [];
+        
+        // Ventas de los últimos 30 días para calcular velocidad de rotación y autonomía
+        const endDate = new Date();
+        const startDate = new Date();
+        startDate.setDate(startDate.getDate() - 30);
+        
+        let sales30Days = [];
+        try {
+            const rawSales = await Sale.getByDateRange(startDate, endDate) || [];
+            sales30Days = rawSales.filter(s => s.status !== 'cancelled');
+        } catch (e) {
+            console.warn('Error al obtener ventas para autonomía de stock:', e);
+        }
 
-        const lowStock = products.filter(p => p.stock <= p.minStock);
-        const outOfStock = products.filter(p => p.stock === 0);
+        const soldMap = {};
+        sales30Days.forEach(s => {
+            (s.items || []).forEach(item => {
+                const pid = String(item.productId || item.id);
+                soldMap[pid] = (soldMap[pid] || 0) + (parseFloat(item.quantity) || 0);
+            });
+        });
 
-        const totalValue = products.reduce((sum, p) => {
+        let totalCostValue = 0;
+        let totalRetailValue = 0;
+        let dormantCapitalTotal = 0;
+
+        const enrichedProducts = products.map(p => {
             const stock = parseFloat(p.stock) || 0;
+            const minStock = parseFloat(p.minStock) || 5;
             const cost = parseFloat(p.cost) || 0;
-            return sum + (stock > 0 && cost > 0 ? stock * cost : 0);
-        }, 0);
+            const price = parseFloat(p.price) || 0;
+            const costVal = stock > 0 ? stock * cost : 0;
+            const retailVal = stock > 0 ? stock * price : 0;
+
+            totalCostValue += costVal;
+            totalRetailValue += retailVal;
+
+            const soldQty30 = soldMap[String(p.id)] || 0;
+            const dailyAvg = soldQty30 / 30;
+
+            let stockDays = null;
+            if (stock <= 0) {
+                stockDays = 0;
+            } else if (dailyAvg > 0) {
+                stockDays = Math.round(stock / dailyAvg);
+            } else {
+                stockDays = 999; // Sin rotación en 30 días
+            }
+
+            // Sugerencia de compra: reponer para 30 días o mínimo el doble del stock mínimo
+            let suggestedOrder = 0;
+            if (stock <= minStock || (stockDays !== null && stockDays <= 7)) {
+                const targetStock = Math.max(minStock * 2, Math.ceil(dailyAvg * 30));
+                suggestedOrder = Math.max(0, targetStock - stock);
+            }
+
+            // Capital inmovilizado: tiene stock > 0, valor en plata > 0 y 0 ventas en 30 días
+            const isDormant = stock > 0 && costVal > 0 && soldQty30 === 0;
+            if (isDormant) {
+                dormantCapitalTotal += costVal;
+            }
+
+            return {
+                ...p,
+                stock,
+                minStock,
+                cost,
+                price,
+                costVal,
+                retailVal,
+                soldQty30,
+                dailyAvg: dailyAvg.toFixed(2),
+                stockDays,
+                suggestedOrder,
+                isDormant
+            };
+        });
+
+        const lowStock = enrichedProducts.filter(p => p.stock > 0 && p.stock <= p.minStock);
+        const outOfStock = enrichedProducts.filter(p => p.stock <= 0);
+        const dormantStock = enrichedProducts.filter(p => p.isDormant);
 
         return {
             totalProducts: products.length,
             lowStock: lowStock,
             outOfStock: outOfStock,
-            totalValue: totalValue,
-            products: products
+            dormantStock: dormantStock,
+            totalCostValue: totalCostValue,
+            totalRetailValue: totalRetailValue,
+            projectedProfit: Math.max(0, totalRetailValue - totalCostValue),
+            dormantCapitalTotal: dormantCapitalTotal,
+            products: enrichedProducts
         };
     }
 
@@ -540,16 +632,18 @@ class ReportController {
     }
 
     static async getStagnantProducts(days = 14) {
-        const products = await Product.getAll();
+        const products = await Product.getAll() || [];
         const threshold = new Date();
         threshold.setDate(threshold.getDate() - parseInt(days));
+
+        const categoryTrappedMap = {};
 
         const stagnantList = products.filter(p => {
             if ((parseFloat(p.stock) || 0) <= 0) return false;
 
             // Si nunca se ha vendido, comparar con fecha de creación
             if (!p.lastSoldAt) {
-                const created = new Date(p.createdAt);
+                const created = new Date(p.createdAt || Date.now());
                 return created < threshold;
             }
 
@@ -557,24 +651,60 @@ class ReportController {
             return lastSold < threshold;
         }).map(p => {
             const currentStock = parseFloat(p.stock) || 0;
+            const cost = parseFloat(p.cost) || 0;
+            const price = parseFloat(p.price) || 0;
+            const costValue = currentStock * cost;
+            const retailValue = currentStock * price;
+            const category = p.category || 'General';
+
             const daysInactive = p.lastSoldAt
                 ? Math.floor((new Date() - new Date(p.lastSoldAt)) / (1000 * 60 * 60 * 24))
-                : Math.floor((new Date() - new Date(p.createdAt)) / (1000 * 60 * 60 * 24));
+                : Math.floor((new Date() - new Date(p.createdAt || Date.now())) / (1000 * 60 * 60 * 24));
+
+            categoryTrappedMap[category] = (categoryTrappedMap[category] || 0) + costValue;
+
+            const currentMargin = price > 0 ? Math.round(((price - cost) / price) * 100) : 0;
+            // Precio mínimo de remate: recupera el costo + 5% para costos de transacción
+            const minClearancePrice = Math.max(cost, Math.round(cost * 1.05));
+
+            let actionLevel = 'yellow';
+            let suggestedAction = '🟡 Reubicar cerca de caja';
+            if (daysInactive > 60) {
+                actionLevel = 'red';
+                suggestedAction = '🔴 Rematar al costo / Pack';
+            } else if (daysInactive > 30) {
+                actionLevel = 'orange';
+                suggestedAction = '🟠 Oferta 15% - 20%';
+            }
 
             return {
                 id: p.id,
                 name: p.name,
+                barcode: p.barcode || '',
+                category: category,
                 stock: currentStock,
-                price: p.price,
-                cost: p.cost,
+                type: p.type || 'unit',
+                price: price,
+                cost: cost,
+                currentMargin: currentMargin,
+                minClearancePrice: minClearancePrice,
                 lastSoldAt: p.lastSoldAt,
                 daysInactive: daysInactive,
-                costValue: currentStock * (parseFloat(p.cost) || 0)
+                costValue: costValue,
+                retailValue: retailValue,
+                actionLevel: actionLevel,
+                suggestedAction: suggestedAction
             };
         });
 
-        // Ordenar por días de inactividad (más estancados primero)
-        return stagnantList.sort((a, b) => b.daysInactive - a.daysInactive);
+        // Categoría con mayor dinero atrapado
+        const sortedCats = Object.entries(categoryTrappedMap).sort((a, b) => b[1] - a[1]);
+        const topStagnantCategory = sortedCats.length > 0 ? { name: sortedCats[0][0], amount: sortedCats[0][1] } : null;
+
+        stagnantList.sort((a, b) => b.costValue - a.costValue); // Por defecto los que tienen más plata atrapada
+        stagnantList._topStagnantCategory = topStagnantCategory;
+
+        return stagnantList;
     }
 
     /**
@@ -583,36 +713,86 @@ class ReportController {
      * que no provienen de una compra (PPP), para detectar errores o robos.
      */
     static async getCostAlerts() {
-        const logs = await AuditLogService.getByEntity('product');
-        const alerts = logs.filter(l =>
+        const logs = await AuditLogService.getByEntity('product') || [];
+        let products = [];
+        try {
+            products = await Product.getAllIncludingDeleted() || [];
+        } catch (_) {
+            try { products = await Product.getAll() || []; } catch (_) {}
+        }
+        const pMap = new Map(products.map(p => [String(p.id), p]));
+
+        const rawAlerts = logs.filter(l =>
             l.action === 'update' &&
             l.metadata &&
-            l.metadata.changedFields &&
-            l.metadata.changedFields.includes('cost')
-        ).map(l => ({
-            id: l.id,
-            productId: l.entityId,
-            date: l.timestamp,
-            summary: l.summary,
-            userId: l.userId,
-            username: l.username || 'Sistema',
-            metadata: l.metadata
-        })).sort((a, b) => new Date(b.date) - new Date(a.date));
+            (
+                (l.metadata.changedFields && (l.metadata.changedFields.includes('cost') || l.metadata.changedFields.includes('costBruto') || l.metadata.changedFields.includes('costNeto'))) ||
+                (l.metadata.changes && (l.metadata.changes.cost || l.metadata.changes.costBruto || l.metadata.changes.costNeto))
+            )
+        );
 
-        // Enriquecer con nombres de productos si faltan (para logs antiguos)
-        try {
-            const products = await Product.getAllIncludingDeleted();
-            const pMap = new Map(products.map(p => [String(p.id), p.name]));
+        const alerts = [];
+        for (const l of rawAlerts) {
+            const changes = l.metadata?.changes || {};
+            const costChange = changes.cost || changes.costBruto || changes.costNeto;
 
-            alerts.forEach(a => {
-                if (a.metadata && !a.metadata.productName) {
-                    a.metadata.productName = pMap.get(String(a.productId)) || null;
-                }
+            let oldCost = 0;
+            let newCost = 0;
+            if (costChange && typeof costChange === 'object') {
+                oldCost = parseFloat(costChange.old) || 0;
+                newCost = parseFloat(costChange.new) || 0;
+            }
+
+            // Filtrar cambios fantasmas donde el costo no varió realmente ($1000 -> $1000)
+            if (Math.abs(newCost - oldCost) < 0.01) continue;
+
+            const product = pMap.get(String(l.entityId)) || {};
+            const productName = l.metadata?.productName || product.name || ('Producto #' + l.entityId);
+            const barcode = product.barcode || '';
+            const category = product.category || 'General';
+            const price = parseFloat(product.price) || 0;
+            const stock = parseFloat(product.stock) || 0;
+
+            const oldMargin = price > 0 ? Math.round(((price - oldCost) / price) * 100) : 0;
+            const newMargin = price > 0 ? Math.round(((price - newCost) / price) * 100) : 0;
+            const marginDiff = newMargin - oldMargin; // ej: -15% o +10%
+            const costDiffAmount = newCost - oldCost;
+            const costDiffPerc = oldCost > 0 ? Math.round((costDiffAmount / oldCost) * 100) : 0;
+
+            // Precio de venta sugerido para recuperar el margen original si el costo subió
+            const suggestedNewPrice = (oldMargin > 0 && oldMargin < 100)
+                ? Math.round(newCost / (1 - (oldMargin / 100)))
+                : Math.round(newCost * 1.3);
+
+            // Pérdida potencial en el stock actual si no se ajusta precio
+            const stockImpact = (costDiffAmount > 0 && stock > 0) ? Math.round(costDiffAmount * stock) : 0;
+
+            alerts.push({
+                id: l.id,
+                productId: l.entityId,
+                productName,
+                barcode,
+                category,
+                date: l.timestamp,
+                userId: l.userId,
+                username: l.username || 'Sistema',
+                oldCost,
+                newCost,
+                costDiffAmount,
+                costDiffPerc,
+                price,
+                stock,
+                oldMargin,
+                newMargin,
+                marginDiff,
+                suggestedNewPrice,
+                stockImpact,
+                isMarginReduced: marginDiff < 0,
+                isCriticalMargin: marginDiff <= -5
             });
-        } catch (e) {
-            console.warn('Error enriqueciendo nombres de productos en alertas:', e);
         }
 
+        alerts.sort((a, b) => new Date(b.date) - new Date(a.date));
         return alerts;
     }
 

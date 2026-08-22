@@ -173,17 +173,26 @@ const ReportsView = {
         this._lastDailyReportSales = report.sales || [];
         this._lastDailyDateStr = dateStr;
 
-        // 1. Comparativa vs Ayer
+        // 1. Comparativa vs Ayer (sin error visual de doble signo)
         const yesterdayDate = new Date(targetDate.getTime() - 86400000);
         let yesterdayReport = { totalAmount: 0 };
         try {
             yesterdayReport = await ReportController.getDailySales(yesterdayDate);
         } catch (_) { }
+        
         const diffAmount = report.totalAmount - yesterdayReport.totalAmount;
-        const percChange = yesterdayReport.totalAmount > 0 
-            ? ((diffAmount / yesterdayReport.totalAmount) * 100).toFixed(1) 
-            : (report.totalAmount > 0 ? '+100' : '0');
-        const isGrowth = diffAmount >= 0;
+        let percBadgeHtml = '';
+        if (yesterdayReport.totalAmount > 0) {
+            const rawPerc = ((diffAmount / yesterdayReport.totalAmount) * 100);
+            const absPerc = Math.abs(rawPerc).toFixed(1);
+            if (rawPerc >= 0) {
+                percBadgeHtml = `<span class="badge badge-success" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">▲ +${absPerc}% vs Ayer (${formatCLP(yesterdayReport.totalAmount)})</span>`;
+            } else {
+                percBadgeHtml = `<span class="badge badge-danger" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">▼ -${absPerc}% vs Ayer (${formatCLP(yesterdayReport.totalAmount)})</span>`;
+            }
+        } else {
+            percBadgeHtml = `<span class="badge badge-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">${report.totalAmount > 0 ? 'Primer día con ventas' : 'Sin ventas ayer'}</span>`;
+        }
 
         // 2. Abonos/Cobros de deudas recibidos hoy
         let paymentsReceivedToday = [];
@@ -193,15 +202,16 @@ const ReportsView = {
             totalDebtPaymentsToday = paymentsReceivedToday.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
         } catch (_) { }
 
-        // 3. Descuentos y Devoluciones/Anulaciones del Día
+        // 3. Descuentos, Anulaciones y Acumuladores
         let totalDiscountsToday = 0;
         let cancelledCount = 0;
         let cancelledAmount = 0;
+        let totalUnitsSold = 0;
 
-        // 4. Ranking Top 5 Productos y Ventas por Categoría
         const productMap = new Map();
         const categoryMap = new Map();
         const paymentMethods = { cash: 0, card: 0, qr: 0, other: 0, pending: 0 };
+        const hourlyMap = new Array(24).fill(0);
 
         report.sales.forEach(sale => {
             const total = parseFloat(sale.total) || 0;
@@ -233,33 +243,87 @@ const ReportsView = {
                 paymentMethods.pending += pending;
             }
 
-            // Mapeo de Productos y Categorías
+            // Horas
+            if (sale.createdAt || sale.date) {
+                const h = new Date(sale.createdAt || sale.date).getHours();
+                if (h >= 0 && h < 24) hourlyMap[h] += total;
+            }
+
+            // Items vendidos y márgenes por producto
             (sale.items || []).forEach(item => {
-                const prodKey = item.productId || item.name || 'Producto';
+                const prodId = item.productId || item.id;
+                const prodKey = prodId || item.name || 'Producto';
                 const qty = parseFloat(item.quantity) || 0;
                 const price = parseFloat(item.unitPrice || item.price) || 0;
+                const unitCost = parseFloat(item.costAtSale) || 0;
                 const lineTotal = price * qty;
+                const lineProfit = lineTotal - (unitCost * qty);
 
-                // Producto
-                const existingP = productMap.get(prodKey) || { name: item.name || 'Producto', quantity: 0, total: 0 };
+                totalUnitsSold += qty;
+
+                const existingP = productMap.get(prodKey) || { id: prodId, name: item.name || 'Producto', quantity: 0, total: 0, profit: 0 };
                 existingP.quantity += qty;
                 existingP.total += lineTotal;
+                existingP.profit += lineProfit;
                 productMap.set(prodKey, existingP);
 
-                // Categoría
                 const catName = item.categoryName || item.category || 'General';
                 const existingC = categoryMap.get(catName) || 0;
                 categoryMap.set(catName, existingC + lineTotal);
             });
         });
 
+        // 4. Cálculos ejecutivos de valor
+        const avgTicket = report.totalSales > 0 ? Math.round(report.totalAmount / report.totalSales) : 0;
+        const avgBasket = report.totalSales > 0 ? (totalUnitsSold / report.totalSales).toFixed(1) : '0';
+
+        // Ganancia comercial pura en ventas (sin restar arriendos/gastos mensuales)
+        const commercialProfit = report.grossCommercialProfit !== undefined 
+            ? report.grossCommercialProfit 
+            : (report.totalNeto - report.totalCostNet);
+        const commercialMargin = report.totalNeto > 0 
+            ? Math.round((commercialProfit / report.totalNeto) * 100) 
+            : 0;
+
+        // Flujo real de dinero cobrado (Ventas cobradas hoy + Abonos de fiados recibidos hoy)
+        const totalCashInflow = paymentMethods.cash + paymentMethods.card + paymentMethods.qr + paymentMethods.other + totalDebtPaymentsToday;
+        const netCashBalance = totalCashInflow - (report.operationalExpenses || 0);
+
+        // Hora Pico
+        let peakHour = -1;
+        let peakAmount = 0;
+        hourlyMap.forEach((amt, hr) => {
+            if (amt > peakAmount) {
+                peakAmount = amt;
+                peakHour = hr;
+            }
+        });
+        const peakHourText = peakHour !== -1 && peakAmount > 0 
+            ? `${String(peakHour).padStart(2, '0')}:00 a ${String(peakHour + 1).padStart(2, '0')}:00 hrs (${formatCLP(peakAmount)})`
+            : 'Sin concentración marcada';
+
+        // Top 5 Productos por Venta & Top Ganadores
         const topProducts = Array.from(productMap.values()).sort((a, b) => b.total - a.total).slice(0, 5);
         const categoryList = Array.from(categoryMap.entries())
             .map(([name, amount]) => ({ name, amount }))
             .sort((a, b) => b.amount - a.amount);
         const totalCategorySales = categoryList.reduce((sum, c) => sum + c.amount, 0);
 
-        const avgTicket = report.totalSales > 0 ? Math.round(report.totalAmount / report.totalSales) : 0;
+        // Alerta de stock para productos vendidos hoy
+        let lowStockAlerts = [];
+        try {
+            const allProducts = await Product.getAll();
+            const prodStockMap = new Map(allProducts.map(p => [p.id, p]));
+            productMap.forEach(item => {
+                if (item.id) {
+                    const p = prodStockMap.get(item.id);
+                    if (p && (p.stock <= (p.minStock || 5))) {
+                        lowStockAlerts.push({ name: p.name, currentStock: p.stock, minStock: p.minStock || 5, isWeight: p.type === 'weight' });
+                    }
+                }
+            });
+        } catch (_) {}
+
         const todayStr = new Date().toISOString().slice(0, 10);
         const yesterdayStr = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
 
@@ -267,13 +331,11 @@ const ReportsView = {
             <!-- CABECERA CON SELECTOR DE FECHA Y BOTONES DE EXPORTACIÓN -->
             <div class="flex-between-wrap" style="margin-bottom: 1.25rem; gap: 1rem; align-items: center;">
                 <div>
-                    <h3 style="margin: 0; font-size: 1.4rem; color: var(--text-main); display: flex; align-items: center; gap: 0.75rem;">
+                    <h3 style="margin: 0; font-size: 1.4rem; color: var(--text-main); display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
                         📅 Ventas del Día: ${formatDate(targetDate)}
-                        <span class="badge ${isGrowth ? 'badge-success' : 'badge-danger'}" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">
-                            ${isGrowth ? '▲ +' : '▼ '}${percChange}% vs Ayer (${formatCLP(yesterdayReport.totalAmount)})
-                        </span>
+                        ${percBadgeHtml}
                     </h3>
-                    <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--secondary);">Resumen comercial y financiero puro del día seleccionado.</p>
+                    <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--secondary);">Resumen comercial, financiero y fiscal puro del día seleccionado.</p>
                 </div>
                 
                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
@@ -289,7 +351,7 @@ const ReportsView = {
                         <label for="dailyDatePicker" style="font-size: 0.8rem; font-weight: 700; color: var(--secondary); white-space: nowrap;">Fecha:</label>
                         <input type="date" id="dailyDatePicker" value="${dateStr}" 
                                onchange="ReportsView.handleDailyDateChange(this.value)"
-                               style="border: none; background: transparent; font-weight: 800; color: var(--primary); cursor: pointer; font-size: 0.9rem;">
+                                style="border: none; background: transparent; font-weight: 800; color: var(--primary); cursor: pointer; font-size: 0.9rem;">
                     </div>
                     <button class="btn btn-success" onclick="ReportsView.exportDailyToCSV()" style="font-weight: 700;">
                         📊 Exportar Excel (CSV)
@@ -300,57 +362,115 @@ const ReportsView = {
                 </div>
             </div>
 
-            <!-- FILA COMPACTA DE MÉTRICAS CLAVE -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
-                <div style="padding: 0.75rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; text-transform: uppercase;">Ventas Emitidas</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: var(--text-main);">${report.totalSales}</div>
-                    <small style="font-size: 0.7rem; opacity: 0.7;">Avg ${formatCLP(avgTicket)}/ticket</small>
+            <!-- FILA 1: TARJETAS PRINCIPALES DEL NEGOCIO -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+                <!-- Total Vendido -->
+                <div style="padding: 0.85rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1.5px solid rgba(59, 130, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #2563eb; font-weight: 800; text-transform: uppercase;">Total Vendido (Bruto)</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: #2563eb; margin: 0.2rem 0;">${formatCLP(report.totalAmount)}</div>
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">${report.totalSales} ventas | Avg ${formatCLP(avgTicket)}</div>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #2563eb; font-weight: 700; text-transform: uppercase;">Total Vendido (Bruto)</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #2563eb;">${formatCLP(report.totalAmount)}</div>
-                    <small style="font-size: 0.7rem; color: #2563eb;">Monto bruto recaudado</small>
+                <!-- Ganancia Comercial en Ventas -->
+                <div style="padding: 0.85rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #059669; font-weight: 800; text-transform: uppercase;">💎 Ganancia en Ventas</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: #059669; margin: 0.2rem 0;">${formatCLP(commercialProfit)}</div>
+                    <div style="font-size: 0.72rem; color: #059669; font-weight: 700;">Margen comercial: ${commercialMargin}%</div>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #059669; font-weight: 700; text-transform: uppercase;">Venta Limpia (Sin IVA)</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #059669;">${formatCLP(report.totalAmount - report.ivaDebito)}</div>
-                    <small style="font-size: 0.7rem; color: #059669;">Neto sin impuestos</small>
+                <!-- Gastos del Día -->
+                <div style="padding: 0.85rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1.5px solid rgba(239, 68, 68, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #dc2626; font-weight: 800; text-transform: uppercase;">💸 Gastos Pagados Hoy</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: #dc2626; margin: 0.2rem 0;">${formatCLP(report.operationalExpenses || 0)}</div>
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">Egresos operativos</div>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #d97706; font-weight: 700; text-transform: uppercase;">IVA Débito (SII 19%)</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #d97706;">${formatCLP(report.ivaDebito)}</div>
-                    <small style="font-size: 0.7rem; color: #d97706;">A guardar para fisco</small>
+                <!-- Flujo Neto de Caja -->
+                <div style="padding: 0.85rem 1rem; background: rgba(139, 92, 246, 0.08); border: 1.5px solid rgba(139, 92, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #7c3aed; font-weight: 800; text-transform: uppercase;">💵 Flujo Neto en Caja</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: #7c3aed; margin: 0.2rem 0;">${formatCLP(netCashBalance)}</div>
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">Cobrado - Gastos</div>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #7c3aed; font-weight: 700; text-transform: uppercase;">💎 Mi Ganancia Real</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #7c3aed;">${formatCLP(report.realProfit)}</div>
-                    <small style="font-size: 0.7rem; color: #7c3aed;">Utilidad de productos</small>
+                <!-- Resumen Fiscal Compacto -->
+                <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">📑 Resumen Fiscal</div>
+                    <div style="font-size: 0.9rem; font-weight: 800; color: var(--text-main); margin-top: 0.25rem;">Neto: <strong>${formatCLP(report.totalNeto || (report.totalAmount - report.ivaDebito))}</strong></div>
+                    <div style="font-size: 0.85rem; font-weight: 800; color: #d97706;">IVA (19%): <strong>${formatCLP(report.ivaDebito)}</strong></div>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(236, 72, 153, 0.08); border: 1px solid rgba(236, 72, 153, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #db2777; font-weight: 700; text-transform: uppercase;">🏷️ Descuentos Hoy</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #db2777;">${formatCLP(totalDiscountsToday)}</div>
-                    <small style="font-size: 0.7rem; color: #db2777;">Rebajas aplicadas</small>
+                <!-- Canasta Promedio y Descuentos -->
+                <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">🛒 Canasta Promedio</div>
+                    <div style="font-size: 1.2rem; font-weight: 900; color: var(--text-main); margin: 0.2rem 0;">${avgBasket} un/ticket</div>
+                    <div style="font-size: 0.72rem; color: #db2777; font-weight: 700;">Desc: ${formatCLP(totalDiscountsToday)}</div>
                 </div>
             </div>
 
-            <!-- FILA 2: COBROS, DEVOLUCIONES Y ANULACIONES DE LA JORNADA -->
-            <div style="margin-bottom: 1.5rem;">
-                <!-- Cobros de Deudas + Devoluciones y Anulaciones -->
+            <!-- FILA 2: RECAUDACIÓN REAL POR MEDIO DE PAGO -->
+            <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.25rem;">
+                <h4 style="margin: 0 0 0.85rem 0; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem;">
+                    💳 ¿Cómo entró el dinero hoy? (Recaudación Real de la Jornada)
+                </h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.75rem;">
+                    <!-- Efectivo -->
+                    <div style="padding: 0.75rem 1rem; background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.25); border-radius: 0.65rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 0.8rem; font-weight: 800; color: #15803d;">💵 EFECTIVO</span>
+                        </div>
+                        <div style="font-size: 1.25rem; font-weight: 900; color: #15803d; margin-top: 0.2rem;">${formatCLP(paymentMethods.cash)}</div>
+                        <small style="font-size: 0.7rem; color: var(--secondary);">Dinero en cajón</small>
+                    </div>
+
+                    <!-- Tarjetas -->
+                    <div style="padding: 0.75rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 0.65rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 0.8rem; font-weight: 800; color: #1d4ed8;">💳 TARJETAS / POS</span>
+                        </div>
+                        <div style="font-size: 1.25rem; font-weight: 900; color: #1d4ed8; margin-top: 0.2rem;">${formatCLP(paymentMethods.card)}</div>
+                        <small style="font-size: 0.7rem; color: var(--secondary);">Transbank / MercadoPago</small>
+                    </div>
+
+                    <!-- Transferencias -->
+                    <div style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 0.65rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 0.8rem; font-weight: 800; color: #b45309;">🏦 TRANSFERENCIAS / QR</span>
+                        </div>
+                        <div style="font-size: 1.25rem; font-weight: 900; color: #b45309; margin-top: 0.2rem;">${formatCLP(paymentMethods.other + paymentMethods.qr)}</div>
+                        <small style="font-size: 0.7rem; color: var(--secondary);">Cuenta Bancaria</small>
+                    </div>
+
+                    <!-- Fiados otorgados -->
+                    <div style="padding: 0.75rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 0.65rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 0.8rem; font-weight: 800; color: #b91c1c;">📓 FIADOS DEL DÍA</span>
+                        </div>
+                        <div style="font-size: 1.25rem; font-weight: 900; color: #b91c1c; margin-top: 0.2rem;">${formatCLP(paymentMethods.pending)}</div>
+                        <small style="font-size: 0.7rem; color: var(--secondary);">Ventas a crédito por cobrar</small>
+                    </div>
+
+                    <!-- Abonos cobrados -->
+                    <div style="padding: 0.75rem 1rem; background: rgba(16, 185, 129, 0.12); border: 1.5px solid rgba(16, 185, 129, 0.4); border-radius: 0.65rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <span style="font-size: 0.8rem; font-weight: 800; color: #047857;">🤝 ABONOS RECIBIDOS</span>
+                        </div>
+                        <div style="font-size: 1.25rem; font-weight: 900; color: #047857; margin-top: 0.2rem;">+${formatCLP(totalDebtPaymentsToday)}</div>
+                        <small style="font-size: 0.7rem; color: var(--secondary);">Cobro de deudas viejas</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FILA 3: CRÉDITOS, DEVOLUCIONES Y ALERTAS DE REPOSICIÓN -->
+            <div style="margin-bottom: 1.25rem;">
                 <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem;">
-                    <h4 style="margin-bottom: 1rem; font-size: 0.95rem;">🤝 Movimientos Financieros Especiales de la Jornada</h4>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+                    <h4 style="margin: 0 0 0.85rem 0; font-size: 0.95rem;">🤝 Movimientos Financieros Especiales & Alertas</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem;">
                         <!-- Clickeable: Fiados anotados hoy -->
                         <div style="padding: 0.85rem 1rem; background: rgba(239, 68, 68, 0.08); border-radius: 0.75rem; border: 1.5px solid rgba(239, 68, 68, 0.25); cursor: pointer; display: flex; justify-content: space-between; align-items: center;" 
                              onclick="ReportsView.showDailyFiadosModal('${dateStr}')" title="Ver deudas otorgadas hoy">
                             <div>
-                                <div style="font-weight: 800; color: #dc2626; font-size: 0.85rem;">📝 Fiados Anotados Hoy 🔍</div>
-                                <div style="font-size: 0.75rem; color: var(--secondary);">Nuevas deudas del día</div>
+                                <div style="font-weight: 800; color: #dc2626; font-size: 0.85rem;">📝 Fiados Otorgados Hoy 🔍</div>
+                                <div style="font-size: 0.75rem; color: var(--secondary);">Ver qué clientes fiaron</div>
                             </div>
                             <div style="font-size: 1.25rem; font-weight: 900; color: #dc2626;">${formatCLP(paymentMethods.pending)}</div>
                         </div>
@@ -361,7 +481,7 @@ const ReportsView = {
                              title="Haz clic para ver qué clientes abonaron/pagaron deudas hoy">
                             <div>
                                 <div style="font-weight: 800; color: #059669; font-size: 0.85rem;">🤝 Deudas Cobradas Hoy (${paymentsReceivedToday.length}) 🔍</div>
-                                <div style="font-size: 0.75rem; color: var(--secondary);">Abonos recuperados hoy</div>
+                                <div style="font-size: 0.75rem; color: var(--secondary);">Ver quién vino a abonar</div>
                             </div>
                             <div style="font-size: 1.25rem; font-weight: 900; color: #059669;">+${formatCLP(totalDebtPaymentsToday)}</div>
                         </div>
@@ -369,34 +489,49 @@ const ReportsView = {
                         <!-- Devoluciones y Anulaciones -->
                         <div style="padding: 0.85rem 1rem; background: rgba(239, 68, 68, 0.05); border: 1px dashed rgba(239, 68, 68, 0.3); border-radius: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <div style="font-weight: 800; color: #dc2626; font-size: 0.85rem;">🔄 Ventas Anuladas / Devoluciones (${cancelledCount})</div>
-                                <div style="font-size: 0.75rem; color: var(--secondary);">Ventas canceladas en el día</div>
+                                <div style="font-weight: 800; color: #dc2626; font-size: 0.85rem;">🔄 Ventas Anuladas (${cancelledCount})</div>
+                                <div style="font-size: 0.75rem; color: var(--secondary);">Cancelaciones en el día</div>
                             </div>
                             <div style="font-size: 1.25rem; font-weight: 900; color: #dc2626;">-${formatCLP(cancelledAmount)}</div>
+                        </div>
+
+                        <!-- Alertas de Reposición (Stock Bajo) -->
+                        <div style="padding: 0.85rem 1rem; background: ${lowStockAlerts.length > 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(100, 116, 139, 0.05)'}; border: 1.5px solid ${lowStockAlerts.length > 0 ? 'var(--warning)' : 'var(--border)'}; border-radius: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-weight: 800; color: ${lowStockAlerts.length > 0 ? '#d97706' : 'var(--text-main)'}; font-size: 0.85rem;">
+                                    ${lowStockAlerts.length > 0 ? '⚠️ Alerta de Reposición' : '📦 Stock en Buen Estado'}
+                                </div>
+                                <div style="font-size: 0.75rem; color: var(--secondary);">
+                                    ${lowStockAlerts.length > 0 ? `${lowStockAlerts.length} productos vendidos con bajo stock` : 'Sin quiebres de stock hoy'}
+                                </div>
+                            </div>
+                            <div style="font-size: 1.2rem; font-weight: 900; color: ${lowStockAlerts.length > 0 ? '#d97706' : 'var(--secondary)'};">
+                                ${lowStockAlerts.length > 0 ? `🚨 ${lowStockAlerts.length}` : '✅ OK'}
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- FILA 3: TOP 5 PRODUCTOS Y VENTAS POR CATEGORÍA -->
+            <!-- FILA 4: TOP 5 PRODUCTOS Y VENTAS POR CATEGORÍA -->
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;">
-                <!-- TOP 5 PRODUCTOS ESTRELLA -->
+                <!-- TOP 5 PRODUCTOS ESTRELLA CON GANANCIA -->
                 <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem;">
-                    <h4 style="margin-bottom: 1rem; font-size: 0.95rem; color: var(--text-main);">🏆 Top 5 Productos Estrella del Día</h4>
+                    <h4 style="margin-bottom: 1rem; font-size: 0.95rem; color: var(--text-main);">🏆 Top 5 Productos del Día (Ventas & Ganancia)</h4>
                     ${topProducts.length === 0 ? '<p style="color:var(--secondary); font-size:0.85rem;">Sin productos vendidos hoy</p>' : `
                         <div style="display: flex; flex-direction: column; gap: 0.5rem;">
                             ${topProducts.map((p, idx) => {
                                 const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
                                 return `
-                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.75rem; background: var(--surface-content); border-radius: 0.5rem; border: 1px solid var(--border);">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.55rem 0.75rem; background: var(--surface-content); border-radius: 0.5rem; border: 1px solid var(--border);">
                                         <div style="display: flex; align-items: center; gap: 0.6rem;">
                                             <span style="font-size: 1.1rem; width: 24px; text-align: center;">${medal}</span>
                                             <div>
-                                                <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-main);">${p.name}</div>
-                                                <small style="color: var(--secondary); font-size: 0.75rem;">${p.quantity} unidad(es) vendida(s)</small>
+                                                <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-main);">${safeHTML(p.name)}</div>
+                                                <small style="color: var(--secondary); font-size: 0.75rem;">${p.quantity} un vendidas | Ganancia: <strong style="color:#059669;">+${formatCLP(p.profit)}</strong></small>
                                             </div>
                                         </div>
-                                        <div style="font-weight: 800; color: #10b981; font-size: 0.95rem;">${formatCLP(p.total)}</div>
+                                        <div style="font-weight: 900; color: var(--primary); font-size: 0.95rem;">${formatCLP(p.total)}</div>
                                     </div>
                                 `;
                             }).join('')}
@@ -414,7 +549,7 @@ const ReportsView = {
                                 return `
                                     <div>
                                         <div style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 0.2rem;">
-                                            <span style="font-weight: 700; color: var(--text-main);">${c.name}</span>
+                                            <span style="font-weight: 700; color: var(--text-main);">${safeHTML(c.name)}</span>
                                             <span style="font-weight: 800; color: var(--primary);">${formatCLP(c.amount)} (${percent}%)</span>
                                         </div>
                                         <div style="width: 100%; height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden;">
@@ -428,11 +563,13 @@ const ReportsView = {
                 </div>
             </div>
 
-            <!-- GRÁFICO DE EVOLUCIÓN POR HORA (HORAS PICO) -->
+            <!-- GRÁFICO DE EVOLUCIÓN POR HORA CON HORA PICO -->
             <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.5rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                    <h4 style="margin: 0; font-size: 0.95rem;">📈 Evolución de Ventas por Tramo Horario (Horas Pico)</h4>
-                    <span style="font-size: 0.75rem; color: var(--secondary);">Ventas acumuladas de 08:00 a 22:00 hrs</span>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+                    <h4 style="margin: 0; font-size: 0.95rem;">📈 Evolución de Ventas por Tramo Horario</h4>
+                    <span class="badge badge-warning" style="font-size: 0.8rem; font-weight: 800; padding: 0.35rem 0.75rem;">
+                        🔥 Hora Pico: ${peakHourText}
+                    </span>
                 </div>
                 ${this._renderHourlyChart(report.sales)}
             </div>
@@ -589,6 +726,13 @@ const ReportsView = {
         `;
     },
 
+    async navigateWeeklyDate(offsetWeeks) {
+        const currentDate = this.selectedWeeklyDate ? new Date(`${this.selectedWeeklyDate}T12:00:00`) : new Date();
+        currentDate.setDate(currentDate.getDate() + (offsetWeeks * 7));
+        const newDateStr = currentDate.toISOString().slice(0, 10);
+        await this.handleWeeklyDateChange(newDateStr);
+    },
+
     async renderWeeklyReport(targetDateStr = null) {
         const dateStr = targetDateStr || this.selectedWeeklyDate || new Date().toISOString().slice(0, 10);
         this.selectedWeeklyDate = dateStr;
@@ -598,10 +742,41 @@ const ReportsView = {
         this._lastWeeklyReportSales = report.sales || [];
         this._lastWeeklyDateStr = dateStr;
 
-        // Día Pico de Ventas de la Semana
+        // 1. Comparativa vs Semana Anterior
+        const prevWeekDate = new Date(targetDate.getTime() - (7 * 86400000));
+        let prevWeekReport = { totalAmount: 0 };
+        try {
+            prevWeekReport = await ReportController.getWeeklySales(prevWeekDate);
+        } catch (_) { }
+
+        const diffAmount = report.totalAmount - prevWeekReport.totalAmount;
+        let percBadgeHtml = '';
+        if (prevWeekReport.totalAmount > 0) {
+            const rawPerc = ((diffAmount / prevWeekReport.totalAmount) * 100);
+            const absPerc = Math.abs(rawPerc).toFixed(1);
+            if (rawPerc >= 0) {
+                percBadgeHtml = `<span class="badge badge-success" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">▲ +${absPerc}% vs Semana Anterior (${formatCLP(prevWeekReport.totalAmount)})</span>`;
+            } else {
+                percBadgeHtml = `<span class="badge badge-danger" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">▼ -${absPerc}% vs Semana Anterior (${formatCLP(prevWeekReport.totalAmount)})</span>`;
+            }
+        } else {
+            percBadgeHtml = `<span class="badge badge-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">${report.totalAmount > 0 ? 'Primera semana registrada' : 'Sin ventas en semana anterior'}</span>`;
+        }
+
+        // 2. Abonos de deudas cobrados durante esta semana
+        let paymentsReceivedWeek = [];
+        let totalDebtPaymentsWeek = 0;
+        try {
+            paymentsReceivedWeek = await Payment.getByDateRange(report.startDate, report.endDate) || [];
+            totalDebtPaymentsWeek = paymentsReceivedWeek.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        } catch (_) { }
+
+        // 3. Desglose diario (Lunes a Domingo) + Detección de Mejor y Peor Día
+        const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
         let peakDayName = '-';
         let peakDayTotal = 0;
-        const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+        let lowestDayName = '-';
+        let lowestDayTotal = Infinity;
 
         const dailyList = Object.entries(report.dailyBreakdown || {}).map(([key, data]) => {
             const d = new Date(key + 'T12:00:00');
@@ -609,6 +784,10 @@ const ReportsView = {
             if (data.total > peakDayTotal) {
                 peakDayTotal = data.total;
                 peakDayName = dayName;
+            }
+            if (data.total < lowestDayTotal && data.count > 0) {
+                lowestDayTotal = data.total;
+                lowestDayName = dayName;
             }
             return {
                 key,
@@ -618,30 +797,20 @@ const ReportsView = {
             };
         });
 
-        // Top 5 Productos de la Semana y Descuentos
+        if (lowestDayTotal === Infinity) {
+            lowestDayTotal = 0;
+            lowestDayName = 'Sin datos';
+        }
+
+        // 4. Métodos de Pago, Top Productos y Ganancias
         const productMap = new Map();
         let totalDiscountsWeek = 0;
+        let totalUnitsSold = 0;
+        const paymentMethods = { cash: 0, card: 0, qr: 0, other: 0, pending: 0 };
 
         report.sales.forEach(sale => {
             totalDiscountsWeek += parseFloat(sale.discountAmount || sale.discount) || 0;
-            (sale.items || []).forEach(item => {
-                const prodKey = item.productId || item.name || 'Producto';
-                const qty = parseFloat(item.quantity) || 0;
-                const price = parseFloat(item.unitPrice || item.price) || 0;
-                const lineTotal = price * qty;
 
-                const existingP = productMap.get(prodKey) || { name: item.name || 'Producto', quantity: 0, total: 0 };
-                existingP.quantity += qty;
-                existingP.total += lineTotal;
-                productMap.set(prodKey, existingP);
-            });
-        });
-
-        const topProducts = Array.from(productMap.values()).sort((a, b) => b.total - a.total).slice(0, 5);
-
-        // Desglose Métodos de Pago
-        const paymentMethods = { cash: 0, card: 0, qr: 0, other: 0, pending: 0 };
-        report.sales.forEach(sale => {
             if (sale.paymentDetails) {
                 Object.entries(sale.paymentDetails).forEach(([method, amount]) => {
                     if (paymentMethods[method] !== undefined) {
@@ -654,29 +823,70 @@ const ReportsView = {
                     paymentMethods[method] += parseFloat(sale.paidAmount !== undefined ? sale.paidAmount : sale.total) || 0;
                 }
             }
+
             const total = parseFloat(sale.total) || 0;
             const paid = parseFloat(sale.paidAmount !== undefined ? sale.paidAmount : (sale.status === 'completed' ? total : 0)) || 0;
             const pending = Math.max(0, total - paid);
             if (pending >= 1.0) paymentMethods.pending += pending;
+
+            (sale.items || []).forEach(item => {
+                const prodId = item.productId || item.id;
+                const prodKey = prodId || item.name || 'Producto';
+                const qty = parseFloat(item.quantity) || 0;
+                const price = parseFloat(item.unitPrice || item.price) || 0;
+                const unitCost = parseFloat(item.costAtSale) || 0;
+                const lineTotal = price * qty;
+                const lineProfit = lineTotal - (unitCost * qty);
+
+                totalUnitsSold += qty;
+
+                const existingP = productMap.get(prodKey) || { id: prodId, name: item.name || 'Producto', quantity: 0, total: 0, profit: 0 };
+                existingP.quantity += qty;
+                existingP.total += lineTotal;
+                existingP.profit += lineProfit;
+                productMap.set(prodKey, existingP);
+            });
         });
 
+        const topProducts = Array.from(productMap.values()).sort((a, b) => b.total - a.total).slice(0, 5);
         const avgTicket = report.totalSales > 0 ? Math.round(report.totalAmount / report.totalSales) : 0;
+        const avgBasket = report.totalSales > 0 ? (totalUnitsSold / report.totalSales).toFixed(1) : '0';
+
+        // Ganancia comercial pura en ventas
+        const commercialProfit = report.grossCommercialProfit !== undefined 
+            ? report.grossCommercialProfit 
+            : (report.totalNeto - report.totalCostNet);
+        const commercialMargin = report.totalNeto > 0 
+            ? Math.round((commercialProfit / report.totalNeto) * 100) 
+            : 0;
+
+        // Flujo neto real de dinero semanal
+        const totalCashInflow = paymentMethods.cash + paymentMethods.card + paymentMethods.qr + paymentMethods.other + totalDebtPaymentsWeek;
+        const netCashBalance = totalCashInflow - (report.operationalExpenses || 0);
+
+        const currentWeekMondayStr = new Date().toISOString().slice(0, 10);
 
         return `
             <!-- CABECERA Y NAVEGACIÓN DE SEMANA -->
             <div class="flex-between-wrap" style="margin-bottom: 1.25rem; gap: 1rem; align-items: center;">
                 <div>
-                    <h3 style="margin: 0; font-size: 1.4rem; color: var(--text-main); display: flex; align-items: center; gap: 0.75rem;">
+                    <h3 style="margin: 0; font-size: 1.4rem; color: var(--text-main); display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
                         📅 Ventas Semanales
+                        ${percBadgeHtml}
                     </h3>
                     <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: var(--secondary);">
-                        Período del ${formatDate(report.startDate)} al ${formatDate(report.endDate)}
+                        Semana del ${formatDate(report.startDate)} al ${formatDate(report.endDate)} (Lunes a Domingo)
                     </p>
                 </div>
 
                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <div style="display: flex; gap: 0.35rem; align-items: center;">
+                        <button class="btn btn-sm btn-secondary" onclick="ReportsView.navigateWeeklyDate(-1)" title="Semana Anterior" style="font-size: 0.9rem; padding: 0.3rem 0.65rem; border-radius: 0.5rem; font-weight: 900; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #1e293b; cursor: pointer;">◀</button>
+                        <button class="btn btn-sm btn-primary" onclick="ReportsView.handleWeeklyDateChange('${currentWeekMondayStr}')">Esta Semana</button>
+                        <button class="btn btn-sm btn-secondary" onclick="ReportsView.navigateWeeklyDate(1)" title="Semana Siguiente" style="font-size: 0.9rem; padding: 0.3rem 0.65rem; border-radius: 0.5rem; font-weight: 900; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #1e293b; cursor: pointer;">▶</button>
+                    </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem; background: var(--surface-content); padding: 0.4rem 0.85rem; border-radius: 0.75rem; border: 1px solid var(--border);">
-                        <label for="weeklyDatePicker" style="font-size: 0.8rem; font-weight: 700; color: var(--secondary); white-space: nowrap;">Seleccionar Fecha:</label>
+                        <label for="weeklyDatePicker" style="font-size: 0.8rem; font-weight: 700; color: var(--secondary); white-space: nowrap;">Fecha:</label>
                         <input type="date" id="weeklyDatePicker" value="${dateStr}" 
                                onchange="ReportsView.handleWeeklyDateChange(this.value)"
                                style="border: none; background: transparent; font-weight: 800; color: var(--primary); cursor: pointer; font-size: 0.9rem;">
@@ -690,82 +900,98 @@ const ReportsView = {
                 </div>
             </div>
 
-            <!-- TARJETAS COMPACTAS SEMANALES -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
-                <div style="padding: 0.75rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; text-transform: uppercase;">Ventas Emitidas</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: var(--text-main);">${report.totalSales}</div>
-                    <small style="font-size: 0.7rem; opacity: 0.7;">Avg ${formatCLP(avgTicket)}/ticket</small>
+            <!-- FILA 1: TARJETAS PRINCIPALES SEMANALES -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+                <!-- Total Vendido Semanal -->
+                <div style="padding: 0.85rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1.5px solid rgba(59, 130, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #2563eb; font-weight: 800; text-transform: uppercase;">Total Vendido Semanal</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: #2563eb; margin: 0.2rem 0;">${formatCLP(report.totalAmount)}</div>
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">${report.totalSales} ventas | Avg ${formatCLP(avgTicket)}</div>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #2563eb; font-weight: 700; text-transform: uppercase;">Total Vendido Semanal</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #2563eb;">${formatCLP(report.totalAmount)}</div>
-                    <small style="font-size: 0.7rem; color: #2563eb;">Recaudación bruta 7 días</small>
+                <!-- Ganancia Comercial Semanal -->
+                <div style="padding: 0.85rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #059669; font-weight: 800; text-transform: uppercase;">💎 Ganancia Comercial</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: #059669; margin: 0.2rem 0;">${formatCLP(commercialProfit)}</div>
+                    <div style="font-size: 0.72rem; color: #059669; font-weight: 700;">Margen 7 días: ${commercialMargin}%</div>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #d97706; font-weight: 700; text-transform: uppercase;">IVA Débito (SII 19%)</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #d97706;">${formatCLP(report.ivaDebito)}</div>
-                    <small style="font-size: 0.7rem; color: #d97706;">A guardar para impuestos</small>
+                <!-- Gastos Semanales -->
+                <div style="padding: 0.85rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1.5px solid rgba(239, 68, 68, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #dc2626; font-weight: 800; text-transform: uppercase;">💸 Gastos de la Semana</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: #dc2626; margin: 0.2rem 0;">${formatCLP(report.operationalExpenses || 0)}</div>
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">Egresos 7 días</div>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #059669; font-weight: 700; text-transform: uppercase;">IVA Crédito (Compras)</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #059669;">${formatCLP(report.ivaCredito)}</div>
-                    <small style="font-size: 0.7rem; color: #059669;">Impuesto recuperable</small>
+                <!-- Flujo Neto Semanal -->
+                <div style="padding: 0.85rem 1rem; background: rgba(139, 92, 246, 0.08); border: 1.5px solid rgba(139, 92, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #7c3aed; font-weight: 800; text-transform: uppercase;">💵 Flujo Neto en Caja</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: #7c3aed; margin: 0.2rem 0;">${formatCLP(netCashBalance)}</div>
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">Cobrado - Gastos</div>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #7c3aed; font-weight: 700; text-transform: uppercase;">💎 Ganancia Real Semanal</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #7c3aed;">${formatCLP(report.realProfit)}</div>
-                    <small style="font-size: 0.7rem; color: #7c3aed;">Utilidad neta 7 días</small>
+                <!-- Resumen Fiscal Semanal -->
+                <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">📑 Fiscal Semanal</div>
+                    <div style="font-size: 0.85rem; font-weight: 800; color: #d97706; margin-top: 0.25rem;">IVA Débito: <strong>${formatCLP(report.ivaDebito)}</strong></div>
+                    <div style="font-size: 0.85rem; font-weight: 800; color: #059669;">IVA Crédito: <strong>${formatCLP(report.ivaCredito)}</strong></div>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(236, 72, 153, 0.08); border: 1px solid rgba(236, 72, 153, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #db2777; font-weight: 700; text-transform: uppercase;">🏷️ Descuentos Semanales</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #db2777;">${formatCLP(totalDiscountsWeek)}</div>
-                    <small style="font-size: 0.7rem; color: #db2777;">Suma de rebajas 7 días</small>
+                <!-- Canasta y Descuentos -->
+                <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">🛒 Canasta Semanal</div>
+                    <div style="font-size: 1.2rem; font-weight: 900; color: var(--text-main); margin: 0.2rem 0;">${avgBasket} un/ticket</div>
+                    <div style="font-size: 0.72rem; color: #db2777; font-weight: 700;">Desc: ${formatCLP(totalDiscountsWeek)}</div>
                 </div>
             </div>
 
-            <!-- HIGHLIGHT: DÍA PICO DE LA SEMANA + MÉTODOS DE PAGO -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;">
+            <!-- FILA 2: DÍA PICO VS DÍA MÁS BAJO & MEDIOS DE PAGO -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem;">
+                <!-- Rendimiento de Días (Mejor vs Peor) -->
                 <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; display: flex; flex-direction: column; justify-content: space-between;">
-                    <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem;">🏆 Día de Mayor Venta de la Semana</h4>
-                    <div style="padding: 1.25rem; background: rgba(245, 158, 11, 0.08); border: 1.5px solid rgba(245, 158, 11, 0.3); border-radius: 0.75rem; text-align: center;">
-                        <span style="font-size: 0.8rem; color: #d97706; font-weight: 800; text-transform: uppercase;">Día Pico Registrado</span>
-                        <div style="font-size: 1.6rem; font-weight: 900; color: #d97706; margin: 0.25rem 0;">${peakDayName}</div>
-                        <div style="font-size: 1.2rem; font-weight: 800; color: var(--text-main);">${formatCLP(peakDayTotal)} vendidos</div>
+                    <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; color: var(--text-main);">⚡ Extremos de la Semana</h4>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                        <div style="padding: 1rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem; text-align: center;">
+                            <span style="font-size: 0.75rem; color: #059669; font-weight: 800; text-transform: uppercase;">🏆 Mejor Día</span>
+                            <div style="font-size: 1.3rem; font-weight: 900; color: #059669; margin: 0.2rem 0;">${peakDayName}</div>
+                            <div style="font-size: 0.9rem; font-weight: 800; color: var(--text-main);">${formatCLP(peakDayTotal)}</div>
+                        </div>
+
+                        <div style="padding: 1rem; background: rgba(245, 158, 11, 0.08); border: 1.5px solid rgba(245, 158, 11, 0.3); border-radius: 0.75rem; text-align: center;">
+                            <span style="font-size: 0.75rem; color: #d97706; font-weight: 800; text-transform: uppercase;">📉 Día Más Flojo</span>
+                            <div style="font-size: 1.3rem; font-weight: 900; color: #d97706; margin: 0.2rem 0;">${lowestDayName}</div>
+                            <div style="font-size: 0.9rem; font-weight: 800; color: var(--text-main);">${formatCLP(lowestDayTotal)}</div>
+                        </div>
                     </div>
                 </div>
 
+                <!-- Métodos de Pago Semanales -->
                 <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem;">
-                    <h4 style="margin-bottom: 1rem; font-size: 0.95rem;">💳 Métodos de Pago Semanales</h4>
-                    <div class="grid grid-2" style="gap: 0.75rem;">
-                        <div style="text-align: center; padding: 0.65rem; background: rgba(16, 185, 129, 0.08); border-radius: 0.75rem; border: 1px solid rgba(16, 185, 129, 0.2);">
-                            <div style="font-size: 0.75rem; color: #059669; font-weight: 700;">💵 Efectivo</div>
-                            <div style="font-size: 1.1rem; font-weight: 900; color: #059669;">${formatCLP(paymentMethods.cash)}</div>
+                    <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: var(--text-main);">💳 ¿Cómo entró el dinero en la semana?</h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.6rem;">
+                        <div style="text-align: center; padding: 0.6rem; background: rgba(16, 185, 129, 0.08); border-radius: 0.65rem; border: 1px solid rgba(16, 185, 129, 0.2);">
+                            <div style="font-size: 0.72rem; color: #059669; font-weight: 800;">💵 Efectivo</div>
+                            <div style="font-size: 1rem; font-weight: 900; color: #059669;">${formatCLP(paymentMethods.cash)}</div>
                         </div>
-                        <div style="text-align: center; padding: 0.65rem; background: rgba(59, 130, 246, 0.08); border-radius: 0.75rem; border: 1px solid rgba(59, 130, 246, 0.2);">
-                            <div style="font-size: 0.75rem; color: #2563eb; font-weight: 700;">💳 Tarjeta</div>
-                            <div style="font-size: 1.1rem; font-weight: 900; color: #2563eb;">${formatCLP(paymentMethods.card)}</div>
+                        <div style="text-align: center; padding: 0.6rem; background: rgba(59, 130, 246, 0.08); border-radius: 0.65rem; border: 1px solid rgba(59, 130, 246, 0.2);">
+                            <div style="font-size: 0.72rem; color: #2563eb; font-weight: 800;">💳 Tarjetas</div>
+                            <div style="font-size: 1rem; font-weight: 900; color: #2563eb;">${formatCLP(paymentMethods.card)}</div>
                         </div>
-                        <div style="text-align: center; padding: 0.65rem; background: rgba(139, 92, 246, 0.08); border-radius: 0.75rem; border: 1px solid rgba(139, 92, 246, 0.2);">
-                            <div style="font-size: 0.75rem; color: #7c3aed; font-weight: 700;">📱 QR / Digital</div>
-                            <div style="font-size: 1.1rem; font-weight: 900; color: #7c3aed;">${formatCLP(paymentMethods.qr)}</div>
+                        <div style="text-align: center; padding: 0.6rem; background: rgba(245, 158, 11, 0.08); border-radius: 0.65rem; border: 1px solid rgba(245, 158, 11, 0.2);">
+                            <div style="font-size: 0.72rem; color: #b45309; font-weight: 800;">🏦 Transferencia</div>
+                            <div style="font-size: 1rem; font-weight: 900; color: #b45309;">${formatCLP(paymentMethods.other + paymentMethods.qr)}</div>
                         </div>
-                        <div style="text-align: center; padding: 0.65rem; background: rgba(239, 68, 68, 0.08); border-radius: 0.75rem; border: 1px solid rgba(239, 68, 68, 0.25);">
-                            <div style="font-size: 0.75rem; color: #dc2626; font-weight: 800;">📝 Anotado (Deuda)</div>
-                            <div style="font-size: 1.1rem; font-weight: 900; color: #dc2626;">${formatCLP(paymentMethods.pending)}</div>
+                        <div style="text-align: center; padding: 0.6rem; background: rgba(239, 68, 68, 0.08); border-radius: 0.65rem; border: 1px solid rgba(239, 68, 68, 0.25);">
+                            <div style="font-size: 0.72rem; color: #dc2626; font-weight: 800;">📓 Fiados Semanales</div>
+                            <div style="font-size: 1rem; font-weight: 900; color: #dc2626;">${formatCLP(paymentMethods.pending)}</div>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- DESGLOSE COMPARATIVO DÍA POR DÍA (LUNES A DOMINGO) -->
-            <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.5rem;">
-                <h4 style="margin-bottom: 1rem; font-size: 0.95rem;">📅 Comparativo Día por Día (Lunes a Domingo)</h4>
+            <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.25rem;">
+                <h4 style="margin-bottom: 1rem; font-size: 0.95rem; color: var(--text-main);">📅 Comparativo Diario de la Semana (Lunes a Domingo)</h4>
                 <div class="table-container">
                     <table style="width: 100%; border-collapse: collapse;">
                         <thead>
@@ -774,29 +1000,40 @@ const ReportsView = {
                                 <th style="padding: 0.75rem; text-align: center;">Fecha</th>
                                 <th style="padding: 0.75rem; text-align: center;">Boletas</th>
                                 <th style="padding: 0.75rem; text-align: right;">Total Vendido</th>
-                                <th style="padding: 0.75rem; text-align: right;">Venta Limpia (Sin IVA)</th>
+                                <th style="padding: 0.75rem; text-align: right;">Venta Limpia (Neto)</th>
+                                <th style="padding: 0.75rem; text-align: center;">Estado</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${dailyList.map(d => `
-                                <tr style="border-bottom: 1px solid var(--border);">
-                                    <td style="padding: 0.75rem; font-weight: 800; color: var(--text-main);">${d.dayName}</td>
-                                    <td style="padding: 0.75rem; text-align: center; color: var(--secondary);">${d.dateFormatted}</td>
-                                    <td style="padding: 0.75rem; text-align: center;"><span class="badge badge-primary">${d.count} ticket(s)</span></td>
-                                    <td style="padding: 0.75rem; text-align: right; font-weight: 800; color: #2563eb;">${formatCLP(d.total)}</td>
-                                    <td style="padding: 0.75rem; text-align: right; font-weight: 800; color: #059669;">${formatCLP(d.neto)}</td>
-                                </tr>
-                            `).join('')}
+                            ${dailyList.map(d => {
+                                const isPeak = d.dayName === peakDayName && peakDayTotal > 0;
+                                const isLow = d.dayName === lowestDayName && lowestDayTotal > 0 && !isPeak;
+                                const rowBg = isPeak ? 'rgba(16, 185, 129, 0.05)' : (isLow ? 'rgba(245, 158, 11, 0.05)' : 'transparent');
+                                const statusBadge = isPeak 
+                                    ? '<span class="badge badge-success" style="font-size: 0.7rem; font-weight: 800;">🏆 Mejor Día</span>' 
+                                    : (isLow ? '<span class="badge badge-warning" style="font-size: 0.7rem; font-weight: 800;">📉 Día Flojo</span>' : '-');
+                                
+                                return `
+                                    <tr style="border-bottom: 1px solid var(--border); background: ${rowBg};">
+                                        <td style="padding: 0.75rem; font-weight: 800; color: var(--text-main);">${d.dayName}</td>
+                                        <td style="padding: 0.75rem; text-align: center; color: var(--secondary);">${d.dateFormatted}</td>
+                                        <td style="padding: 0.75rem; text-align: center;"><span class="badge badge-primary">${d.count} ticket(s)</span></td>
+                                        <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: #2563eb;">${formatCLP(d.total)}</td>
+                                        <td style="padding: 0.75rem; text-align: right; font-weight: 800; color: #059669;">${formatCLP(d.neto)}</td>
+                                        <td style="padding: 0.75rem; text-align: center;">${statusBadge}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
                         </tbody>
                     </table>
                 </div>
             </div>
 
-            <!-- TOP 5 PRODUCTOS DE LA SEMANA -->
+            <!-- TOP 5 PRODUCTOS DE LA SEMANA CON GANANCIA -->
             <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.5rem;">
-                <h4 style="margin-bottom: 1rem; font-size: 0.95rem; color: var(--text-main);">🏆 Top 5 Productos Estrella de la Semana</h4>
+                <h4 style="margin-bottom: 1rem; font-size: 0.95rem; color: var(--text-main);">🏆 Top 5 Productos Estrella de la Semana (Ventas & Ganancia)</h4>
                 ${topProducts.length === 0 ? '<p style="color:var(--secondary); font-size:0.85rem;">Sin productos vendidos esta semana</p>' : `
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem;">
                         ${topProducts.map((p, idx) => {
                             const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
                             return `
@@ -804,11 +1041,11 @@ const ReportsView = {
                                     <div style="display: flex; align-items: center; gap: 0.6rem;">
                                         <span style="font-size: 1.2rem;">${medal}</span>
                                         <div>
-                                            <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-main);">${p.name}</div>
-                                            <small style="color: var(--secondary); font-size: 0.75rem;">${p.quantity} unid.</small>
+                                            <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-main);">${safeHTML(p.name)}</div>
+                                            <small style="color: var(--secondary); font-size: 0.75rem;">${p.quantity} unid. | Ganancia: <strong style="color:#059669;">+${formatCLP(p.profit)}</strong></small>
                                         </div>
                                     </div>
-                                    <div style="font-weight: 800; color: #10b981; font-size: 0.95rem;">${formatCLP(p.total)}</div>
+                                    <div style="font-weight: 900; color: var(--primary); font-size: 0.95rem;">${formatCLP(p.total)}</div>
                                 </div>
                             `;
                         }).join('')}
@@ -858,10 +1095,20 @@ const ReportsView = {
         showNotification('📊 Reporte de Ventas Semanales descargado en Excel (CSV)', 'success');
     },
 
+    async navigateMonthlyDate(offsetMonths) {
+        const now = new Date();
+        const curYear = this.selectedMonthlyYear !== undefined ? this.selectedMonthlyYear : now.getFullYear();
+        const curMonth = this.selectedMonthlyMonth !== undefined ? this.selectedMonthlyMonth : now.getMonth();
+        const targetDate = new Date(curYear, curMonth + offsetMonths, 1);
+        await this.handleMonthChange(`${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}`);
+    },
+
     async renderMonthlyReport(selectedYear, selectedMonth) {
         const now = new Date();
         const currentYear = selectedYear !== undefined ? selectedYear : now.getFullYear();
         const currentMonth = selectedMonth !== undefined ? selectedMonth : now.getMonth();
+        this.selectedMonthlyYear = currentYear;
+        this.selectedMonthlyMonth = currentMonth;
 
         const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
             'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -879,6 +1126,112 @@ const ReportsView = {
         this._lastMonthlyReportSales = report.sales || [];
         this._lastMonthlyDateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
 
+        const startOfMonth = new Date(currentYear, currentMonth, 1);
+        const endOfMonth = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
+        const isCurrentMonth = currentYear === now.getFullYear() && currentMonth === now.getMonth();
+        const periodEnd = isCurrentMonth ? now : endOfMonth;
+        const daysInPeriod = Math.max(1, Math.ceil((periodEnd - startOfMonth) / (1000 * 60 * 60 * 24)) + (isCurrentMonth ? 0 : 1));
+        const totalDaysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+        // 1. Comparativa vs Mes Anterior
+        const prevMonthDate = new Date(currentYear, currentMonth - 1, 1);
+        let prevMonthReport = { totalAmount: 0 };
+        try {
+            prevMonthReport = await ReportController.getMonthlySales(prevMonthDate.getFullYear(), prevMonthDate.getMonth());
+        } catch (_) { }
+
+        const diffAmount = report.totalAmount - prevMonthReport.totalAmount;
+        let percBadgeHtml = '';
+        if (prevMonthReport.totalAmount > 0) {
+            const rawPerc = ((diffAmount / prevMonthReport.totalAmount) * 100);
+            const absPerc = Math.abs(rawPerc).toFixed(1);
+            if (rawPerc >= 0) {
+                percBadgeHtml = `<span class="badge badge-success" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">▲ +${absPerc}% vs Mes Anterior (${formatCLP(prevMonthReport.totalAmount)})</span>`;
+            } else {
+                percBadgeHtml = `<span class="badge badge-danger" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">▼ -${absPerc}% vs Mes Anterior (${formatCLP(prevMonthReport.totalAmount)})</span>`;
+            }
+        } else {
+            percBadgeHtml = `<span class="badge badge-secondary" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">${report.totalAmount > 0 ? 'Primer mes registrado' : 'Sin ventas en mes anterior'}</span>`;
+        }
+
+        // 2. Abonos de deudas recibidos en el mes
+        let paymentsReceivedMonth = [];
+        let totalDebtPaymentsMonth = 0;
+        try {
+            paymentsReceivedMonth = await Payment.getByDateRange(startOfMonth, endOfMonth) || [];
+            totalDebtPaymentsMonth = paymentsReceivedMonth.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+        } catch (_) { }
+
+        // 3. Proyección Comercial
+        const dailyAvg = report.totalSales > 0 ? (report.totalAmount / daysInPeriod) : 0;
+        const monthProjection = Math.round(dailyAvg * totalDaysInMonth);
+
+        // 4. Métodos de Pago, Top Productos y Ganancias
+        const productMap = new Map();
+        let totalDiscountsMonth = 0;
+        let totalUnitsSold = 0;
+        const paymentMethods = { cash: 0, card: 0, qr: 0, other: 0, pending: 0 };
+
+        report.sales.forEach(sale => {
+            totalDiscountsMonth += parseFloat(sale.discountAmount || sale.discount) || 0;
+
+            if (sale.paymentDetails) {
+                Object.entries(sale.paymentDetails).forEach(([method, amount]) => {
+                    if (paymentMethods[method] !== undefined) {
+                        paymentMethods[method] += parseFloat(amount) || 0;
+                    }
+                });
+            } else {
+                const method = sale.paymentMethod || 'cash';
+                if (paymentMethods[method] !== undefined) {
+                    paymentMethods[method] += parseFloat(sale.paidAmount !== undefined ? sale.paidAmount : sale.total) || 0;
+                }
+            }
+
+            const total = parseFloat(sale.total) || 0;
+            const paid = parseFloat(sale.paidAmount !== undefined ? sale.paidAmount : (sale.status === 'completed' ? total : 0)) || 0;
+            const pending = Math.max(0, total - paid);
+            if (pending >= 1.0) paymentMethods.pending += pending;
+
+            (sale.items || []).forEach(item => {
+                const prodId = item.productId || item.id;
+                const prodKey = prodId || item.name || 'Producto';
+                const qty = parseFloat(item.quantity) || 0;
+                const price = parseFloat(item.unitPrice || item.price) || 0;
+                const unitCost = parseFloat(item.costAtSale) || 0;
+                const lineTotal = price * qty;
+                const lineProfit = lineTotal - (unitCost * qty);
+
+                totalUnitsSold += qty;
+
+                const existingP = productMap.get(prodKey) || { id: prodId, name: item.name || 'Producto', quantity: 0, total: 0, profit: 0 };
+                existingP.quantity += qty;
+                existingP.total += lineTotal;
+                existingP.profit += lineProfit;
+                productMap.set(prodKey, existingP);
+            });
+        });
+
+        const topProducts = Array.from(productMap.values()).sort((a, b) => b.total - a.total).slice(0, 5);
+        const avgTicket = report.totalSales > 0 ? Math.round(report.totalAmount / report.totalSales) : 0;
+        const avgBasket = report.totalSales > 0 ? (totalUnitsSold / report.totalSales).toFixed(1) : '0';
+
+        // Ganancia comercial pura en ventas
+        const commercialProfit = report.grossCommercialProfit !== undefined 
+            ? report.grossCommercialProfit 
+            : (report.totalNeto - report.totalCostNet);
+        const commercialMargin = report.totalNeto > 0 
+            ? Math.round((commercialProfit / report.totalNeto) * 100) 
+            : 0;
+
+        // Utilidad real de bolsillo (Cobrado neto tras gastos)
+        const pocketProfit = report.pocketProfit !== undefined ? report.pocketProfit : (report.totalAmount - report.totalCostGross - (report.operationalExpenses || 0));
+
+        // Flujo neto real de dinero en caja y banco mensual
+        const totalCashInflow = paymentMethods.cash + paymentMethods.card + paymentMethods.qr + paymentMethods.other + totalDebtPaymentsMonth;
+        const netCashBalance = totalCashInflow - (report.operationalExpenses || 0);
+
+        // Historial últimos 3 meses para comparativa
         const previousMonthsReports = [];
         for (let i = 1; i <= 3; i++) {
             const prevDate = new Date(currentYear, currentMonth - i, 1);
@@ -892,65 +1245,15 @@ const ReportsView = {
             }
         }
 
-        const startOfMonth = new Date(currentYear, currentMonth, 1);
-        const endOfMonth = new Date(currentYear, currentMonth + 1, 0);
-        const isCurrentMonth = currentYear === now.getFullYear() && currentMonth === now.getMonth();
-        const periodEnd = isCurrentMonth ? now : endOfMonth;
-        const daysInPeriod = Math.max(1, Math.ceil((periodEnd - startOfMonth) / (1000 * 60 * 60 * 24)) + (isCurrentMonth ? 0 : 1));
-        const totalDaysInMonth = endOfMonth.getDate();
-
-        // Proyección Comercial
-        const dailyAvg = report.totalSales > 0 ? (report.totalAmount / daysInPeriod) : 0;
-        const monthProjection = Math.round(dailyAvg * totalDaysInMonth);
-
-        // Top 5 Productos del Mes y Descuentos Totales
-        const productMap = new Map();
-        let totalDiscountsMonth = 0;
-
-        report.sales.forEach(sale => {
-            totalDiscountsMonth += parseFloat(sale.discountAmount || sale.discount) || 0;
-            (sale.items || []).forEach(item => {
-                const prodKey = item.productId || item.name || 'Producto';
-                const qty = parseFloat(item.quantity) || 0;
-                const price = parseFloat(item.unitPrice || item.price) || 0;
-                const lineTotal = price * qty;
-
-                const existingP = productMap.get(prodKey) || { name: item.name || 'Producto', quantity: 0, total: 0 };
-                existingP.quantity += qty;
-                existingP.total += lineTotal;
-                productMap.set(prodKey, existingP);
-            });
-        });
-
-        const topProducts = Array.from(productMap.values()).sort((a, b) => b.total - a.total).slice(0, 5);
-
-        // Desglose Métodos de Pago
-        const paymentMethods = { cash: 0, card: 0, qr: 0, other: 0, pending: 0 };
-        report.sales.forEach(sale => {
-            if (sale.paymentDetails) {
-                Object.entries(sale.paymentDetails).forEach(([method, amount]) => {
-                    if (paymentMethods[method] !== undefined) {
-                        paymentMethods[method] += parseFloat(amount) || 0;
-                    }
-                });
-            } else {
-                const method = sale.paymentMethod || 'cash';
-                if (paymentMethods[method] !== undefined) {
-                    paymentMethods[method] += parseFloat(sale.paidAmount !== undefined ? sale.paidAmount : sale.total) || 0;
-                }
-            }
-            const total = parseFloat(sale.total) || 0;
-            const paid = parseFloat(sale.paidAmount !== undefined ? sale.paidAmount : (sale.status === 'completed' ? total : 0)) || 0;
-            const pending = Math.max(0, total - paid);
-            if (pending >= 1.0) paymentMethods.pending += pending;
-        });
+        const currentMonthInputStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
         return `
             <!-- CABECERA Y NAVEGACIÓN MES -->
             <div class="flex-between-wrap" style="margin-bottom: 1.25rem; gap: 1rem; align-items: center;">
                 <div>
-                    <h3 style="margin: 0; font-size: 1.4rem; color: var(--text-main); display: flex; align-items: center; gap: 0.75rem;">
+                    <h3 style="margin: 0; font-size: 1.4rem; color: var(--text-main); display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
                         🗓️ Ventas de ${monthNames[currentMonth]} ${currentYear}
+                        ${percBadgeHtml}
                     </h3>
                     <p style="margin: 0.25rem 0 0 0; color: var(--secondary); font-size: 0.85rem;">
                         Período: ${formatDate(startOfMonth)} - ${formatDate(periodEnd)} 
@@ -959,14 +1262,19 @@ const ReportsView = {
                 </div>
 
                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <div style="display: flex; gap: 0.35rem; align-items: center;">
+                        <button class="btn btn-sm btn-secondary" onclick="ReportsView.navigateMonthlyDate(-1)" title="Mes Anterior" style="font-size: 0.9rem; padding: 0.3rem 0.65rem; border-radius: 0.5rem; font-weight: 900; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #1e293b; cursor: pointer;">◀</button>
+                        <button class="btn btn-sm btn-primary" onclick="ReportsView.handleMonthChange('${currentMonthInputStr}')">Mes Actual</button>
+                        <button class="btn btn-sm btn-secondary" onclick="ReportsView.navigateMonthlyDate(1)" title="Mes Siguiente" style="font-size: 0.9rem; padding: 0.3rem 0.65rem; border-radius: 0.5rem; font-weight: 900; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #1e293b; cursor: pointer;">▶</button>
+                    </div>
                     <div style="display: flex; align-items: center; gap: 0.5rem; background: var(--surface-content); padding: 0.4rem 0.85rem; border-radius: 0.75rem; border: 1px solid var(--border);">
-                        <label for="monthPicker" style="font-size: 0.8rem; font-weight: 700; color: var(--secondary); white-space: nowrap;">Seleccionar Mes:</label>
+                        <label for="monthPicker" style="font-size: 0.8rem; font-weight: 700; color: var(--secondary); white-space: nowrap;">Mes:</label>
                         <input type="month" id="monthPicker" value="${currentYear}-${String(currentMonth + 1).padStart(2, '0')}" 
                                onchange="ReportsView.handleMonthChange(this.value)"
                                style="border: none; background: transparent; font-weight: 800; color: var(--primary); cursor: pointer; font-size: 0.9rem;">
                     </div>
                     <button class="btn btn-primary" onclick="ReportsView.showReport('iva', ${currentYear}, ${currentMonth})" style="font-weight: 700;">
-                        🔍 Detalle IVA
+                        🔍 Detalle IVA (F29)
                     </button>
                     <button class="btn btn-success" onclick="ReportsView.exportMonthlyToCSV()" style="font-weight: 700;">
                         📊 Exportar Excel (CSV)
@@ -977,84 +1285,85 @@ const ReportsView = {
                 </div>
             </div>
 
-            <!-- TARJETAS COMPACTAS DEL MES -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
-                <div style="padding: 0.75rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; text-transform: uppercase;">Boletas Emitidas</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: var(--text-main);">${report.totalSales}</div>
-                    <small style="font-size: 0.7rem; opacity: 0.7;">Prom. ${formatCLP(dailyAvg)}/día</small>
+            <!-- FILA 1: TARJETAS PRINCIPALES DEL MES -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+                <!-- Total Vendido Mes -->
+                <div style="padding: 0.85rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1.5px solid rgba(59, 130, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #2563eb; font-weight: 800; text-transform: uppercase;">Total Vendido Mes</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: #2563eb; margin: 0.2rem 0;">${formatCLP(report.totalAmount)}</div>
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">${report.totalSales} ventas | Prom ${formatCLP(dailyAvg)}/día</div>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #2563eb; font-weight: 700; text-transform: uppercase;">Total Vendido Mes</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #2563eb;">${formatCLP(report.totalAmount)}</div>
-                    <small style="font-size: 0.7rem; color: #2563eb;">Recaudación bruta mensual</small>
+                <!-- Ganancia Comercial en Ventas -->
+                <div style="padding: 0.85rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #059669; font-weight: 800; text-transform: uppercase;">💎 Ganancia en Ventas</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: #059669; margin: 0.2rem 0;">${formatCLP(commercialProfit)}</div>
+                    <div style="font-size: 0.72rem; color: #059669; font-weight: 700;">Margen comercial: ${commercialMargin}%</div>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #d97706; font-weight: 700; text-transform: uppercase;">IVA Débito (Ventas)</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #d97706;">${formatCLP(report.ivaDebito)}</div>
-                    <small style="font-size: 0.7rem; color: #d97706;">Impuesto por ventas</small>
+                <!-- Gastos del Mes -->
+                <div style="padding: 0.85rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1.5px solid rgba(239, 68, 68, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #dc2626; font-weight: 800; text-transform: uppercase;">💸 Gastos Totales Mes</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: #dc2626; margin: 0.2rem 0;">${formatCLP(report.operationalExpenses || 0)}</div>
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">Egresos y costos fijos</div>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #059669; font-weight: 700; text-transform: uppercase;">IVA Crédito (Facturas)</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #059669;">${formatCLP(report.ivaCredito)}</div>
-                    <small style="font-size: 0.7rem; color: #059669;">Impuesto en compras</small>
+                <!-- Utilidad Neta Real -->
+                <div style="padding: 0.85rem 1rem; background: rgba(139, 92, 246, 0.08); border: 1.5px solid rgba(139, 92, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #7c3aed; font-weight: 800; text-transform: uppercase;">💰 Utilidad Neta Real</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: #7c3aed; margin: 0.2rem 0;">${formatCLP(pocketProfit)}</div>
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">Ganancia menos gastos</div>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #7c3aed; font-weight: 700; text-transform: uppercase;">💎 Ganancia Real Mes</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #7c3aed;">${formatCLP(report.realProfit)}</div>
-                    <small style="font-size: 0.7rem; color: #7c3aed;">Utilidad neta mensual</small>
+                <!-- Pérdidas y Mermas -->
+                <div style="padding: 0.85rem 1rem; background: ${report.monthlyLoss > 0 ? 'rgba(245, 158, 11, 0.1)' : 'var(--surface-content)'}; border: 1.5px solid ${report.monthlyLoss > 0 ? 'var(--warning)' : 'var(--border)'}; border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: ${report.monthlyLoss > 0 ? '#d97706' : 'var(--secondary)'}; font-weight: 800; text-transform: uppercase;">📦 Mermas / Pérdidas</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: ${report.monthlyLoss > 0 ? '#d97706' : 'var(--text-main)'}; margin: 0.2rem 0;">${formatCLP(report.monthlyLoss || 0)}</div>
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">Consumo: ${formatCLP(report.monthlyConsumption || 0)}</div>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(236, 72, 153, 0.08); border: 1px solid rgba(236, 72, 153, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #db2777; font-weight: 700; text-transform: uppercase;">🏷️ Descuentos Totales</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #db2777;">${formatCLP(totalDiscountsMonth)}</div>
-                    <small style="font-size: 0.7rem; color: #db2777;">Rebajas en el mes</small>
-                </div>
-            </div>
-
-            <!-- PROYECCIÓN COMERCIAL DEL MES + MÉTODOS DE PAGO -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.5rem;">
-                <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; display: flex; flex-direction: column; justify-content: space-between;">
-                    <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem;">📈 Proyección Comercial del Mes</h4>
-                    <div style="padding: 1.25rem; background: rgba(59, 130, 246, 0.08); border: 1.5px solid rgba(59, 130, 246, 0.3); border-radius: 0.75rem; text-align: center;">
-                        <span style="font-size: 0.8rem; color: #2563eb; font-weight: 800; text-transform: uppercase;">Estimación de Cierre de Mes</span>
-                        <div style="font-size: 1.6rem; font-weight: 900; color: #2563eb; margin: 0.25rem 0;">${formatCLP(monthProjection)}</div>
-                        <small style="font-size: 0.75rem; color: var(--secondary);">Basado en ritmo promedio de ${formatCLP(dailyAvg)}/día</small>
-                    </div>
-                </div>
-
-                <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem;">
-                    <h4 style="margin-bottom: 1rem; font-size: 0.95rem;">💳 Métodos de Pago del Mes</h4>
-                    <div class="grid grid-2" style="gap: 0.75rem;">
-                        <div style="text-align: center; padding: 0.65rem; background: rgba(16, 185, 129, 0.08); border-radius: 0.75rem; border: 1px solid rgba(16, 185, 129, 0.2);">
-                            <div style="font-size: 0.75rem; color: #059669; font-weight: 700;">💵 Efectivo</div>
-                            <div style="font-size: 1.1rem; font-weight: 900; color: #059669;">${formatCLP(paymentMethods.cash)}</div>
-                        </div>
-                        <div style="text-align: center; padding: 0.65rem; background: rgba(59, 130, 246, 0.08); border-radius: 0.75rem; border: 1px solid rgba(59, 130, 246, 0.2);">
-                            <div style="font-size: 0.75rem; color: #2563eb; font-weight: 700;">💳 Tarjeta</div>
-                            <div style="font-size: 1.1rem; font-weight: 900; color: #2563eb;">${formatCLP(paymentMethods.card)}</div>
-                        </div>
-                        <div style="text-align: center; padding: 0.65rem; background: rgba(139, 92, 246, 0.08); border-radius: 0.75rem; border: 1px solid rgba(139, 92, 246, 0.2);">
-                            <div style="font-size: 0.75rem; color: #7c3aed; font-weight: 700;">📱 QR / Digital</div>
-                            <div style="font-size: 1.1rem; font-weight: 900; color: #7c3aed;">${formatCLP(paymentMethods.qr)}</div>
-                        </div>
-                        <div style="text-align: center; padding: 0.65rem; background: rgba(239, 68, 68, 0.08); border-radius: 0.75rem; border: 1px solid rgba(239, 68, 68, 0.25);">
-                            <div style="font-size: 0.75rem; color: #dc2626; font-weight: 800;">📝 Anotado (Deuda)</div>
-                            <div style="font-size: 1.1rem; font-weight: 900; color: #dc2626;">${formatCLP(paymentMethods.pending)}</div>
-                        </div>
-                    </div>
+                <!-- Proyección de Cierre de Mes -->
+                <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">🔮 Proyección Cierre</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: var(--primary); margin: 0.2rem 0;">${formatCLP(monthProjection)}</div>
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">Estimado al día ${totalDaysInMonth}</div>
                 </div>
             </div>
 
-            <!-- TOP 5 PRODUCTOS ESTRELLA DEL MES -->
-            <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.5rem;">
-                <h4 style="margin-bottom: 1rem; font-size: 0.95rem; color: var(--text-main);">🏆 Top 5 Productos Estrella del Mes</h4>
+            <!-- FILA 2: RECAUDACIÓN POR MEDIO DE PAGO EN EL MES -->
+            <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.25rem;">
+                <h4 style="margin: 0 0 0.85rem 0; font-size: 0.95rem; color: var(--text-main);">
+                    💳 ¿Cómo entró el dinero en el mes? (Recaudación Real Mensual)
+                </h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem;">
+                    <div style="padding: 0.75rem 1rem; background: rgba(34, 197, 94, 0.08); border: 1px solid rgba(34, 197, 94, 0.25); border-radius: 0.65rem;">
+                        <span style="font-size: 0.75rem; font-weight: 800; color: #15803d;">💵 EFECTIVO</span>
+                        <div style="font-size: 1.2rem; font-weight: 900; color: #15803d; margin-top: 0.2rem;">${formatCLP(paymentMethods.cash)}</div>
+                    </div>
+                    <div style="padding: 0.75rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 0.65rem;">
+                        <span style="font-size: 0.75rem; font-weight: 800; color: #1d4ed8;">💳 TARJETAS / POS</span>
+                        <div style="font-size: 1.2rem; font-weight: 900; color: #1d4ed8; margin-top: 0.2rem;">${formatCLP(paymentMethods.card)}</div>
+                    </div>
+                    <div style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 0.65rem;">
+                        <span style="font-size: 0.75rem; font-weight: 800; color: #b45309;">🏦 TRANSFERENCIAS / QR</span>
+                        <div style="font-size: 1.2rem; font-weight: 900; color: #b45309; margin-top: 0.2rem;">${formatCLP(paymentMethods.other + paymentMethods.qr)}</div>
+                    </div>
+                    <div style="padding: 0.75rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 0.65rem;">
+                        <span style="font-size: 0.75rem; font-weight: 800; color: #b91c1c;">📓 FIADOS DEL MES</span>
+                        <div style="font-size: 1.2rem; font-weight: 900; color: #b91c1c; margin-top: 0.2rem;">${formatCLP(paymentMethods.pending)}</div>
+                    </div>
+                    <div style="padding: 0.75rem 1rem; background: rgba(16, 185, 129, 0.12); border: 1.5px solid rgba(16, 185, 129, 0.4); border-radius: 0.65rem;">
+                        <span style="font-size: 0.75rem; font-weight: 800; color: #047857;">🤝 ABONOS COBRADOS</span>
+                        <div style="font-size: 1.2rem; font-weight: 900; color: #047857; margin-top: 0.2rem;">+${formatCLP(totalDebtPaymentsMonth)}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TOP 5 PRODUCTOS ESTRELLA DEL MES CON GANANCIA -->
+            <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.25rem;">
+                <h4 style="margin-bottom: 1rem; font-size: 0.95rem; color: var(--text-main);">🏆 Top 5 Productos Estrella del Mes (Ventas & Ganancia)</h4>
                 ${topProducts.length === 0 ? '<p style="color:var(--secondary); font-size:0.85rem;">Sin productos vendidos este mes</p>' : `
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem;">
                         ${topProducts.map((p, idx) => {
                             const medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : `#${idx + 1}`;
                             return `
@@ -1062,11 +1371,11 @@ const ReportsView = {
                                     <div style="display: flex; align-items: center; gap: 0.6rem;">
                                         <span style="font-size: 1.2rem;">${medal}</span>
                                         <div>
-                                            <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-main);">${p.name}</div>
-                                            <small style="color: var(--secondary); font-size: 0.75rem;">${p.quantity} unid.</small>
+                                            <div style="font-weight: 700; font-size: 0.85rem; color: var(--text-main);">${safeHTML(p.name)}</div>
+                                            <small style="color: var(--secondary); font-size: 0.75rem;">${p.quantity} unid. | Ganancia: <strong style="color:#059669;">+${formatCLP(p.profit)}</strong></small>
                                         </div>
                                     </div>
-                                    <div style="font-weight: 800; color: #10b981; font-size: 0.95rem;">${formatCLP(p.total)}</div>
+                                    <div style="font-weight: 900; color: var(--primary); font-size: 0.95rem;">${formatCLP(p.total)}</div>
                                 </div>
                             `;
                         }).join('')}
@@ -1074,10 +1383,10 @@ const ReportsView = {
                 `}
             </div>
 
-            <!-- EVOLUCIÓN MES A MES -->
+            <!-- EVOLUCIÓN HISTÓRICA MES A MES -->
             ${previousMonthsReports.length > 0 ? `
                 <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.5rem;">
-                    <h4 style="margin-bottom: 1rem; font-size: 0.95rem;">📈 Comparativo Mes a Mes (Últimos Meses)</h4>
+                    <h4 style="margin-bottom: 1rem; font-size: 0.95rem; color: var(--text-main);">📈 Comparativo Histórico Mes a Mes</h4>
                     <div class="table-container">
                         <table style="width: 100%; border-collapse: collapse;">
                             <thead>
@@ -1161,94 +1470,463 @@ const ReportsView = {
         showNotification('📊 Reporte de Ventas Mensuales descargado en Excel (CSV)', 'success');
     },
 
+    getF29Declaration(year, month) {
+        try {
+            const key = `F29_DECLARATION_${year}_${month}`;
+            const raw = localStorage.getItem(key);
+            return raw ? JSON.parse(raw) : null;
+        } catch (e) {
+            return null;
+        }
+    },
+
+    saveF29Declaration(year, month, data) {
+        const key = `F29_DECLARATION_${year}_${month}`;
+        localStorage.setItem(key, JSON.stringify({
+            ...data,
+            year,
+            month,
+            updatedAt: new Date().toISOString()
+        }));
+    },
+
+    async navigateIVAMonth(offset) {
+        const currentYear = this._lastIVAYear !== undefined ? this._lastIVAYear : new Date().getFullYear();
+        const currentMonth = this._lastIVAMonth !== undefined ? this._lastIVAMonth : new Date().getMonth();
+        let targetMonth = currentMonth + offset;
+        let targetYear = currentYear;
+        if (targetMonth < 0) {
+            targetMonth = 11;
+            targetYear--;
+        } else if (targetMonth > 11) {
+            targetMonth = 0;
+            targetYear++;
+        }
+        await this.showReport('iva', targetYear, targetMonth);
+    },
+
     async renderIVAReport(selectedYear, selectedMonth) {
         const now = new Date();
         const year = selectedYear !== undefined ? selectedYear : now.getFullYear();
         const month = selectedMonth !== undefined ? selectedMonth : now.getMonth();
+        this._lastIVAYear = year;
+        this._lastIVAMonth = month;
+
         const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
             'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 
         const report = await ReportController.getMonthlySales(year, month);
+        this._lastIVAReport = report;
 
-        // Separar compras con factura para el detalle (incluyendo factura_neto y factura_bruto)
-        const purchasesWithInvoice = (report.purchases || []).filter(p => p.documentType && p.documentType.includes('factura'));
-        const netDifference = report.ivaDebito - report.ivaCredito;
+        // Compras con factura vs compras sin factura
+        const allPurchases = report.purchases || [];
+        const purchasesWithInvoice = allPurchases.filter(p => p.documentType && p.documentType.includes('factura'));
+        const purchasesWithoutInvoice = allPurchases.filter(p => !p.documentType || !p.documentType.includes('factura'));
+        
+        const unInvoicedTotal = purchasesWithoutInvoice.reduce((sum, p) => sum + (parseFloat(p.total) || 0), 0);
+        const lostIvaCredit = Math.round(unInvoicedTotal - (unInvoicedTotal / 1.19));
+
+        // Registro F29 del contador guardado para este mes
+        const f29Declared = this.getF29Declaration(year, month);
+        const prevRemanente = f29Declared ? (parseFloat(f29Declared.prevRemanente) || 0) : 0;
+
+        // Cálculos Fiscales del POS
+        const totalTaxCreditAvailable = report.ivaCredito + prevRemanente;
+        const netDifference = report.ivaDebito - totalTaxCreditAvailable;
+        const toPay = netDifference > 0 ? netDifference : 0;
+        const newRemanente = netDifference < 0 ? Math.abs(netDifference) : 0;
+
+        // Estimación de PPM (1% de ventas netas con boleta)
+        const ppmEstimate = Math.round(report.totalNeto * 0.01);
+        const totalEstimatedF29Provision = toPay + ppmEstimate;
+
+        const isCurrentMonth = (now.getFullYear() === year && now.getMonth() === month);
 
         return `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
+            <!-- CABECERA Y NAVEGACIÓN MENSUAL -->
+            <div class="flex-between-wrap" style="margin-bottom: 1.25rem; gap: 1rem; align-items: center;">
                 <div>
-                    <h3>Detalle de IVA - ${monthNames[month]} ${year}</h3>
-                    <p style="color: var(--secondary); margin: 0;">Resumen fiscal de impuestos generados y créditos acumulados.</p>
-                </div>
-                <div style="display: flex; gap: 1rem; align-items: center;">
-                    <div style="background: var(--light); padding: 0.5rem 1rem; border-radius: 0.5rem;">
-                        <input type="month" value="${year}-${String(month + 1).padStart(2, '0')}" 
-                               onchange="ReportsView.showReport('iva', ...this.value.split('-').map(v => parseInt(v)).map((v, i) => i === 1 ? v-1 : v))"
-                               style="background: transparent; border: none; font-weight: bold; color: var(--primary);">
-                    </div>
-                </div>
-            </div>
-
-            <div class="grid grid-3" style="margin-bottom: 2rem;">
-                <!-- IVA DÉBITO -->
-                <div class="card clickable" 
-                     onclick="ReportsView.showIVADetailModal('debito', ${year}, ${month})"
-                     style="border-left: 5px solid #f87171; padding: 1.5rem; cursor: pointer; transition: transform 0.2s;"
-                     onmouseover="this.style.transform='translateY(-5px)'"
-                     onmouseout="this.style.transform='translateY(0)'">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                        <span style="font-weight: 600; color: #f87171;">🔴 IVA DÉBITO (Ventas)</span>
-                        <span class="badge badge-danger">19%</span>
-                    </div>
-                    <div style="font-size: 2rem; font-weight: 800; color: var(--text);">${formatCLP(report.ivaDebito)}</div>
-                    <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem; opacity: 0.8;">Monto total cobrado en impuestos por tus ventas.</p>
-                    <div style="text-align: right; margin-top: 1rem; color: var(--primary); font-size: 0.8rem; font-weight: bold;">Ver Detalle (Boletas) →</div>
-                </div>
-
-                <!-- IVA CRÉDITO -->
-                <div class="card clickable" 
-                     onclick="ReportsView.showIVADetailModal('credito', ${year}, ${month})"
-                     style="border-left: 5px solid #34d399; padding: 1.5rem; cursor: pointer; transition: transform 0.2s;"
-                     onmouseover="this.style.transform='translateY(-5px)'"
-                     onmouseout="this.style.transform='translateY(0)'">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                        <span style="font-weight: 600; color: #34d399;">🟢 IVA CRÉDITO (Compras)</span>
-                        <span class="badge badge-success">Facturas</span>
-                    </div>
-                    <div style="font-size: 2rem; font-weight: 800; color: var(--text);">${formatCLP(report.ivaCredito)}</div>
-                    <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem; opacity: 0.8;">Impuesto a tu favor por compras con factura.</p>
-                    <div style="text-align: right; margin-top: 1rem; color: var(--primary); font-size: 0.8rem; font-weight: bold;">Ver Detalle (Facturas) →</div>
-                </div>
-
-                <!-- DIFERENCIA -->
-                <div class="card" style="border-left: 5px solid ${netDifference > 0 ? '#fbbf24' : '#6366f1'}; padding: 1.5rem;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                        <span style="font-weight: 600; color: ${netDifference > 0 ? '#fbbf24' : '#6366f1'};">
-                            ${netDifference > 0 ? '⚖️ TOTAL A PAGAR' : '💰 REMANENTE A FAVOR'}
-                        </span>
-                    </div>
-                    <div style="font-size: 2rem; font-weight: 800; color: var(--text);">${formatCLP(Math.abs(netDifference))}</div>
-                    <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem; opacity: 0.8;">
-                        ${netDifference > 0
-                ? 'Este es el monto aproximado que debes pagar al fisco.'
-                : 'Este monto queda a tu favor para el próximo mes.'}
+                    <h3 style="margin: 0; font-size: 1.4rem; color: var(--text-main); display: flex; align-items: center; gap: 0.75rem;">
+                        📑 Resumen de IVA y Auditoría F29 (SII)
+                    </h3>
+                    <p style="margin: 0.25rem 0 0 0; color: var(--secondary); font-size: 0.85rem;">
+                        ${monthNames[month]} ${year} · Control de Débito, Crédito Fiscal y Validación del Contador
                     </p>
                 </div>
+
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <!-- Botones de Navegación Rápida -->
+                    <div style="display: flex; gap: 0.25rem; background: var(--surface-content); padding: 0.25rem; border-radius: 0.75rem; border: 1px solid var(--border);">
+                        <button class="btn btn-sm btn-ghost" onclick="ReportsView.navigateIVAMonth(-1)">◀ Mes Anterior</button>
+                        <button class="btn btn-sm ${isCurrentMonth ? 'btn-primary' : 'btn-ghost'}" onclick="ReportsView.showReport('iva', ${now.getFullYear()}, ${now.getMonth()})">Mes Actual</button>
+                        <button class="btn btn-sm btn-ghost" onclick="ReportsView.navigateIVAMonth(1)">Mes Siguiente ▶</button>
+                    </div>
+
+                    <div style="background: var(--surface-content); padding: 0.35rem 0.75rem; border-radius: 0.75rem; border: 1px solid var(--border);">
+                        <input type="month" value="${year}-${String(month + 1).padStart(2, '0')}" 
+                               onchange="ReportsView.showReport('iva', ...this.value.split('-').map(v => parseInt(v)).map((v, i) => i === 1 ? v-1 : v))"
+                               style="background: transparent; border: none; font-weight: 700; color: var(--text-main); font-size: 0.85rem; cursor: pointer;">
+                    </div>
+
+                    <button class="btn btn-success" onclick="ReportsView.exportIVAToCSV()" style="font-weight: 700;">
+                        📊 Exportar para Contador (Excel)
+                    </button>
+                </div>
             </div>
 
+            <!-- TARJETAS DE BALANCE FISCAL Y ESTIMACIÓN F29 -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+                <!-- IVA DÉBITO -->
+                <div class="card clickable" onclick="ReportsView.showIVADetailModal('debito', ${year}, ${month})"
+                     style="padding: 0.85rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1.5px solid rgba(239, 68, 68, 0.3); border-radius: 0.75rem; text-align: center; cursor: pointer;">
+                    <div style="font-size: 0.72rem; color: #dc2626; font-weight: 800; text-transform: uppercase;">🔴 IVA Débito (Ventas)</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #dc2626; margin: 0.2rem 0;">${formatCLP(report.ivaDebito)}</div>
+                    <small style="font-size: 0.72rem; color: #dc2626;">Ver ${report.sales.length} boletas/ventas →</small>
+                </div>
+
+                <!-- IVA CRÉDITO + REMANENTE -->
+                <div class="card clickable" onclick="ReportsView.showIVADetailModal('credito', ${year}, ${month})"
+                     style="padding: 0.85rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem; text-align: center; cursor: pointer;">
+                    <div style="font-size: 0.72rem; color: #059669; font-weight: 800; text-transform: uppercase;">🟢 IVA Crédito (Compras)</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #059669; margin: 0.2rem 0;">${formatCLP(report.ivaCredito)}</div>
+                    <small style="font-size: 0.72rem; color: #059669;">${purchasesWithInvoice.length} facturas registradas →</small>
+                </div>
+
+                <!-- REMANENTE ANTERIOR -->
+                <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">Remanente Mes Anterior</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: var(--text-main); margin: 0.2rem 0;">${formatCLP(prevRemanente)}</div>
+                    <small style="font-size: 0.72rem; color: var(--secondary);">Crédito a favor traído</small>
+                </div>
+
+                <!-- RESULTADO FISCAL -->
+                <div style="padding: 0.85rem 1rem; background: ${toPay > 0 ? 'rgba(245, 158, 11, 0.08)' : 'rgba(99, 102, 241, 0.08)'}; border: 1.5px solid ${toPay > 0 ? 'rgba(245, 158, 11, 0.3)' : 'rgba(99, 102, 241, 0.3)'}; border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: ${toPay > 0 ? '#d97706' : '#4f46e5'}; font-weight: 800; text-transform: uppercase;">
+                        ${toPay > 0 ? '⚖️ IVA Neto a Pagar' : '💰 Nuevo Remanente a Favor'}
+                    </div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: ${toPay > 0 ? '#d97706' : '#4f46e5'}; margin: 0.2rem 0;">
+                        ${toPay > 0 ? formatCLP(toPay) : formatCLP(newRemanente)}
+                    </div>
+                    <small style="font-size: 0.72rem; color: ${toPay > 0 ? '#d97706' : '#4f46e5'};">
+                        ${toPay > 0 ? 'Impuesto neto al SII' : 'Pasa al mes siguiente'}
+                    </small>
+                </div>
+
+                <!-- PROVISIÓN TOTAL F29 -->
+                <div style="padding: 0.85rem 1rem; background: rgba(139, 92, 246, 0.08); border: 1.5px solid rgba(139, 92, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #7c3aed; font-weight: 800; text-transform: uppercase;">🏦 Provisión F29 (IVA + PPM)</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #7c3aed; margin: 0.2rem 0;">${formatCLP(totalEstimatedF29Provision)}</div>
+                    <small style="font-size: 0.72rem; color: #7c3aed;">Incluye PPM (~1%: ${formatCLP(ppmEstimate)})</small>
+                </div>
+            </div>
+
+            <!-- ALERTA DE FUGA DE IVA EN COMPRAS SIN FACTURA -->
+            ${unInvoicedTotal > 0 ? `
+                <div style="background: rgba(239, 68, 68, 0.08); border: 1.5px solid rgba(239, 68, 68, 0.3); border-radius: 0.75rem; padding: 0.85rem 1.25rem; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <span style="font-size: 1.6rem;">🛡️</span>
+                        <div>
+                            <strong style="color: #dc2626; font-size: 0.95rem;">Alerta de Fuga de Crédito Fiscal en Compras</strong>
+                            <p style="margin: 0.2rem 0 0 0; font-size: 0.82rem; color: var(--text-main);">
+                                Registraste <strong>${formatCLP(unInvoicedTotal)}</strong> en compras sin factura (${purchasesWithoutInvoice.length} compras). Si hubieses pedido factura con RUT de tu negocio, <strong>te habrías ahorrado ${formatCLP(lostIvaCredit)} en el pago de IVA de este mes</strong>.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            ` : ''}
+
+            <!-- PANEL DE CONCILIACIÓN Y AUDITORÍA: POS VS LO QUE DECLARÓ EL CONTADOR (F29) -->
+            <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.25rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+                    <div>
+                        <h4 style="margin: 0; font-size: 1.05rem; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem;">
+                            ⚖️ Auditoría de F29: Tu Sistema vs Lo que declaró tu Contador
+                        </h4>
+                        <p style="margin: 0.2rem 0 0 0; color: var(--secondary); font-size: 0.8rem;">
+                            Compara la realidad de tu caja contra el formulario F29 que te entregó el contador ante el SII
+                        </p>
+                    </div>
+
+                    <button class="btn btn-primary" onclick="ReportsView.showF29Modal(${year}, ${month})" style="font-weight: 800; font-size: 0.85rem;">
+                        📝 ${f29Declared ? 'Editar / Actualizar F29 Declarado' : 'Registrar F29 del Contador'}
+                    </button>
+                </div>
+
+                ${f29Declared ? `
+                    <div class="table-container">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="border-bottom: 2px solid var(--border); font-size: 0.8rem; color: var(--secondary); text-transform: uppercase;">
+                                    <th style="padding: 0.75rem; text-align: left;">Concepto Tributario</th>
+                                    <th style="padding: 0.75rem; text-align: right;">Tu Sistema (Caja Real)</th>
+                                    <th style="padding: 0.75rem; text-align: right; color: #2563eb;">Declarado por Contador (F29)</th>
+                                    <th style="padding: 0.75rem; text-align: center;">Diferencia / Descuadre</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <!-- IVA DÉBITO -->
+                                ${(() => {
+                                    const diffDebito = (f29Declared.ivaDebito || 0) - report.ivaDebito;
+                                    const diffClass = Math.abs(diffDebito) < 100 ? 'badge-success' : (diffDebito < 0 ? 'badge-danger' : 'badge-warning');
+                                    const diffText = Math.abs(diffDebito) < 100 ? '✅ Coincide' : (diffDebito < 0 ? `⚠️ Contador declaró -${formatCLP(Math.abs(diffDebito))} menos` : `⚠️ Contador declaró +${formatCLP(diffDebito)} más`);
+                                    return `
+                                        <tr style="border-bottom: 1px solid var(--border);">
+                                            <td style="padding: 0.75rem; font-weight: 800;">🔴 IVA Débito (Ventas)</td>
+                                            <td style="padding: 0.75rem; text-align: right; font-weight: 800;">${formatCLP(report.ivaDebito)}</td>
+                                            <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: #2563eb;">${formatCLP(f29Declared.ivaDebito || 0)}</td>
+                                            <td style="padding: 0.75rem; text-align: center;"><span class="badge ${diffClass}" style="font-size: 0.75rem;">${diffText}</span></td>
+                                        </tr>
+                                    `;
+                                })()}
+
+                                <!-- IVA CRÉDITO -->
+                                ${(() => {
+                                    const diffCredito = (f29Declared.ivaCredito || 0) - report.ivaCredito;
+                                    const diffClass = Math.abs(diffCredito) < 100 ? 'badge-success' : (diffCredito < 0 ? 'badge-danger' : 'badge-warning');
+                                    const diffText = Math.abs(diffCredito) < 100 ? '✅ Coincide' : (diffCredito < 0 ? `⚠️ Contador omitió ${formatCLP(Math.abs(diffCredito))} en facturas` : `⚠️ Contador incluyó +${formatCLP(diffCredito)} crédito extra`);
+                                    return `
+                                        <tr style="border-bottom: 1px solid var(--border);">
+                                            <td style="padding: 0.75rem; font-weight: 800;">🟢 IVA Crédito (Compras Factura)</td>
+                                            <td style="padding: 0.75rem; text-align: right; font-weight: 800;">${formatCLP(report.ivaCredito)}</td>
+                                            <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: #2563eb;">${formatCLP(f29Declared.ivaCredito || 0)}</td>
+                                            <td style="padding: 0.75rem; text-align: center;"><span class="badge ${diffClass}" style="font-size: 0.75rem;">${diffText}</span></td>
+                                        </tr>
+                                    `;
+                                })()}
+
+                                <!-- REMANENTE ANTERIOR -->
+                                <tr style="border-bottom: 1px solid var(--border);">
+                                    <td style="padding: 0.75rem; font-weight: 800;">💰 Remanente Mes Anterior Usado</td>
+                                    <td style="padding: 0.75rem; text-align: right;">${formatCLP(prevRemanente)}</td>
+                                    <td style="padding: 0.75rem; text-align: right; font-weight: 800; color: #2563eb;">${formatCLP(f29Declared.prevRemanente || 0)}</td>
+                                    <td style="padding: 0.75rem; text-align: center;"><span class="badge badge-info" style="font-size: 0.75rem;">Aplicado en F29</span></td>
+                                </tr>
+
+                                <!-- TOTAL PAGADO EN F29 -->
+                                <tr style="background: rgba(0,0,0,0.02); font-weight: 900;">
+                                    <td style="padding: 0.75rem; font-size: 0.95rem;">🏦 Total Pagado en F29 al SII</td>
+                                    <td style="padding: 0.75rem; text-align: right; font-size: 1.05rem; color: #059669;">${formatCLP(totalEstimatedF29Provision)}</td>
+                                    <td style="padding: 0.75rem; text-align: right; font-size: 1.15rem; color: #2563eb;">${formatCLP(f29Declared.totalPaid || 0)}</td>
+                                    <td style="padding: 0.75rem; text-align: center;">
+                                        ${(() => {
+                                            const diffTotal = (f29Declared.totalPaid || 0) - totalEstimatedF29Provision;
+                                            if (Math.abs(diffTotal) < 1000) return '<span class="badge badge-success">✅ Pago Cuadrado</span>';
+                                            if (diffTotal > 0) return `<span class="badge badge-warning">Pagaste +${formatCLP(diffTotal)} extra</span>`;
+                                            return `<span class="badge badge-danger">Diferencia de ${formatCLP(Math.abs(diffTotal))}</span>`;
+                                        })()}
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        ${f29Declared.notes ? `
+                            <div style="margin-top: 0.75rem; padding: 0.6rem 0.85rem; background: var(--surface-content); border-radius: 0.5rem; font-size: 0.82rem; color: var(--secondary);">
+                                <strong>📝 Notas del Contador / F29:</strong> ${safeHTML(f29Declared.notes)}
+                            </div>
+                        ` : ''}
+                    </div>
+                ` : `
+                    <div style="padding: 1.5rem; text-align: center; background: var(--surface-content); border-radius: 0.75rem; border: 1px dashed var(--border);">
+                        <div style="font-size: 1.5rem; margin-bottom: 0.5rem;">📄</div>
+                        <strong style="color: var(--text-main); font-size: 0.95rem;">Aún no has registrado el F29 de este mes</strong>
+                        <p style="margin: 0.35rem auto 1rem auto; color: var(--secondary); font-size: 0.82rem; max-width: 500px;">
+                            Cuando tu contador te entregue el formulario F29 (incluso si es con semanas de retraso), regístralo aquí para auditar si los números que él declaró coinciden con las ventas de tu caja.
+                        </p>
+                        <button class="btn btn-primary" onclick="ReportsView.showF29Modal(${year}, ${month})" style="font-weight: 800;">
+                            ➕ Registrar F29 Declarado para ${monthNames[month]} ${year}
+                        </button>
+                    </div>
+                `}
+            </div>
         `;
     },
 
-    async renderProductsReport(daysParam = 30) {
-        const days = parseInt(daysParam) || 30;
-        this.selectedProductsDays = days;
+    showF29Modal(year, month) {
+        const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+            'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const report = this._lastIVAReport || { ivaDebito: 0, ivaCredito: 0, totalNeto: 0 };
+        const currentF29 = this.getF29Declaration(year, month) || {};
 
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - days);
+        const defaultPrevRemanente = currentF29.prevRemanente !== undefined ? currentF29.prevRemanente : 0;
+        const defaultDebito = currentF29.ivaDebito !== undefined ? currentF29.ivaDebito : report.ivaDebito;
+        const defaultCredito = currentF29.ivaCredito !== undefined ? currentF29.ivaCredito : report.ivaCredito;
+        const defaultPpm = currentF29.ppmAmount !== undefined ? currentF29.ppmAmount : Math.round(report.totalNeto * 0.01);
+        const defaultPaid = currentF29.totalPaid !== undefined ? currentF29.totalPaid : Math.max(0, defaultDebito - defaultCredito - defaultPrevRemanente) + defaultPpm;
+        const defaultNotes = currentF29.notes || '';
+
+        const modalHtml = `
+            <div style="display: flex; flex-direction: column; gap: 1rem; font-size: 0.88rem;">
+                <p style="margin: 0; color: var(--secondary);">
+                    Ingresa los valores exactos que aparecen en el papel o PDF del Formulario 29 que te entregó tu contador para <strong>${monthNames[month]} ${year}</strong>:
+                </p>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                    <div>
+                        <label style="font-weight: 700; font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">
+                            Remanente Mes Anterior ($)
+                        </label>
+                        <input type="number" id="f29_prevRemanente" value="${defaultPrevRemanente}" class="form-control" placeholder="0">
+                        <small style="color: var(--secondary); font-size: 0.72rem;">Crédito a favor traído del mes previo</small>
+                    </div>
+
+                    <div>
+                        <label style="font-weight: 700; font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">
+                            IVA Débito Declarado ($)
+                        </label>
+                        <input type="number" id="f29_debito" value="${defaultDebito}" class="form-control" placeholder="0">
+                        <small style="color: var(--secondary); font-size: 0.72rem;">Monto de ventas con boleta en F29</small>
+                    </div>
+
+                    <div>
+                        <label style="font-weight: 700; font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">
+                            IVA Crédito Declarado ($)
+                        </label>
+                        <input type="number" id="f29_credito" value="${defaultCredito}" class="form-control" placeholder="0">
+                        <small style="color: var(--secondary); font-size: 0.72rem;">Crédito por facturas de compra en F29</small>
+                    </div>
+
+                    <div>
+                        <label style="font-weight: 700; font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">
+                            PPM Declarado ($)
+                        </label>
+                        <input type="number" id="f29_ppm" value="${defaultPpm}" class="form-control" placeholder="0">
+                        <small style="color: var(--secondary); font-size: 0.72rem;">Pago Provisional Mensual (~1%)</small>
+                    </div>
+                </div>
+
+                <div>
+                    <label style="font-weight: 800; font-size: 0.85rem; display: block; margin-bottom: 0.25rem; color: #2563eb;">
+                        Total Pagado en Banco / F29 ($)
+                    </label>
+                    <input type="number" id="f29_totalPaid" value="${defaultPaid}" class="form-control" style="font-weight: 900; font-size: 1.1rem;" placeholder="0">
+                    <small style="color: var(--secondary); font-size: 0.72rem;">El monto total que te cobraron o debitaron de tu cuenta corriente</small>
+                </div>
+
+                <div>
+                    <label style="font-weight: 700; font-size: 0.8rem; display: block; margin-bottom: 0.25rem;">
+                        Observaciones / Notas del Contador
+                    </label>
+                    <textarea id="f29_notes" class="form-control" rows="2" placeholder="Ej: Declarado el 18/08 con folio 123456...">${defaultNotes}</textarea>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
+                    <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+                    <button class="btn btn-success" onclick="ReportsView.saveF29ModalData(${year}, ${month})" style="font-weight: 800;">
+                        💾 Guardar y Auditar
+                    </button>
+                </div>
+            </div>
+        `;
+
+        showModal(modalHtml, {
+            title: `📝 Registro de F29 - ${monthNames[month]} ${year}`,
+            width: '600px'
+        });
+    },
+
+    saveF29ModalData(year, month) {
+        const prevRemanente = parseFloat(document.getElementById('f29_prevRemanente')?.value) || 0;
+        const ivaDebito = parseFloat(document.getElementById('f29_debito')?.value) || 0;
+        const ivaCredito = parseFloat(document.getElementById('f29_credito')?.value) || 0;
+        const ppmAmount = parseFloat(document.getElementById('f29_ppm')?.value) || 0;
+        const totalPaid = parseFloat(document.getElementById('f29_totalPaid')?.value) || 0;
+        const notes = (document.getElementById('f29_notes')?.value || '').trim();
+
+        this.saveF29Declaration(year, month, {
+            prevRemanente,
+            ivaDebito,
+            ivaCredito,
+            ppmAmount,
+            totalPaid,
+            notes
+        });
+
+        closeModal();
+        showNotification('✅ F29 guardado y conciliado exitosamente', 'success');
+        this.showReport('iva', year, month);
+    },
+
+    exportIVAToCSV() {
+        const report = this._lastIVAReport;
+        const year = this._lastIVAYear || new Date().getFullYear();
+        const month = this._lastIVAMonth !== undefined ? this._lastIVAMonth : new Date().getMonth();
+        if (!report) {
+            showNotification('No hay datos fiscales para exportar', 'warning');
+            return;
+        }
+
+        const f29 = this.getF29Declaration(year, month);
+        const prevRemanente = f29 ? (f29.prevRemanente || 0) : 0;
+        const netDiff = report.ivaDebito - report.ivaCredito - prevRemanente;
+        const ppm = Math.round(report.totalNeto * 0.01);
+
+        const rows = [
+            ['Resumen Fiscal de IVA y F29 - Mes: ' + (month + 1) + '/' + year],
+            [],
+            ['Concepto', 'Monto ($)'],
+            ['Ventas Totales Netas (Sin IVA)', report.totalNeto || 0],
+            ['IVA Débito (19% Ventas)', report.ivaDebito || 0],
+            ['Compras con Factura (Costo)', report.purchases ? report.purchases.filter(p => p.documentType && p.documentType.includes('factura')).reduce((s, p) => s + (p.total || 0), 0) : 0],
+            ['IVA Crédito (19% Compras)', report.ivaCredito || 0],
+            ['Remanente Mes Anterior Aplicado', prevRemanente],
+            ['Diferencia Neta de IVA', netDiff > 0 ? `A Pagar: ${netDiff}` : `Remanente a Favor: ${Math.abs(netDiff)}`],
+            ['PPM Estimado (1% Ventas Netas)', ppm],
+            ['Provisión Total Estimada F29', (netDiff > 0 ? netDiff : 0) + ppm],
+            []
+        ];
+
+        if (f29) {
+            rows.push(
+                ['Datos Declarados por Contador en F29'],
+                ['IVA Débito Declarado', f29.ivaDebito || 0],
+                ['IVA Crédito Declarado', f29.ivaCredito || 0],
+                ['Remanente Anterior Usado', f29.prevRemanente || 0],
+                ['PPM Pagado', f29.ppmAmount || 0],
+                ['Total Pagado en F29', f29.totalPaid || 0],
+                ['Notas', `"${(f29.notes || '').replace(/"/g, '""')}"`]
+            );
+        }
+
+        const csvContent = '\uFEFF' + rows.map(e => e.join(';')).join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `resumen_fiscal_iva_${year}_${String(month + 1).padStart(2, '0')}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showNotification('📊 Resumen Fiscal descargado en Excel (CSV)', 'success');
+    },
+
+    async renderProductsReport(daysOrStart = 30, endParam = null) {
+        let startDate, endDate;
+        let periodLabel = '';
+        let isCustom = false;
+
+        if (endParam) {
+            startDate = new Date(`${daysOrStart}T00:00:00`);
+            endDate = new Date(`${endParam}T23:59:59`);
+            this.selectedProductsStart = daysOrStart;
+            this.selectedProductsEnd = endParam;
+            this.selectedProductsDays = 'custom';
+            periodLabel = `Del ${formatDate(startDate)} al ${formatDate(endDate)}`;
+            isCustom = true;
+        } else {
+            const days = parseInt(daysOrStart) || 30;
+            this.selectedProductsDays = days;
+            endDate = new Date();
+            startDate = new Date();
+            startDate.setDate(startDate.getDate() - days);
+            this.selectedProductsStart = startDate.toISOString().slice(0, 10);
+            this.selectedProductsEnd = endDate.toISOString().slice(0, 10);
+            periodLabel = `Últimos ${days} días`;
+        }
 
         const products = await ReportController.getSalesByProduct(startDate, endDate) || [];
         this._lastProductsReportData = products;
+        this._currentProductSort = this._currentProductSort || { key: 'quantity', dir: 'desc' };
+
+        // Aplicar ordenamiento
+        this._sortProductDataList(products, this._currentProductSort.key, this._currentProductSort.dir);
 
         const totalVariety = products.length;
         const totalUnits = products.reduce((sum, p) => sum + (parseFloat(p.quantity) || 0), 0);
@@ -1264,95 +1942,146 @@ const ReportsView = {
             <div class="flex-between-wrap" style="margin-bottom: 1.25rem; gap: 1rem; align-items: center;">
                 <div>
                     <h3 style="margin: 0; font-size: 1.4rem; color: var(--text-main); display: flex; align-items: center; gap: 0.75rem;">
-                        📦 Vendido por Producto
+                        📦 Desempeño por Producto
                     </h3>
                     <p style="margin: 0.25rem 0 0 0; color: var(--secondary); font-size: 0.85rem;">
-                        Ranking de rotación y rentabilidad (Últimos ${days} días)
+                        Ranking de rotación comercial y rentabilidad (${periodLabel})
                     </p>
                 </div>
 
                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <!-- Botones Rápidos -->
                     <div style="display: flex; gap: 0.25rem; background: var(--surface-content); padding: 0.25rem; border-radius: 0.75rem; border: 1px solid var(--border);">
-                        <button class="btn btn-sm ${days === 7 ? 'btn-primary' : 'btn-ghost'}" onclick="ReportsView.handleProductsPeriodChange(7)">7 Días</button>
-                        <button class="btn btn-sm ${days === 30 ? 'btn-primary' : 'btn-ghost'}" onclick="ReportsView.handleProductsPeriodChange(30)">30 Días</button>
-                        <button class="btn btn-sm ${days === 90 ? 'btn-primary' : 'btn-ghost'}" onclick="ReportsView.handleProductsPeriodChange(90)">90 Días</button>
+                        <button class="btn btn-sm ${this.selectedProductsDays === 7 ? 'btn-primary' : 'btn-ghost'}" onclick="ReportsView.handleProductsPeriodChange(7)">7 Días</button>
+                        <button class="btn btn-sm ${this.selectedProductsDays === 30 ? 'btn-primary' : 'btn-ghost'}" onclick="ReportsView.handleProductsPeriodChange(30)">30 Días</button>
+                        <button class="btn btn-sm ${this.selectedProductsDays === 90 ? 'btn-primary' : 'btn-ghost'}" onclick="ReportsView.handleProductsPeriodChange(90)">90 Días</button>
                     </div>
 
-                    <input type="text" id="reportProductFilter" placeholder="🔍 Buscar producto..." 
+                    <!-- Selector Personalizado Desde / Hasta -->
+                    <div style="display: flex; align-items: center; gap: 0.35rem; background: var(--surface-content); padding: 0.35rem 0.75rem; border-radius: 0.75rem; border: 1px solid var(--border);">
+                        <input type="date" id="prodDateFrom" value="${this.selectedProductsStart}" style="border: none; background: transparent; font-size: 0.8rem; font-weight: 700; color: var(--text-main); cursor: pointer;">
+                        <span style="color: var(--secondary); font-size: 0.8rem;">a</span>
+                        <input type="date" id="prodDateTo" value="${this.selectedProductsEnd}" style="border: none; background: transparent; font-size: 0.8rem; font-weight: 700; color: var(--text-main); cursor: pointer;">
+                        <button class="btn btn-xs btn-primary" onclick="ReportsView.applyProductsCustomDate()" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; font-weight: 800;">Filtrar</button>
+                    </div>
+
+                    <!-- Buscador -->
+                    <input type="text" id="reportProductFilter" placeholder="🔍 Buscar producto o código..." 
                            onkeyup="ReportsView.filterProductsReport(this.value)" class="form-control" 
-                           style="width: 220px; padding: 0.4rem 0.75rem; border-radius: 0.75rem;">
+                           style="width: 210px; padding: 0.4rem 0.75rem; border-radius: 0.75rem;">
 
                     <button class="btn btn-success" onclick="ReportsView.exportProductsToCSV()" style="font-weight: 700;">
-                        📊 Exportar Excel (CSV)
+                        📊 Exportar Excel
                     </button>
                 </div>
             </div>
 
-            <!-- TARJETAS COMPACTAS DE RESUMEN DE PRODUCTOS -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
-                <div style="padding: 0.75rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; text-transform: uppercase;">Variedad Vendida</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: var(--text-main);">${totalVariety} SKUs</div>
-                    <small style="font-size: 0.7rem; opacity: 0.7;">Productos distintos</small>
+            <!-- TARJETAS DE RESUMEN PROFESIONAL -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+                <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">Variedad Vendida</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: var(--text-main); margin: 0.2rem 0;">${totalVariety} productos</div>
+                    <small style="font-size: 0.72rem; color: var(--secondary);">Artículos con venta</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #2563eb; font-weight: 700; text-transform: uppercase;">Unidades Despachadas</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #2563eb;">${formatNumber(totalUnits)}</div>
-                    <small style="font-size: 0.7rem; color: #2563eb;">Total ítems vendidos</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1.5px solid rgba(59, 130, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #2563eb; font-weight: 800; text-transform: uppercase;">Unidades Despachadas</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: #2563eb; margin: 0.2rem 0;">${formatNumber(totalUnits)}</div>
+                    <small style="font-size: 0.72rem; color: #2563eb;">Total ítems entregados</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #d97706; font-weight: 700; text-transform: uppercase;">👑 Rey de Volumen</div>
-                    <div style="font-size: 1rem; font-weight: 900; color: #d97706; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${topByQty.name}">${topByQty.name}</div>
-                    <small style="font-size: 0.7rem; color: #d97706;">${formatNumber(topByQty.quantity)} unid.</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1.5px solid rgba(245, 158, 11, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #d97706; font-weight: 800; text-transform: uppercase;">👑 Más Vendido (Volumen)</div>
+                    <div style="font-size: 1rem; font-weight: 900; color: #d97706; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0.2rem 0;" title="${topByQty.name}">${topByQty.name}</div>
+                    <small style="font-size: 0.72rem; color: #d97706;">${formatNumber(topByQty.quantity)} unidades</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #059669; font-weight: 700; text-transform: uppercase;">💎 Rey de Ganancia</div>
-                    <div style="font-size: 1rem; font-weight: 900; color: #059669; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${topByProfit.name}">${topByProfit.name}</div>
-                    <small style="font-size: 0.7rem; color: #059669;">+${formatCLP(topByProfit.grossProfit)} ganancia</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #059669; font-weight: 800; text-transform: uppercase;">💎 Más Rentable (Ganancia)</div>
+                    <div style="font-size: 1rem; font-weight: 900; color: #059669; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0.2rem 0;" title="${topByProfit.name}">${topByProfit.name}</div>
+                    <small style="font-size: 0.72rem; color: #059669;">+${formatCLP(topByProfit.grossProfit)} ganancia</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #7c3aed; font-weight: 700; text-transform: uppercase;">Utilidad Total Periodo</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #7c3aed;">${formatCLP(grandTotalProfit)}</div>
-                    <small style="font-size: 0.7rem; color: #7c3aed;">Ganancia limpia</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(139, 92, 246, 0.08); border: 1.5px solid rgba(139, 92, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #7c3aed; font-weight: 800; text-transform: uppercase;">Utilidad Total en Ventas</div>
+                    <div style="font-size: 1.4rem; font-weight: 900; color: #7c3aed; margin: 0.2rem 0;">${formatCLP(grandTotalProfit)}</div>
+                    <small style="font-size: 0.72rem; color: #7c3aed;">Ganancia neta total</small>
                 </div>
             </div>
             
-            ${products.length === 0 ? '<div class="card glass-panel" style="padding: 2rem; text-align: center; color: var(--secondary); font-weight: 700;">No hay ventas registradas en los últimos ' + days + ' días</div>' : `
+            ${products.length === 0 ? '<div class="card glass-panel" style="padding: 2.5rem; text-align: center; color: var(--secondary); font-weight: 700;">No hay ventas registradas en el período seleccionado</div>' : `
                 <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">
+                        <span style="font-size: 0.85rem; color: var(--secondary); font-weight: 600;">
+                            💡 Puedes hacer clic en los encabezados de la tabla para ordenar por Ventas, Ganancia o Stock.
+                        </span>
+                    </div>
                     <div class="table-container">
                         <table id="reportProductsTable" style="width: 100%; border-collapse: collapse;">
                             <thead>
                                 <tr style="border-bottom: 2px solid var(--border); font-size: 0.8rem; color: var(--secondary); text-transform: uppercase;">
-                                    <th style="padding: 0.75rem; text-align: left;">Producto</th>
-                                    <th style="padding: 0.75rem; text-align: right;">Cantidad Vendida</th>
-                                    <th style="padding: 0.75rem; text-align: right;">Total Vendido</th>
-                                    <th style="padding: 0.75rem; text-align: right; color: var(--secondary);">Costo Total</th>
-                                    <th style="padding: 0.75rem; text-align: right; color: #10b981;">Ganancia Real</th>
-                                    <th style="padding: 0.75rem; text-align: right; color: #10b981;">Margen %</th>
-                                    <th style="padding: 0.75rem; text-align: left; width: 140px;">% de Ingresos</th>
+                                    <th style="padding: 0.75rem; text-align: left; cursor: pointer;" onclick="ReportsView.sortProductsReportTable('name')">
+                                        Producto ↕
+                                    </th>
+                                    <th style="padding: 0.75rem; text-align: center; cursor: pointer;" onclick="ReportsView.sortProductsReportTable('currentStock')">
+                                        Stock en Tienda ↕
+                                    </th>
+                                    <th style="padding: 0.75rem; text-align: right; cursor: pointer;" onclick="ReportsView.sortProductsReportTable('quantity')">
+                                        Cant. Vendida ↕
+                                    </th>
+                                    <th style="padding: 0.75rem; text-align: right; cursor: pointer;" onclick="ReportsView.sortProductsReportTable('total')">
+                                        Total Vendido ↕
+                                    </th>
+                                    <th style="padding: 0.75rem; text-align: right; color: var(--secondary);">
+                                        Costo Total
+                                    </th>
+                                    <th style="padding: 0.75rem; text-align: right; color: #059669; cursor: pointer;" onclick="ReportsView.sortProductsReportTable('grossProfit')">
+                                        Ganancia Real ↕
+                                    </th>
+                                    <th style="padding: 0.75rem; text-align: right; color: #059669; cursor: pointer;" onclick="ReportsView.sortProductsReportTable('marginPercent')">
+                                        Margen % ↕
+                                    </th>
+                                    <th style="padding: 0.75rem; text-align: left; width: 130px;">% de Ingresos</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 ${products.map(p => {
                                     const percentage = grandTotalRevenue > 0 ? (p.total / grandTotalRevenue * 100).toFixed(1) : 0;
+                                    
+                                    // Estado del Stock
+                                    let stockBadge = '-';
+                                    if (p.currentStock !== null && p.currentStock !== undefined) {
+                                        const stockVal = parseFloat(p.currentStock) || 0;
+                                        const unitText = p.type === 'weight' ? 'kg' : 'un';
+                                        if (stockVal <= 0) {
+                                            stockBadge = `<span class="badge badge-danger" style="font-size: 0.72rem; font-weight: 800;">🚨 Agotado (${stockVal})</span>`;
+                                        } else if (stockVal <= (p.minStock || 5)) {
+                                            stockBadge = `<span class="badge badge-warning" style="font-size: 0.72rem; font-weight: 800;">⚠️ Bajo (${stockVal} ${unitText})</span>`;
+                                        } else {
+                                            stockBadge = `<span class="badge badge-success" style="font-size: 0.72rem; font-weight: 700;">✅ ${stockVal} ${unitText}</span>`;
+                                        }
+                                    }
+
                                     return `
                                         <tr style="border-bottom: 1px solid var(--border);">
-                                            <td style="padding: 0.75rem; font-weight: 800; color: var(--text-main);">${p.name}</td>
-                                            <td style="padding: 0.75rem; text-align: right; font-weight: 700;">${formatNumber(p.quantity)} unid.</td>
-                                            <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: #2563eb;">${formatCLP(p.total)}</td>
-                                            <td style="padding: 0.75rem; text-align: right; color: var(--secondary);">${formatCLP(p.costTotal)}</td>
-                                            <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: #10b981;">${formatCLP(p.grossProfit)}</td>
-                                            <td style="padding: 0.75rem; text-align: right; font-weight: 800; color: #10b981;"><span class="badge badge-success">${p.marginPercent}%</span></td>
                                             <td style="padding: 0.75rem;">
-                                                <div style="display: flex; align-items: center; gap: 0.5rem;">
-                                                    <div style="flex: 1; height: 8px; background: rgba(255,255,255,0.08); border-radius: 4px; overflow: hidden;">
+                                                <div style="font-weight: 800; color: var(--text-main);">${safeHTML(p.name)}</div>
+                                                ${p.barcode ? `<small style="color: var(--secondary); font-size: 0.72rem;">Código: ${safeHTML(p.barcode)}</small>` : ''}
+                                            </td>
+                                            <td style="padding: 0.75rem; text-align: center;">${stockBadge}</td>
+                                            <td style="padding: 0.75rem; text-align: right; font-weight: 800;">${formatNumber(p.quantity)}</td>
+                                            <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: #2563eb;">${formatCLP(p.total)}</td>
+                                            <td style="padding: 0.75rem; text-align: right; color: var(--secondary); font-weight: 600;">${formatCLP(p.costTotal)}</td>
+                                            <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: #059669;">+${formatCLP(p.grossProfit)}</td>
+                                            <td style="padding: 0.75rem; text-align: right; font-weight: 800; color: #059669;">
+                                                <span class="badge badge-success" style="font-size: 0.75rem;">${p.marginPercent}%</span>
+                                            </td>
+                                            <td style="padding: 0.75rem;">
+                                                <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                                    <div style="flex: 1; height: 7px; background: rgba(0,0,0,0.06); border-radius: 4px; overflow: hidden;">
                                                         <div style="width: ${percentage}%; height: 100%; background: var(--primary); border-radius: 4px;"></div>
                                                     </div>
-                                                    <span style="font-size: 0.75rem; font-weight: 700; color: var(--secondary);">${percentage}%</span>
+                                                    <span style="font-size: 0.72rem; font-weight: 800; color: var(--secondary); min-width: 35px;">${percentage}%</span>
                                                 </div>
                                             </td>
                                         </tr>
@@ -1364,6 +2093,45 @@ const ReportsView = {
                 </div>
             `}
         `;
+    },
+
+    _sortProductDataList(list, key, dir) {
+        list.sort((a, b) => {
+            let valA = a[key];
+            let valB = b[key];
+            if (typeof valA === 'string') valA = valA.toLowerCase();
+            if (typeof valB === 'string') valB = valB.toLowerCase();
+            if (valA === null || valA === undefined) valA = -999999;
+            if (valB === null || valB === undefined) valB = -999999;
+            if (valA < valB) return dir === 'asc' ? -1 : 1;
+            if (valA > valB) return dir === 'asc' ? 1 : -1;
+            return 0;
+        });
+    },
+
+    async sortProductsReportTable(key) {
+        if (!this._currentProductSort) this._currentProductSort = { key: 'quantity', dir: 'desc' };
+        if (this._currentProductSort.key === key) {
+            this._currentProductSort.dir = this._currentProductSort.dir === 'desc' ? 'asc' : 'desc';
+        } else {
+            this._currentProductSort.key = key;
+            this._currentProductSort.dir = 'desc';
+        }
+        const content = await this.renderProductsReport(this.selectedProductsStart, this.selectedProductsEnd);
+        const container = document.getElementById('reportContent');
+        if (container) container.innerHTML = content;
+    },
+
+    async applyProductsCustomDate() {
+        const fromVal = document.getElementById('prodDateFrom')?.value;
+        const toVal = document.getElementById('prodDateTo')?.value;
+        if (!fromVal || !toVal) {
+            showNotification('Selecciona ambas fechas para filtrar', 'warning');
+            return;
+        }
+        const content = await this.renderProductsReport(fromVal, toVal);
+        const container = document.getElementById('reportContent');
+        if (container) container.innerHTML = content;
     },
 
     async handleProductsPeriodChange(days) {
@@ -1387,9 +2155,10 @@ const ReportsView = {
             showNotification('No hay datos para exportar', 'warning');
             return;
         }
-        const headers = ['Producto', 'Cantidad Vendida', 'Total Vendido ($)', 'Costo Total ($)', 'Ganancia ($)', 'Margen (%)'];
+        const headers = ['Producto', 'Stock Actual', 'Cantidad Vendida', 'Total Vendido ($)', 'Costo Total ($)', 'Ganancia ($)', 'Margen (%)'];
         const rows = products.map(p => [
             `"${(p.name || '').replace(/"/g, '""')}"`,
+            p.currentStock !== null ? p.currentStock : 'N/A',
             p.quantity || 0,
             p.total || 0,
             p.costTotal || 0,
@@ -1400,7 +2169,7 @@ const ReportsView = {
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `reporte_productos_vendidos_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.download = `reporte_desempeno_productos_${new Date().toISOString().slice(0, 10)}.csv`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
@@ -1436,17 +2205,42 @@ const ReportsView = {
         showNotification('📊 Reporte de Ventas del Día descargado en Excel (CSV)', 'success');
     },
 
-    async renderProfitabilityReport(daysParam = 30) {
-        const days = parseInt(daysParam) || 30;
-        this.selectedProfitabilityDays = days;
+    async renderProfitabilityReport(daysOrStart = 30, endParam = null) {
+        let startDate, endDate;
+        let periodLabel = '';
 
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - days);
+        if (endParam) {
+            startDate = new Date(`${daysOrStart}T00:00:00`);
+            endDate = new Date(`${endParam}T23:59:59`);
+            this.selectedProfitabilityStart = daysOrStart;
+            this.selectedProfitabilityEnd = endParam;
+            this.selectedProfitabilityDays = 'custom';
+            periodLabel = `Del ${formatDate(startDate)} al ${formatDate(endDate)}`;
+        } else {
+            const days = parseInt(daysOrStart) || 30;
+            this.selectedProfitabilityDays = days;
+            endDate = new Date();
+            startDate = new Date();
+            startDate.setDate(startDate.getDate() - days);
+            this.selectedProfitabilityStart = startDate.toISOString().slice(0, 10);
+            this.selectedProfitabilityEnd = endDate.toISOString().slice(0, 10);
+            periodLabel = `Últimos ${days} días`;
+        }
 
         const report = await ReportController.getProfitability(startDate, endDate);
         this._lastProfitabilityReport = report;
-        this._lastProfitabilityDays = days;
+
+        const netMarginPerc = report.margin || 0;
+        const grossMarginPerc = report.grossMargin || 0;
+
+        // Cálculo de retorno real por cada $200, $500 y $1.000
+        const profitPer200 = Math.round(200 * (netMarginPerc / 100));
+        const profitPer500 = Math.round(500 * (netMarginPerc / 100));
+        const profitPer1000 = Math.round(1000 * (netMarginPerc / 100));
+
+        const categories = report.byCategory || [];
+        const topCat = categories.length > 0 ? categories[0] : null;
+        const lowestCat = categories.length > 1 ? [...categories].sort((a, b) => a.margin - b.margin)[0] : null;
 
         return `
             <!-- CABECERA Y FILTROS DE PERÍODO -->
@@ -1456,109 +2250,177 @@ const ReportsView = {
                         💰 Ganancias y Utilidad Real
                     </h3>
                     <p style="margin: 0.25rem 0 0 0; color: var(--secondary); font-size: 0.85rem;">
-                        Estado de Resultados y Margen de Utilidad (${days} días)
+                        Estado de Resultados Financiero y Margen de Utilidad (${periodLabel})
                     </p>
                 </div>
 
                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <!-- Botones Rápidos -->
                     <div style="display: flex; gap: 0.25rem; background: var(--surface-content); padding: 0.25rem; border-radius: 0.75rem; border: 1px solid var(--border);">
-                        <button class="btn btn-sm ${days === 7 ? 'btn-primary' : 'btn-ghost'}" onclick="ReportsView.handleProfitabilityPeriodChange(7)">7 Días</button>
-                        <button class="btn btn-sm ${days === 30 ? 'btn-primary' : 'btn-ghost'}" onclick="ReportsView.handleProfitabilityPeriodChange(30)">30 Días</button>
-                        <button class="btn btn-sm ${days === 90 ? 'btn-primary' : 'btn-ghost'}" onclick="ReportsView.handleProfitabilityPeriodChange(90)">90 Días</button>
+                        <button class="btn btn-sm ${this.selectedProfitabilityDays === 7 ? 'btn-primary' : 'btn-ghost'}" onclick="ReportsView.handleProfitabilityPeriodChange(7)">7 Días</button>
+                        <button class="btn btn-sm ${this.selectedProfitabilityDays === 30 ? 'btn-primary' : 'btn-ghost'}" onclick="ReportsView.handleProfitabilityPeriodChange(30)">30 Días</button>
+                        <button class="btn btn-sm ${this.selectedProfitabilityDays === 90 ? 'btn-primary' : 'btn-ghost'}" onclick="ReportsView.handleProfitabilityPeriodChange(90)">90 Días</button>
+                    </div>
+
+                    <!-- Selector Personalizado Desde / Hasta -->
+                    <div style="display: flex; align-items: center; gap: 0.35rem; background: var(--surface-content); padding: 0.35rem 0.75rem; border-radius: 0.75rem; border: 1px solid var(--border);">
+                        <input type="date" id="profDateFrom" value="${this.selectedProfitabilityStart}" style="border: none; background: transparent; font-size: 0.8rem; font-weight: 700; color: var(--text-main); cursor: pointer;">
+                        <span style="color: var(--secondary); font-size: 0.8rem;">a</span>
+                        <input type="date" id="profDateTo" value="${this.selectedProfitabilityEnd}" style="border: none; background: transparent; font-size: 0.8rem; font-weight: 700; color: var(--text-main); cursor: pointer;">
+                        <button class="btn btn-xs btn-primary" onclick="ReportsView.applyProfitabilityCustomDate()" style="padding: 0.2rem 0.5rem; font-size: 0.75rem; font-weight: 800;">Filtrar</button>
                     </div>
 
                     <button class="btn btn-success" onclick="ReportsView.exportProfitabilityToCSV()" style="font-weight: 700;">
-                        📊 Exportar Excel (CSV)
+                        📊 Exportar Excel
                     </button>
                 </div>
             </div>
 
-            <!-- TARJETAS COMPACTAS DE RENTABILIDAD -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
-                <div style="padding: 0.75rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #2563eb; font-weight: 700; text-transform: uppercase;">Ingresos Reales</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #2563eb;">${formatCLP(report.revenue)}</div>
-                    <small style="font-size: 0.7rem; color: #2563eb;">Venta Neta + Interna</small>
+            <!-- TARJETAS DE BALANCE FINANCIERO -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+                <div style="padding: 0.85rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1.5px solid rgba(59, 130, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #2563eb; font-weight: 800; text-transform: uppercase;">Ventas Limpias (Sin IVA)</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #2563eb; margin: 0.2rem 0;">${formatCLP(report.revenue)}</div>
+                    <small style="font-size: 0.72rem; color: #2563eb;">Ingreso real del negocio</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; text-transform: uppercase;">Costo de Ventas</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: var(--text-main);">${formatCLP(report.costOfSales)}</div>
-                    <small style="font-size: 0.7rem; opacity: 0.7;">Costo Neto Proveedor</small>
+                <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">Costo de Proveedores</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: var(--text-main); margin: 0.2rem 0;">${formatCLP(report.costOfSales)}</div>
+                    <small style="font-size: 0.72rem; color: var(--secondary);">Costo de la mercadería</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #059669; font-weight: 700; text-transform: uppercase;">Ganancia Bruta Real</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #059669;">${formatCLP(report.grossProfit)}</div>
-                    <small style="font-size: 0.7rem; color: #059669;">Margen: ${(report.grossMargin || 0).toFixed(1)}%</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #059669; font-weight: 800; text-transform: uppercase;">Ganancia en Mercadería</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #059669; margin: 0.2rem 0;">${formatCLP(report.grossProfit)}</div>
+                    <small style="font-size: 0.72rem; color: #059669; font-weight: 700;">Margen comercial: ${grossMarginPerc.toFixed(1)}%</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #dc2626; font-weight: 700; text-transform: uppercase;">Gastos Operativos</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #dc2626;">-${formatCLP(report.operationalExpenses)}</div>
-                    <small style="font-size: 0.7rem; color: #dc2626;">Gastos de caja/servicios</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1.5px solid rgba(239, 68, 68, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #dc2626; font-weight: 800; text-transform: uppercase;">Gastos de Operación</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #dc2626; margin: 0.2rem 0;">-${formatCLP(report.operationalExpenses)}</div>
+                    <small style="font-size: 0.72rem; color: #dc2626;">Arriendo, cuentas, etc.</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(139, 92, 246, 0.08); border: 1px solid rgba(139, 92, 246, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #7c3aed; font-weight: 700; text-transform: uppercase;">💎 Utilidad Final</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: ${report.profit >= 0 ? '#7c3aed' : '#dc2626'};">${formatCLP(report.profit)}</div>
-                    <small style="font-size: 0.7rem; color: #7c3aed;">${(report.margin || 0).toFixed(1)}% de éxito neto</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(139, 92, 246, 0.08); border: 1.5px solid rgba(139, 92, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #7c3aed; font-weight: 800; text-transform: uppercase;">💎 Utilidad Limpia Final</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: ${report.profit >= 0 ? '#7c3aed' : '#dc2626'}; margin: 0.2rem 0;">${formatCLP(report.profit)}</div>
+                    <small style="font-size: 0.72rem; color: #7c3aed; font-weight: 700;">Rendimiento: ${netMarginPerc.toFixed(1)}% neto</small>
                 </div>
             </div>
 
-            <!-- ESTADO DE RESULTADOS CONSOLIDADO (P&L) -->
-            <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.5rem;">
-                <h4 style="margin: 0 0 1rem 0; font-size: 0.95rem; color: var(--text-main);">📊 Estado de Resultados Consolidado (P&L)</h4>
-                <div style="display: flex; flex-direction: column; gap: 0.65rem; font-size: 0.88rem;">
+            <!-- PANEL DIDÁCTICO: RETORNO REAL POR CADA VENTA EN MOSTRADOR -->
+            <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.25rem; border-left: 5px solid #7c3aed;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+                    <div>
+                        <h4 style="margin: 0; font-size: 1rem; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem;">
+                            💵 Rendimiento de Bolsillo por cada Venta en Mostrador
+                        </h4>
+                        <p style="margin: 0.2rem 0 0 0; color: var(--secondary); font-size: 0.8rem;">
+                            ¿Cuánta plata limpia te queda para ti por cada venta cobrada en caja? (Margen neto actual: <strong>${netMarginPerc.toFixed(1)}%</strong>)
+                        </p>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.75rem;">
+                    <!-- Cada $200 -->
+                    <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem;">
+                        <div style="font-size: 0.8rem; font-weight: 700; color: var(--secondary);">Por cada $200 vendidos:</div>
+                        <div style="font-size: 1.3rem; font-weight: 900; color: ${profitPer200 >= 0 ? '#059669' : '#dc2626'}; margin: 0.2rem 0;">
+                            ${profitPer200 >= 0 ? '+' : ''}${formatCLP(profitPer200)} limpios
+                        </div>
+                        <small style="font-size: 0.72rem; color: var(--secondary);">$${Math.max(0, 200 - profitPer200)} cubren costo y gastos</small>
+                    </div>
+
+                    <!-- Cada $500 -->
+                    <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem;">
+                        <div style="font-size: 0.8rem; font-weight: 700; color: var(--secondary);">Por cada $500 vendidos:</div>
+                        <div style="font-size: 1.3rem; font-weight: 900; color: ${profitPer500 >= 0 ? '#059669' : '#dc2626'}; margin: 0.2rem 0;">
+                            ${profitPer500 >= 0 ? '+' : ''}${formatCLP(profitPer500)} limpios
+                        </div>
+                        <small style="font-size: 0.72rem; color: var(--secondary);">$${Math.max(0, 500 - profitPer500)} cubren costo y gastos</small>
+                    </div>
+
+                    <!-- Cada $1.000 -->
+                    <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem;">
+                        <div style="font-size: 0.8rem; font-weight: 700; color: var(--secondary);">Por cada $1.000 vendidos:</div>
+                        <div style="font-size: 1.3rem; font-weight: 900; color: ${profitPer1000 >= 0 ? '#059669' : '#dc2626'}; margin: 0.2rem 0;">
+                            ${profitPer1000 >= 0 ? '+' : ''}${formatCLP(profitPer1000)} limpios
+                        </div>
+                        <small style="font-size: 0.72rem; color: var(--secondary);">$${Math.max(0, 1000 - profitPer1000)} cubren costo y gastos</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ESTADO DE RESULTADOS CLARO Y ORDENADO (P&L) -->
+            <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.25rem;">
+                <h4 style="margin: 0 0 0.85rem 0; font-size: 0.95rem; color: var(--text-main);">
+                    📊 Estado de Resultados Consolidado
+                </h4>
+                <div style="display: flex; flex-direction: column; gap: 0.65rem; font-size: 0.9rem;">
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="color: var(--secondary);">(+) Ingresos Reales Acumulados:</span>
-                        <strong style="color: #2563eb; font-size: 1rem;">${formatCLP(report.revenue)}</strong>
+                        <span style="color: var(--secondary);">(+) Ventas Limpias Realizadas:</span>
+                        <strong style="color: #2563eb; font-size: 1.05rem;">${formatCLP(report.revenue)}</strong>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="color: var(--secondary);">(-) Costo de Productos (Valor Neto):</span>
+                        <span style="color: var(--secondary);">(-) Costo de Productos Pagado a Proveedores:</span>
                         <strong style="color: #dc2626;">-${formatCLP(report.costOfSales)}</strong>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; border-top: 1px dashed var(--border); border-bottom: 1px dashed var(--border);">
-                        <span style="font-weight: 700; color: var(--text-main); font-size: 0.95rem;">(=) Ganancia Bruta Real:</span>
-                        <strong style="color: #059669; font-size: 1.1rem;">${formatCLP(report.grossProfit)}</strong>
+                        <span style="font-weight: 800; color: var(--text-main);">(=) Ganancia por Venta de Mercadería:</span>
+                        <strong style="color: #059669; font-size: 1.15rem;">+${formatCLP(report.grossProfit)}</strong>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span style="color: var(--secondary);">(-) Gastos Operativos y de Caja:</span>
+                        <span style="color: var(--secondary);">(-) Gastos del Negocio (Cuentas, Arriendos, Insumos):</span>
                         <strong style="color: #dc2626;">-${formatCLP(report.operationalExpenses)}</strong>
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 0.75rem; border-top: 2px solid var(--border); font-size: 1.15rem;">
-                        <strong style="color: var(--text-main);">🏆 Utilidad Final Limpia del Negocio:</strong>
-                        <strong style="color: ${report.profit >= 0 ? '#10b981' : '#dc2626'}; font-size: 1.3rem;">${formatCLP(report.profit)}</strong>
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding-top: 0.75rem; border-top: 2px solid var(--border);">
+                        <div>
+                            <strong style="color: var(--text-main); font-size: 1.05rem;">🏆 Ganancia Limpia Final para tu Bolsillo:</strong>
+                            <div style="font-size: 0.75rem; color: var(--secondary);">Dinero libre después de cubrir todo</div>
+                        </div>
+                        <strong style="color: ${report.profit >= 0 ? '#059669' : '#dc2626'}; font-size: 1.4rem;">
+                            ${report.profit >= 0 ? '+' : ''}${formatCLP(report.profit)}
+                        </strong>
                     </div>
                 </div>
             </div>
 
             <!-- RENTABILIDAD POR CATEGORÍA -->
-            ${report.byCategory && report.byCategory.length > 0 ? `
+            ${categories.length > 0 ? `
                 <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem;">
-                    <h4 style="margin-bottom: 1rem; font-size: 0.95rem;">📂 Rentabilidad por Categoría</h4>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">
+                        <div>
+                            <h4 style="margin: 0; font-size: 0.95rem; color: var(--text-main);">📂 Rentabilidad por Categoría</h4>
+                            <p style="margin: 0.2rem 0 0 0; color: var(--secondary); font-size: 0.8rem;">Desempeño de cada departamento de tu tienda</p>
+                        </div>
+                        <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            ${topCat ? `<span class="badge badge-success" style="font-size: 0.75rem; font-weight: 700;">🏆 Más Rentable: ${safeHTML(topCat.name)}</span>` : ''}
+                            ${lowestCat ? `<span class="badge badge-warning" style="font-size: 0.75rem; font-weight: 700;">⚠️ Menor Margen: ${safeHTML(lowestCat.name)} (${(lowestCat.margin || 0).toFixed(1)}%)</span>` : ''}
+                        </div>
+                    </div>
                     <div class="table-container">
                         <table style="width: 100%; border-collapse: collapse;">
                             <thead>
                                 <tr style="border-bottom: 2px solid var(--border); font-size: 0.8rem; color: var(--secondary); text-transform: uppercase;">
                                     <th style="padding: 0.75rem; text-align: left;">Categoría</th>
-                                    <th style="padding: 0.75rem; text-align: right;">Ingresos</th>
-                                    <th style="padding: 0.75rem; text-align: right;">Costos</th>
-                                    <th style="padding: 0.75rem; text-align: right; color: #10b981;">Ganancia</th>
+                                    <th style="padding: 0.75rem; text-align: right;">Ventas Limpias</th>
+                                    <th style="padding: 0.75rem; text-align: right; color: var(--secondary);">Costo Proveedor</th>
+                                    <th style="padding: 0.75rem; text-align: right; color: #059669;">Ganancia</th>
                                     <th style="padding: 0.75rem; text-align: center;">Margen %</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${report.byCategory.map(cat => `
+                                ${categories.map(cat => `
                                     <tr style="border-bottom: 1px solid var(--border);">
-                                        <td style="padding: 0.75rem; font-weight: 800; color: var(--text-main);">${cat.name}</td>
+                                        <td style="padding: 0.75rem; font-weight: 800; color: var(--text-main);">${safeHTML(cat.name)}</td>
                                         <td style="padding: 0.75rem; text-align: right; font-weight: 700; color: #2563eb;">${formatCLP(cat.revenue)}</td>
-                                        <td style="padding: 0.75rem; text-align: right; color: var(--secondary);">${formatCLP(cat.cost)}</td>
-                                        <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: ${cat.profit >= 0 ? '#10b981' : '#dc2626'};">
-                                            ${formatCLP(cat.profit)}
+                                        <td style="padding: 0.75rem; text-align: right; color: var(--secondary); font-weight: 600;">${formatCLP(cat.cost)}</td>
+                                        <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: ${cat.profit >= 0 ? '#059669' : '#dc2626'};">
+                                            ${cat.profit >= 0 ? '+' : ''}${formatCLP(cat.profit)}
                                         </td>
                                         <td style="padding: 0.75rem; text-align: center;">
-                                            <span class="badge ${cat.margin >= 0 ? 'badge-success' : 'badge-danger'}">
+                                            <span class="badge ${cat.margin >= 25 ? 'badge-success' : (cat.margin >= 15 ? 'badge-warning' : 'badge-danger')}" style="font-size: 0.75rem; font-weight: 800;">
                                                 ${(cat.margin || 0).toFixed(1)}%
                                             </span>
                                         </td>
@@ -1572,6 +2434,18 @@ const ReportsView = {
         `;
     },
 
+    async applyProfitabilityCustomDate() {
+        const fromVal = document.getElementById('profDateFrom')?.value;
+        const toVal = document.getElementById('profDateTo')?.value;
+        if (!fromVal || !toVal) {
+            showNotification('Selecciona ambas fechas para filtrar', 'warning');
+            return;
+        }
+        const content = await this.renderProfitabilityReport(fromVal, toVal);
+        const container = document.getElementById('reportContent');
+        if (container) container.innerHTML = content;
+    },
+
     async handleProfitabilityPeriodChange(days) {
         const content = await this.renderProfitabilityReport(days);
         const container = document.getElementById('reportContent');
@@ -1580,13 +2454,14 @@ const ReportsView = {
 
     exportProfitabilityToCSV() {
         const report = this._lastProfitabilityReport;
-        const days = this._lastProfitabilityDays || 30;
+        const startStr = this.selectedProfitabilityStart || new Date().toISOString().slice(0, 10);
+        const endStr = this.selectedProfitabilityEnd || new Date().toISOString().slice(0, 10);
         if (!report) {
             showNotification('No hay datos de rentabilidad para exportar', 'warning');
             return;
         }
 
-        const headers = ['Categoría', 'Ingresos Reales ($)', 'Costo de Ventas ($)', 'Ganancia ($)', 'Margen (%)'];
+        const headers = ['Categoría', 'Ventas Limpias ($)', 'Costo de Ventas ($)', 'Ganancia ($)', 'Margen (%)'];
         const rows = (report.byCategory || []).map(c => [
             `"${(c.name || '').replace(/"/g, '""')}"`,
             c.revenue || 0,
@@ -1597,23 +2472,23 @@ const ReportsView = {
 
         const summaryRows = [
             [],
-            ['Resumen Consolidado'],
-            ['Ingresos Reales', report.revenue || 0],
-            ['Costo de Ventas', report.costOfSales || 0],
-            ['Ganancia Bruta Real', report.grossProfit || 0],
-            ['Gastos Operativos', report.operationalExpenses || 0],
-            ['Utilidad Final del Negocio', report.profit || 0]
+            ['Resumen de Ganancias y Utilidad'],
+            ['Ventas Limpias (Sin IVA)', report.revenue || 0],
+            ['Costo de Proveedores', report.costOfSales || 0],
+            ['Ganancia en Mercadería', report.grossProfit || 0],
+            ['Gastos de Operación', report.operationalExpenses || 0],
+            ['Ganancia Limpia Final para el Bolsillo', report.profit || 0]
         ];
 
         const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map(e => e.join(';')), ...summaryRows.map(e => e.join(';'))].join('\n');
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `reporte_rentabilidad_${days}dias_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.download = `reporte_ganancias_utilidad_${startStr}_al_${endStr}.csv`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        showNotification('📊 Reporte de Rentabilidad descargado en Excel (CSV)', 'success');
+        showNotification('📊 Reporte de Ganancias descargado en Excel (CSV)', 'success');
     },
 
     async renderStockReport(filterType = 'all') {
@@ -1623,83 +2498,92 @@ const ReportsView = {
         this.selectedStockFilter = filterType;
 
         const totalProducts = allProducts.length;
-        const lowStockCount = report.lowStock.length;
-        const outOfStockCount = report.outOfStock.length;
-        const totalCostValue = report.totalValue || 0;
+        const lowStockCount = (report.lowStock || []).length;
+        const outOfStockCount = (report.outOfStock || []).length;
+        const dormantCount = (report.dormantStock || []).length;
+        const reorderList = allProducts.filter(p => p.suggestedOrder > 0);
+        const reorderCount = reorderList.length;
 
-        const totalRetailValue = allProducts.reduce((sum, p) => {
-            const stock = parseFloat(p.stock) || 0;
-            const price = parseFloat(p.price) || 0;
-            return sum + (stock > 0 && price > 0 ? stock * price : 0);
-        }, 0);
+        const totalCostValue = report.totalCostValue || 0;
+        const totalRetailValue = report.totalRetailValue || 0;
+        const projectedProfit = report.projectedProfit || 0;
+        const dormantCapitalTotal = report.dormantCapitalTotal || 0;
+        const potentialMargin = totalRetailValue > 0 ? ((projectedProfit / totalRetailValue) * 100).toFixed(1) : 0;
 
         let filteredProducts = allProducts;
         if (filterType === 'low') {
             filteredProducts = report.lowStock;
         } else if (filterType === 'out') {
             filteredProducts = report.outOfStock;
+        } else if (filterType === 'dormant') {
+            filteredProducts = report.dormantStock;
+        } else if (filterType === 'reorder') {
+            filteredProducts = reorderList;
         }
+
+        // Ordenamiento
+        this._currentStockSort = this._currentStockSort || { key: 'stock', dir: 'asc' };
+        this._sortStockDataList(filteredProducts, this._currentStockSort.key, this._currentStockSort.dir);
 
         return `
             <!-- CABECERA Y ACCIONES -->
             <div class="flex-between-wrap" style="margin-bottom: 1.25rem; gap: 1rem; align-items: center;">
                 <div>
                     <h3 style="margin: 0; font-size: 1.4rem; color: var(--text-main); display: flex; align-items: center; gap: 0.75rem;">
-                        📦 Estado de Inventario y Stock
+                        📦 Estado de Inventario y Salud del Stock
                     </h3>
                     <p style="margin: 0.25rem 0 0 0; color: var(--secondary); font-size: 0.85rem;">
-                        Valorización total de mercadería y alertas de reposición
+                        Valorización de bodega, días de autonomía y sugerencia inteligente de compras
                     </p>
                 </div>
 
                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                     <input type="text" id="reportStockSearchFilter" placeholder="🔍 Buscar producto o código..." 
                            onkeyup="ReportsView.filterStockReportTable(this.value)" class="form-control" 
-                           style="width: 230px; padding: 0.4rem 0.75rem; border-radius: 0.75rem;">
+                           style="width: 240px; padding: 0.4rem 0.75rem; border-radius: 0.75rem;">
 
                     <button class="btn btn-success" onclick="ReportsView.exportStockToCSV()" style="font-weight: 700;">
-                        📊 Exportar Excel (CSV)
+                        📊 Exportar Excel
                     </button>
                 </div>
             </div>
 
-            <!-- TARJETAS COMPACTAS DE RESUMEN DE INVENTARIO -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
-                <div style="padding: 0.75rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; text-transform: uppercase;">SKUs Registrados</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: var(--text-main);">${totalProducts}</div>
-                    <small style="font-size: 0.7rem; opacity: 0.7;">Catálogo activo</small>
+            <!-- TARJETAS DE VALORIZACIÓN Y SALUD DE BODEGA -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+                <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">Catálogo Activo</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: var(--text-main); margin: 0.2rem 0;">${totalProducts} productos</div>
+                    <small style="font-size: 0.72rem; color: var(--secondary);">Total artículos registrados</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #2563eb; font-weight: 700; text-transform: uppercase;">Valor a Costo Neto</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #2563eb;">${formatCLP(totalCostValue)}</div>
-                    <small style="font-size: 0.7rem; color: #2563eb;">Capital Invertido</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1.5px solid rgba(59, 130, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #2563eb; font-weight: 800; text-transform: uppercase;">Capital Invertido a Costo</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #2563eb; margin: 0.2rem 0;">${formatCLP(totalCostValue)}</div>
+                    <small style="font-size: 0.72rem; color: #2563eb;">Plata en mercadería</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #059669; font-weight: 700; text-transform: uppercase;">Valor a Venta Bruta</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #059669;">${formatCLP(totalRetailValue)}</div>
-                    <small style="font-size: 0.7rem; color: #059669;">Recaudación Esperada</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #059669; font-weight: 800; text-transform: uppercase;">Recaudación Esperada</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #059669; margin: 0.2rem 0;">${formatCLP(totalRetailValue)}</div>
+                    <small style="font-size: 0.72rem; color: #059669;">Si vendes todo tu stock</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 0.75rem; text-align: center; cursor: pointer;"
-                     onclick="ReportsView.handleStockFilterChange('low')">
-                    <div style="font-size: 0.75rem; color: #d97706; font-weight: 700; text-transform: uppercase;">⚠️ Stock Bajo</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #d97706;">${lowStockCount}</div>
-                    <small style="font-size: 0.7rem; color: #d97706;">Próximos a agotar</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(139, 92, 246, 0.08); border: 1.5px solid rgba(139, 92, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #7c3aed; font-weight: 800; text-transform: uppercase;">💎 Ganancia Potencial</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #7c3aed; margin: 0.2rem 0;">+${formatCLP(projectedProfit)}</div>
+                    <small style="font-size: 0.72rem; color: #7c3aed; font-weight: 700;">Margen bodega: ${potentialMargin}%</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 0.75rem; text-align: center; cursor: pointer;"
-                     onclick="ReportsView.handleStockFilterChange('out')">
-                    <div style="font-size: 0.75rem; color: #dc2626; font-weight: 700; text-transform: uppercase;">🛑 Agotados</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #dc2626;">${outOfStockCount}</div>
-                    <small style="font-size: 0.7rem; color: #dc2626;">Sin stock (0 unid.)</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1.5px solid rgba(245, 158, 11, 0.3); border-radius: 0.75rem; text-align: center; cursor: pointer;"
+                     onclick="ReportsView.handleStockFilterChange('dormant')">
+                    <div style="font-size: 0.72rem; color: #d97706; font-weight: 800; text-transform: uppercase;">💤 Capital Inmovilizado</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #d97706; margin: 0.2rem 0;">${formatCLP(dormantCapitalTotal)}</div>
+                    <small style="font-size: 0.72rem; color: #d97706; font-weight: 700;">${dormantCount} productos sin venta</small>
                 </div>
             </div>
 
-            <!-- PESTAÑAS DE FILTRADO -->
-            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+            <!-- PESTAÑAS DE FILTRADO INTERACTIVO -->
+            <div style="display: flex; gap: 0.4rem; margin-bottom: 1rem; flex-wrap: wrap;">
                 <button class="btn btn-sm ${filterType === 'all' ? 'btn-primary' : 'btn-ghost'}" onclick="ReportsView.handleStockFilterChange('all')">
                     📦 Todos los Productos (${totalProducts})
                 </button>
@@ -1709,19 +2593,43 @@ const ReportsView = {
                 <button class="btn btn-sm ${filterType === 'out' ? 'btn-danger' : 'btn-ghost'}" onclick="ReportsView.handleStockFilterChange('out')">
                     🛑 Agotados (${outOfStockCount})
                 </button>
+                <button class="btn btn-sm ${filterType === 'reorder' ? 'btn-primary' : 'btn-ghost'}" style="${filterType === 'reorder' ? 'background: #059669;' : ''}" onclick="ReportsView.handleStockFilterChange('reorder')">
+                    🛒 Pedido Sugerido (${reorderCount})
+                </button>
+                <button class="btn btn-sm ${filterType === 'dormant' ? 'btn-warning' : 'btn-ghost'}" onclick="ReportsView.handleStockFilterChange('dormant')">
+                    💤 Sin Venta en 30 Días (${dormantCount})
+                </button>
             </div>
 
             <!-- TABLA DE DETALLE DE INVENTARIO -->
             <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">
+                    <span style="font-size: 0.85rem; color: var(--secondary); font-weight: 600;">
+                        💡 Puedes hacer clic en los encabezados para ordenar por Stock, Días de Autonomía o Valor en Dinero.
+                    </span>
+                </div>
                 <div class="table-container">
                     <table id="reportStockTable" style="width: 100%; border-collapse: collapse;">
                         <thead>
                             <tr style="border-bottom: 2px solid var(--border); font-size: 0.8rem; color: var(--secondary); text-transform: uppercase;">
-                                <th style="padding: 0.75rem; text-align: left;">Producto</th>
-                                <th style="padding: 0.75rem; text-align: center;">Stock Actual</th>
-                                <th style="padding: 0.75rem; text-align: center;">Stock Mínimo</th>
-                                <th style="padding: 0.75rem; text-align: right;">Valor a Costo</th>
-                                <th style="padding: 0.75rem; text-align: right;">Valor a Venta</th>
+                                <th style="padding: 0.75rem; text-align: left; cursor: pointer;" onclick="ReportsView.sortStockReportTable('name')">
+                                    Producto ↕
+                                </th>
+                                <th style="padding: 0.75rem; text-align: center; cursor: pointer;" onclick="ReportsView.sortStockReportTable('stock')">
+                                    Stock Actual ↕
+                                </th>
+                                <th style="padding: 0.75rem; text-align: center; cursor: pointer;" onclick="ReportsView.sortStockReportTable('stockDays')">
+                                    Autonomía (Días) ↕
+                                </th>
+                                <th style="padding: 0.75rem; text-align: center; color: #059669; cursor: pointer;" onclick="ReportsView.sortStockReportTable('suggestedOrder')">
+                                    Sugerencia Pedido ↕
+                                </th>
+                                <th style="padding: 0.75rem; text-align: right; color: var(--secondary); cursor: pointer;" onclick="ReportsView.sortStockReportTable('costVal')">
+                                    Valor a Costo ↕
+                                </th>
+                                <th style="padding: 0.75rem; text-align: right; color: #2563eb; cursor: pointer;" onclick="ReportsView.sortStockReportTable('retailVal')">
+                                    Valor a Venta ↕
+                                </th>
                                 <th style="padding: 0.75rem; text-align: center;">Estado</th>
                             </tr>
                         </thead>
@@ -1729,35 +2637,89 @@ const ReportsView = {
                             ${filteredProducts.map(p => {
                                 const stock = parseFloat(p.stock) || 0;
                                 const minStock = parseFloat(p.minStock) || 0;
-                                const cost = parseFloat(p.cost) || 0;
-                                const price = parseFloat(p.price) || 0;
-                                const costVal = stock * cost;
-                                const saleVal = stock * price;
+                                const unitText = p.type === 'weight' ? 'kg' : 'un';
+                                const costVal = p.costVal || 0;
+                                const retailVal = p.retailVal || 0;
 
-                                let badge = '<span class="badge badge-success">Normal</span>';
-                                if (stock === 0) {
-                                    badge = '<span class="badge badge-danger">Agotado</span>';
+                                // Badge de Estado
+                                let badge = '<span class="badge badge-success" style="font-size: 0.72rem; font-weight: 700;">✅ Normal</span>';
+                                if (stock <= 0) {
+                                    badge = '<span class="badge badge-danger" style="font-size: 0.72rem; font-weight: 800;">🚨 Agotado</span>';
                                 } else if (stock <= minStock) {
-                                    badge = '<span class="badge badge-warning">Stock Bajo</span>';
+                                    badge = '<span class="badge badge-warning" style="font-size: 0.72rem; font-weight: 800;">⚠️ Stock Bajo</span>';
+                                }
+
+                                // Autonomía en días
+                                let autonomyBadge = '-';
+                                if (stock <= 0) {
+                                    autonomyBadge = '<span style="color: #dc2626; font-weight: 800; font-size: 0.8rem;">0 días (Agotado)</span>';
+                                } else if (p.stockDays === 999) {
+                                    autonomyBadge = '<span style="color: #d97706; font-size: 0.78rem; font-weight: 600;">💤 Sin venta (30d)</span>';
+                                } else if (p.stockDays <= 3) {
+                                    autonomyBadge = `<span style="color: #dc2626; font-weight: 900; font-size: 0.82rem;">🚨 ${p.stockDays} días</span>`;
+                                } else if (p.stockDays <= 7) {
+                                    autonomyBadge = `<span style="color: #d97706; font-weight: 800; font-size: 0.82rem;">⚠️ ${p.stockDays} días</span>`;
+                                } else {
+                                    autonomyBadge = `<span style="color: #059669; font-weight: 700; font-size: 0.82rem;">✅ ${p.stockDays} días</span>`;
+                                }
+
+                                // Pedido Sugerido
+                                let suggestedBadge = '<span style="color: var(--secondary); font-size: 0.78rem;">-</span>';
+                                if (p.suggestedOrder > 0) {
+                                    suggestedBadge = `<span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #059669; font-weight: 800; font-size: 0.75rem; border: 1px solid rgba(16, 185, 129, 0.3);">+${p.suggestedOrder} ${unitText}</span>`;
                                 }
 
                                 return `
                                     <tr style="border-bottom: 1px solid var(--border);">
-                                        <td style="padding: 0.75rem; font-weight: 800; color: var(--text-main);">${p.name}</td>
-                                        <td style="padding: 0.75rem; text-align: center; font-weight: 800;">${stock} ${p.type === 'weight' ? 'kg' : 'un'}</td>
-                                        <td style="padding: 0.75rem; text-align: center; color: var(--secondary);">${minStock} ${p.type === 'weight' ? 'kg' : 'un'}</td>
-                                        <td style="padding: 0.75rem; text-align: right; color: var(--secondary);">${formatCLP(costVal)}</td>
-                                        <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: #2563eb;">${formatCLP(saleVal)}</td>
+                                        <td style="padding: 0.75rem;">
+                                            <div style="font-weight: 800; color: var(--text-main);">${safeHTML(p.name)}</div>
+                                            ${p.barcode ? `<small style="color: var(--secondary); font-size: 0.72rem;">Código: ${safeHTML(p.barcode)}</small>` : ''}
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: center; font-weight: 800; color: ${stock <= 0 ? '#dc2626' : 'var(--text-main)'};">
+                                            ${stock} ${unitText}
+                                            <div style="font-size: 0.7rem; color: var(--secondary); font-weight: 600;">Mín: ${minStock} ${unitText}</div>
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: center;">${autonomyBadge}</td>
+                                        <td style="padding: 0.75rem; text-align: center;">${suggestedBadge}</td>
+                                        <td style="padding: 0.75rem; text-align: right; color: var(--secondary); font-weight: 600;">${formatCLP(costVal)}</td>
+                                        <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: #2563eb;">${formatCLP(retailVal)}</td>
                                         <td style="padding: 0.75rem; text-align: center;">${badge}</td>
                                     </tr>
                                 `;
                             }).join('')}
-                            ${filteredProducts.length === 0 ? '<tr><td colspan="6" style="text-align:center; padding: 2rem; color: var(--secondary); font-weight:700;">No hay productos en esta categoría</td></tr>' : ''}
+                            ${filteredProducts.length === 0 ? '<tr><td colspan="7" style="text-align:center; padding: 2.5rem; color: var(--secondary); font-weight:700;">No hay productos en este filtro</td></tr>' : ''}
                         </tbody>
                     </table>
                 </div>
             </div>
         `;
+    },
+
+    _sortStockDataList(list, key, dir) {
+        list.sort((a, b) => {
+            let valA = a[key];
+            let valB = b[key];
+            if (typeof valA === 'string') valA = valA.toLowerCase();
+            if (typeof valB === 'string') valB = valB.toLowerCase();
+            if (valA === null || valA === undefined) valA = -999999;
+            if (valB === null || valB === undefined) valB = -999999;
+            if (valA < valB) return dir === 'asc' ? -1 : 1;
+            if (valA > valB) return dir === 'asc' ? 1 : -1;
+            return 0;
+        });
+    },
+
+    async sortStockReportTable(key) {
+        if (!this._currentStockSort) this._currentStockSort = { key: 'stock', dir: 'asc' };
+        if (this._currentStockSort.key === key) {
+            this._currentStockSort.dir = this._currentStockSort.dir === 'desc' ? 'asc' : 'desc';
+        } else {
+            this._currentStockSort.key = key;
+            this._currentStockSort.dir = 'asc';
+        }
+        const content = await this.renderStockReport(this.selectedStockFilter || 'all');
+        const container = document.getElementById('reportContent');
+        if (container) container.innerHTML = content;
     },
 
     async handleStockFilterChange(filterType) {
@@ -1782,20 +2744,25 @@ const ReportsView = {
             return;
         }
 
-        const headers = ['Producto', 'Stock Actual', 'Stock Mínimo', 'Costo Unitario ($)', 'Precio Venta ($)', 'Valor Total Costo ($)', 'Valor Total Venta ($)', 'Estado'];
+        const headers = ['Producto', 'Código de Barra', 'Stock Actual', 'Stock Mínimo', 'Días de Autonomía', 'Pedido Sugerido', 'Costo Unitario ($)', 'Precio Venta ($)', 'Valor Total Costo ($)', 'Valor Total Venta ($)', 'Estado'];
         const rows = products.map(p => {
             const stock = parseFloat(p.stock) || 0;
             const minStock = parseFloat(p.minStock) || 0;
             const cost = parseFloat(p.cost) || 0;
             const price = parseFloat(p.price) || 0;
             let status = 'Normal';
-            if (stock === 0) status = 'Agotado';
+            if (stock <= 0) status = 'Agotado';
             else if (stock <= minStock) status = 'Stock Bajo';
+
+            const daysText = p.stockDays === 999 ? 'Sin venta (30d)' : (p.stockDays !== null ? `${p.stockDays} días` : '-');
 
             return [
                 `"${(p.name || '').replace(/"/g, '""')}"`,
+                `"${p.barcode || ''}"`,
                 stock,
                 minStock,
+                `"${daysText}"`,
+                p.suggestedOrder || 0,
                 cost,
                 price,
                 stock * cost,
@@ -1824,24 +2791,29 @@ const ReportsView = {
         const totalStagnantCount = report.length;
         const criticalCount = report.filter(i => i.daysInactive > 30).length;
         const totalCapitalStagnant = report.reduce((sum, item) => sum + (parseFloat(item.costValue) || 0), 0);
-        const totalRetailStagnant = report.reduce((sum, item) => sum + ((parseFloat(item.stock) || 0) * (parseFloat(item.price) || 0)), 0);
+        const totalRetailStagnant = report.reduce((sum, item) => sum + (parseFloat(item.retailValue) || 0), 0);
+        const topCat = report._topStagnantCategory;
+
+        // Ordenamiento
+        this._currentStagnantSort = this._currentStagnantSort || { key: 'costValue', dir: 'desc' };
+        this._sortStagnantDataList(report, this._currentStagnantSort.key, this._currentStagnantSort.dir);
 
         return `
             <!-- CABECERA Y FILTROS -->
             <div class="flex-between-wrap" style="margin-bottom: 1.25rem; gap: 1rem; align-items: center;">
                 <div>
                     <h3 style="margin: 0; font-size: 1.4rem; color: var(--text-main); display: flex; align-items: center; gap: 0.75rem;">
-                        😴 Productos Estancados (Sin Venta)
+                        ⏳ Productos sin Venta (Capital Inmovilizado)
                     </h3>
                     <p style="margin: 0.25rem 0 0 0; color: var(--secondary); font-size: 0.85rem;">
-                        Artículos en stock sin rotación reciente (Capital Inmovilizado)
+                        Mercadería en estantería sin rotación reciente y sugerencias de remate
                     </p>
                 </div>
 
                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                    <div style="display: flex; gap: 0.35rem; align-items: center;">
-                        <span style="font-size: 0.85rem; color: var(--secondary); font-weight: 700;">Inactivos hace:</span>
-                        <select class="form-control" style="width: auto; padding: 0.4rem 0.75rem; border-radius: 0.75rem;" onchange="ReportsView.handleStagnantDaysChange(this.value)">
+                    <div style="display: flex; gap: 0.35rem; align-items: center; background: var(--surface-content); padding: 0.35rem 0.75rem; border-radius: 0.75rem; border: 1px solid var(--border);">
+                        <span style="font-size: 0.8rem; color: var(--secondary); font-weight: 700;">Sin venta hace:</span>
+                        <select class="form-control" style="width: auto; padding: 0.25rem 0.5rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.82rem;" onchange="ReportsView.handleStagnantDaysChange(this.value)">
                             <option value="7" ${days == 7 ? 'selected' : ''}>7 días</option>
                             <option value="14" ${days == 14 ? 'selected' : ''}>14 días</option>
                             <option value="30" ${days == 30 ? 'selected' : ''}>30 días</option>
@@ -1850,52 +2822,60 @@ const ReportsView = {
                         </select>
                     </div>
 
-                    <input type="text" placeholder="🔍 Buscar producto..." 
+                    <input type="text" placeholder="🔍 Buscar producto o código..." 
                            onkeyup="ReportsView.filterStagnantTable(this.value)" class="form-control" 
-                           style="width: 200px; padding: 0.4rem 0.75rem; border-radius: 0.75rem;">
+                           style="width: 220px; padding: 0.4rem 0.75rem; border-radius: 0.75rem;">
 
                     <button class="btn btn-success" onclick="ReportsView.exportStagnantToCSV()" style="font-weight: 700;">
-                        📊 Exportar Excel (CSV)
+                        📊 Exportar Excel
                     </button>
                 </div>
             </div>
 
-            <!-- TARJETAS COMPACTAS DE RESUMEN -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
-                <div style="padding: 0.75rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; text-transform: uppercase;">Total Estancados</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: var(--text-main);">${totalStagnantCount} SKUs</div>
-                    <small style="font-size: 0.7rem; opacity: 0.7;">> ${days} días sin venta</small>
+            <!-- TARJETAS DE RESUMEN EJECUTIVO -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+                <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">Total sin Rotación</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: var(--text-main); margin: 0.2rem 0;">${totalStagnantCount} productos</div>
+                    <small style="font-size: 0.72rem; color: var(--secondary);">> ${days} días sin vender</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #dc2626; font-weight: 700; text-transform: uppercase;">🔴 Nivel Crítico</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #dc2626;">${criticalCount} SKUs</div>
-                    <small style="font-size: 0.7rem; color: #dc2626;">> 30 días inactivos</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1.5px solid rgba(239, 68, 68, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #dc2626; font-weight: 800; text-transform: uppercase;">🔴 Nivel Crítico</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #dc2626; margin: 0.2rem 0;">${criticalCount} productos</div>
+                    <small style="font-size: 0.72rem; color: #dc2626;">> 30 días inactivos</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #d97706; font-weight: 700; text-transform: uppercase;">💸 Capital Inmovilizado</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #d97706;">${formatCLP(totalCapitalStagnant)}</div>
-                    <small style="font-size: 0.7rem; color: #d97706;">Costo total atrapado</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1.5px solid rgba(245, 158, 11, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #d97706; font-weight: 800; text-transform: uppercase;">💸 Capital Inmovilizado</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #d97706; margin: 0.2rem 0;">${formatCLP(totalCapitalStagnant)}</div>
+                    <small style="font-size: 0.72rem; color: #d97706;">Costo total atrapado</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #2563eb; font-weight: 700; text-transform: uppercase;">Valor Venta Estancada</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #2563eb;">${formatCLP(totalRetailStagnant)}</div>
-                    <small style="font-size: 0.7rem; color: #2563eb;">Recaudación potencial</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(139, 92, 246, 0.08); border: 1.5px solid rgba(139, 92, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #7c3aed; font-weight: 800; text-transform: uppercase;">📂 Rubro Más Afectado</div>
+                    <div style="font-size: 1rem; font-weight: 900; color: #7c3aed; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0.2rem 0;" title="${topCat ? topCat.name : '-'}">
+                        ${topCat ? safeHTML(topCat.name) : '-'}
+                    </div>
+                    <small style="font-size: 0.72rem; color: #7c3aed;">${topCat ? formatCLP(topCat.amount) + ' atrapados' : '-'}</small>
+                </div>
+
+                <div style="padding: 0.85rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1.5px solid rgba(59, 130, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #2563eb; font-weight: 800; text-transform: uppercase;">Recaudación Esperada</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #2563eb; margin: 0.2rem 0;">${formatCLP(totalRetailStagnant)}</div>
+                    <small style="font-size: 0.72rem; color: #2563eb;">Si se remata todo</small>
                 </div>
             </div>
 
-            <!-- SUGERENCIA INTELIGENTE DE LIQUIDACIÓN -->
+            <!-- SUGERENCIA DIDÁCTICA DE LIQUIDACIÓN -->
             ${totalCapitalStagnant > 0 ? `
-                <div style="background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 0.75rem; padding: 0.85rem 1.25rem; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
+                <div style="background: rgba(245, 158, 11, 0.08); border: 1.5px solid rgba(245, 158, 11, 0.3); border-radius: 0.75rem; padding: 0.85rem 1.25rem; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;">
                     <div style="display: flex; align-items: center; gap: 0.75rem;">
-                        <span style="font-size: 1.5rem;">💡</span>
+                        <span style="font-size: 1.6rem;">💡</span>
                         <div>
-                            <strong style="color: #d97706; font-size: 0.95rem;">Recomendación de Liquidación Rápida</strong>
-                            <p style="margin: 0; font-size: 0.82rem; color: var(--text-main);">
-                                Tienes <strong>${formatCLP(totalCapitalStagnant)}</strong> atrapados en estos productos. Aplicar un 15% de descuento te permitiría recuperar rápidamente hasta <strong>${formatCLP(Math.round(totalRetailStagnant * 0.85))}</strong> para reinvertir en stock de alta rotación.
+                            <strong style="color: #d97706; font-size: 0.95rem;">Estrategia de Descongelamiento de Efectivo</strong>
+                            <p style="margin: 0.2rem 0 0 0; font-size: 0.82rem; color: var(--text-main);">
+                                Tienes <strong>${formatCLP(totalCapitalStagnant)}</strong> durmiendo en estos productos. La columna <strong>"Remate Mínimo"</strong> te indica el precio más bajo al que puedes venderlos para recuperar tu dinero de inmediato sin vender a pérdida.
                             </p>
                         </div>
                     </div>
@@ -1904,43 +2884,112 @@ const ReportsView = {
 
             <!-- TABLA DE PRODUCTOS ESTANCADOS -->
             <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">
+                    <span style="font-size: 0.85rem; color: var(--secondary); font-weight: 600;">
+                        💡 Haz clic en los encabezados para ordenar por Días Inactivo, Capital Atrapado o Stock.
+                    </span>
+                </div>
                 <div class="table-container">
                     <table id="reportStagnantTable" style="width: 100%; border-collapse: collapse;">
                         <thead>
                             <tr style="border-bottom: 2px solid var(--border); font-size: 0.8rem; color: var(--secondary); text-transform: uppercase;">
-                                <th style="padding: 0.75rem; text-align: left;">Producto</th>
-                                <th style="padding: 0.75rem; text-align: center;">Última Venta</th>
-                                <th style="padding: 0.75rem; text-align: center;">Inactivo Hace</th>
-                                <th style="padding: 0.75rem; text-align: center;">Stock Bodega</th>
-                                <th style="padding: 0.75rem; text-align: right;">Capital Atrapado</th>
+                                <th style="padding: 0.75rem; text-align: left; cursor: pointer;" onclick="ReportsView.sortStagnantReportTable('name')">
+                                    Producto ↕
+                                </th>
+                                <th style="padding: 0.75rem; text-align: left;">Categoría</th>
+                                <th style="padding: 0.75rem; text-align: center; cursor: pointer;" onclick="ReportsView.sortStagnantReportTable('daysInactive')">
+                                    Inactivo Hace ↕
+                                </th>
+                                <th style="padding: 0.75rem; text-align: center; cursor: pointer;" onclick="ReportsView.sortStagnantReportTable('stock')">
+                                    Stock ↕
+                                </th>
+                                <th style="padding: 0.75rem; text-align: right;">Precio Actual (Margen)</th>
+                                <th style="padding: 0.75rem; text-align: right; color: #059669;">Remate Mínimo</th>
+                                <th style="padding: 0.75rem; text-align: right; color: #d97706; cursor: pointer;" onclick="ReportsView.sortStagnantReportTable('costValue')">
+                                    Capital Atrapado ↕
+                                </th>
+                                <th style="padding: 0.75rem; text-align: center;">Acción Recomendada</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${report.map(item => {
+                                const unitText = item.type === 'weight' ? 'kg' : 'un';
                                 let badgeClass = 'badge-info';
-                                if (item.daysInactive > 30) badgeClass = 'badge-danger';
-                                else if (item.daysInactive > 14) badgeClass = 'badge-warning';
+                                if (item.daysInactive > 60) badgeClass = 'badge-danger';
+                                else if (item.daysInactive > 30) badgeClass = 'badge-warning';
 
                                 return `
                                     <tr style="border-bottom: 1px solid var(--border);">
-                                        <td style="padding: 0.75rem; font-weight: 800; color: var(--text-main);">${item.name}</td>
-                                        <td style="padding: 0.75rem; text-align: center; color: var(--secondary);">
-                                            ${item.lastSoldAt ? new Date(item.lastSoldAt).toLocaleDateString('es-CL') : '<span style="opacity: 0.5;">Nunca vendido</span>'}
+                                        <td style="padding: 0.75rem;">
+                                            <div style="font-weight: 800; color: var(--text-main);">${safeHTML(item.name)}</div>
+                                            ${item.barcode ? `<small style="color: var(--secondary); font-size: 0.72rem;">Código: ${safeHTML(item.barcode)}</small>` : ''}
+                                        </td>
+                                        <td style="padding: 0.75rem; color: var(--secondary); font-weight: 600; font-size: 0.85rem;">
+                                            ${safeHTML(item.category)}
                                         </td>
                                         <td style="padding: 0.75rem; text-align: center;">
-                                            <span class="badge ${badgeClass}">${item.daysInactive} días</span>
+                                            <span class="badge ${badgeClass}" style="font-size: 0.75rem; font-weight: 800;">
+                                                ${item.daysInactive} días
+                                            </span>
+                                            <div style="font-size: 0.68rem; color: var(--secondary); margin-top: 0.15rem;">
+                                                ${item.lastSoldAt ? new Date(item.lastSoldAt).toLocaleDateString('es-CL') : 'Nunca vendido'}
+                                            </div>
                                         </td>
-                                        <td style="padding: 0.75rem; text-align: center; font-weight: 800;">${item.stock} un.</td>
-                                        <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: #d97706;">${formatCLP(item.costValue)}</td>
+                                        <td style="padding: 0.75rem; text-align: center; font-weight: 800;">
+                                            ${item.stock} ${unitText}
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: right;">
+                                            <div style="font-weight: 800; color: #2563eb;">${formatCLP(item.price)}</div>
+                                            <small style="color: var(--secondary); font-size: 0.72rem;">Margen: ${item.currentMargin}%</small>
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: #059669;">
+                                            ${formatCLP(item.minClearancePrice)}
+                                            <div style="font-size: 0.68rem; color: var(--secondary);">Costo: ${formatCLP(item.cost)}</div>
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: #d97706; font-size: 0.95rem;">
+                                            ${formatCLP(item.costValue)}
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: center;">
+                                            <span class="badge ${item.actionLevel === 'red' ? 'badge-danger' : (item.actionLevel === 'orange' ? 'badge-warning' : 'badge-info')}" style="font-size: 0.72rem; font-weight: 700;">
+                                                ${item.suggestedAction}
+                                            </span>
+                                        </td>
                                     </tr>
                                 `;
                             }).join('')}
-                            ${report.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding: 2rem; color: #10b981; font-weight:700;">✅ ¡Excelente! No tienes productos estancados en este umbral de ' + days + ' días.</td></tr>' : ''}
+                            ${report.length === 0 ? '<tr><td colspan="8" style="text-align:center; padding: 2.5rem; color: #10b981; font-weight:700;">✅ ¡Excelente! No tienes productos estancados en este umbral de ' + days + ' días.</td></tr>' : ''}
                         </tbody>
                     </table>
                 </div>
             </div>
         `;
+    },
+
+    _sortStagnantDataList(list, key, dir) {
+        list.sort((a, b) => {
+            let valA = a[key];
+            let valB = b[key];
+            if (typeof valA === 'string') valA = valA.toLowerCase();
+            if (typeof valB === 'string') valB = valB.toLowerCase();
+            if (valA === null || valA === undefined) valA = -999999;
+            if (valB === null || valB === undefined) valB = -999999;
+            if (valA < valB) return dir === 'asc' ? -1 : 1;
+            if (valA > valB) return dir === 'asc' ? 1 : -1;
+            return 0;
+        });
+    },
+
+    async sortStagnantReportTable(key) {
+        if (!this._currentStagnantSort) this._currentStagnantSort = { key: 'costValue', dir: 'desc' };
+        if (this._currentStagnantSort.key === key) {
+            this._currentStagnantSort.dir = this._currentStagnantSort.dir === 'desc' ? 'asc' : 'desc';
+        } else {
+            this._currentStagnantSort.key = key;
+            this._currentStagnantSort.dir = 'desc';
+        }
+        const content = await this.renderStagnantReport(this.selectedStagnantDays || 14);
+        const container = document.getElementById('reportContent');
+        if (container) container.innerHTML = content;
     },
 
     async handleStagnantDaysChange(days) {
@@ -1966,14 +3015,19 @@ const ReportsView = {
             return;
         }
 
-        const headers = ['Producto', 'Última Venta', 'Días Inactivo', 'Stock Bodega', 'Costo Unitario ($)', 'Capital Atrapado ($)'];
+        const headers = ['Producto', 'Código', 'Categoría', 'Última Venta', 'Días Inactivo', 'Stock Actual', 'Costo ($)', 'Precio ($)', 'Remate Mínimo ($)', 'Capital Atrapado ($)', 'Acción'];
         const rows = products.map(p => [
             `"${(p.name || '').replace(/"/g, '""')}"`,
+            `"${p.barcode || ''}"`,
+            `"${p.category || 'General'}"`,
             `"${p.lastSoldAt ? new Date(p.lastSoldAt).toLocaleDateString('es-CL') : 'Nunca'}"`,
             p.daysInactive || 0,
             p.stock || 0,
             p.cost || 0,
-            p.costValue || 0
+            p.price || 0,
+            p.minClearancePrice || 0,
+            p.costValue || 0,
+            `"${p.suggestedAction || ''}"`
         ]);
 
         const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map(e => e.join(';'))].join('\n');
@@ -1987,49 +3041,122 @@ const ReportsView = {
         showNotification('📊 Reporte de Productos Estancados descargado en Excel (CSV)', 'success');
     },
 
-    async renderCostAlertsReport() {
-        const alerts = await ReportController.getCostAlerts() || [];
-        this._lastCostAlertsData = alerts;
+    getCostAlertThreshold() {
+        const val = localStorage.getItem('COST_ALERT_MARGIN_THRESHOLD');
+        return val ? parseInt(val) : 5;
+    },
 
-        const totalAlerts = alerts.length;
-        const usersInvolved = Array.from(new Set(alerts.map(a => a.username || 'Sistema'))).length;
+    setCostAlertThreshold(val) {
+        const threshold = Math.max(1, parseInt(val) || 5);
+        localStorage.setItem('COST_ALERT_MARGIN_THRESHOLD', threshold);
+        showNotification(`⚙️ Umbral de alerta de margen ajustado al ${threshold}%`, 'info');
+        this.handleCostAlertsFilterChange(this._costAlertActiveTab || 'critical');
+    },
+
+    async handleCostAlertsFilterChange(tab) {
+        this._costAlertActiveTab = tab;
+        const content = await this.renderCostAlertsReport();
+        const container = document.getElementById('reportContent');
+        if (container) container.innerHTML = content;
+    },
+
+    async renderCostAlertsReport() {
+        const allAlerts = await ReportController.getCostAlerts() || [];
+        this._lastCostAlertsData = allAlerts;
+
+        const threshold = this.getCostAlertThreshold();
+        const activeTab = this._costAlertActiveTab || 'critical';
+
+        // Filtrar según la pestaña activa
+        let filteredAlerts = allAlerts;
+        if (activeTab === 'critical') {
+            filteredAlerts = allAlerts.filter(a => a.marginDiff <= -threshold);
+        } else if (activeTab === 'reduced') {
+            filteredAlerts = allAlerts.filter(a => a.isMarginReduced);
+        }
+
+        const totalAlerts = allAlerts.length;
+        const criticalAlerts = allAlerts.filter(a => a.marginDiff <= -threshold);
+        const criticalCount = criticalAlerts.length;
+        const totalStockLoss = criticalAlerts.reduce((sum, a) => sum + (a.stockImpact || 0), 0);
+        const usersInvolved = Array.from(new Set(allAlerts.map(a => a.username || 'Sistema'))).length;
 
         return `
             <!-- CABECERA Y ACCIONES -->
             <div class="flex-between-wrap" style="margin-bottom: 1.25rem; gap: 1rem; align-items: center;">
                 <div>
                     <h3 style="margin: 0; font-size: 1.4rem; color: var(--text-main); display: flex; align-items: center; gap: 0.75rem;">
-                        ⚠️ Alertas de Auditoría: Cambios de Costo
+                        ⚠️ Alertas de Auditoría: Cambios de Costo y Margen
                     </h3>
                     <p style="margin: 0.25rem 0 0 0; color: var(--secondary); font-size: 0.85rem;">
-                        Monitoreo de modificaciones manuales de costos que afectan los márgenes de ganancia
+                        Monitoreo de modificaciones manuales de costos que comprometen tus márgenes de ganancia
                     </p>
                 </div>
 
                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <!-- Configuración de Umbral -->
+                    <div style="display: flex; gap: 0.35rem; align-items: center; background: var(--surface-content); padding: 0.35rem 0.75rem; border-radius: 0.75rem; border: 1px solid var(--border);">
+                        <span style="font-size: 0.8rem; color: var(--secondary); font-weight: 700;">⚙️ Alertar si margen cae ≥</span>
+                        <select class="form-control" style="width: auto; padding: 0.2rem 0.5rem; border-radius: 0.5rem; font-weight: 800; font-size: 0.82rem;" onchange="ReportsView.setCostAlertThreshold(this.value)">
+                            <option value="3" ${threshold === 3 ? 'selected' : ''}>3%</option>
+                            <option value="5" ${threshold === 5 ? 'selected' : ''}>5% (Recomendado)</option>
+                            <option value="10" ${threshold === 10 ? 'selected' : ''}>10%</option>
+                            <option value="15" ${threshold === 15 ? 'selected' : ''}>15%</option>
+                            <option value="20" ${threshold === 20 ? 'selected' : ''}>20%</option>
+                        </select>
+                    </div>
+
                     <input type="text" placeholder="🔍 Buscar por usuario o producto..." 
                            onkeyup="ReportsView.filterCostAlertsTable(this.value)" class="form-control" 
-                           style="width: 230px; padding: 0.4rem 0.75rem; border-radius: 0.75rem;">
+                           style="width: 220px; padding: 0.4rem 0.75rem; border-radius: 0.75rem;">
 
                     <button class="btn btn-success" onclick="ReportsView.exportCostAlertsToCSV()" style="font-weight: 700;">
-                        📊 Exportar Excel (CSV)
+                        📊 Exportar Excel
                     </button>
                 </div>
             </div>
 
-            <!-- TARJETAS COMPACTAS DE AUDITORÍA -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
-                <div style="padding: 0.75rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; text-transform: uppercase;">Modificaciones Auditadas</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: var(--text-main);">${totalAlerts} cambios</div>
-                    <small style="font-size: 0.7rem; opacity: 0.7;">Registros en sistema</small>
+            <!-- TARJETAS DE AUDITORÍA Y CONTROL -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+                <div style="padding: 0.85rem 1rem; background: ${criticalCount > 0 ? 'rgba(239, 68, 68, 0.08)' : 'var(--surface-content)'}; border: 1.5px solid ${criticalCount > 0 ? 'rgba(239, 68, 68, 0.3)' : 'var(--border)'}; border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: ${criticalCount > 0 ? '#dc2626' : 'var(--secondary)'}; font-weight: 800; text-transform: uppercase;">🚨 Márgenes Comprometidos</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: ${criticalCount > 0 ? '#dc2626' : 'var(--text-main)'}; margin: 0.2rem 0;">${criticalCount} productos</div>
+                    <small style="font-size: 0.72rem; color: ${criticalCount > 0 ? '#dc2626' : 'var(--secondary)'};">Caída de margen ≥ ${threshold}%</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #d97706; font-weight: 700; text-transform: uppercase;">Usuarios Responsables</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #d97706;">${usersInvolved} usuario(s)</div>
-                    <small style="font-size: 0.7rem; color: #d97706;">Operadores detectados</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1.5px solid rgba(245, 158, 11, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #d97706; font-weight: 800; text-transform: uppercase;">💸 Riesgo de Pérdida en Stock</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #d97706; margin: 0.2rem 0;">${formatCLP(totalStockLoss)}</div>
+                    <small style="font-size: 0.72rem; color: #d97706;">Si no se ajusta el precio de venta</small>
                 </div>
+
+                <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">Total Modificaciones Reales</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: var(--text-main); margin: 0.2rem 0;">${totalAlerts} cambios</div>
+                    <small style="font-size: 0.72rem; color: var(--secondary);">Sin cambios falsos ($0)</small>
+                </div>
+
+                <div style="padding: 0.85rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1.5px solid rgba(59, 130, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #2563eb; font-weight: 800; text-transform: uppercase;">Operadores Auditados</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #2563eb; margin: 0.2rem 0;">${usersInvolved} usuario(s)</div>
+                    <small style="font-size: 0.72rem; color: #2563eb;">Responsables detectados</small>
+                </div>
+            </div>
+
+            <!-- PESTAÑAS INTERACTIVAS DE FILTRO -->
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; flex-wrap: wrap;">
+                <button class="btn btn-sm ${activeTab === 'critical' ? 'btn-danger' : 'btn-ghost'}" 
+                        onclick="ReportsView.handleCostAlertsFilterChange('critical')" style="font-weight: 800;">
+                    🚨 Margen en Peligro (≥ ${threshold}%) (${criticalCount})
+                </button>
+                <button class="btn btn-sm ${activeTab === 'reduced' ? 'btn-warning' : 'btn-ghost'}" 
+                        onclick="ReportsView.handleCostAlertsFilterChange('reduced')" style="font-weight: 700;">
+                    🔻 Todas las Caídas de Margen (${allAlerts.filter(a => a.isMarginReduced).length})
+                </button>
+                <button class="btn btn-sm ${activeTab === 'all' ? 'btn-primary' : 'btn-ghost'}" 
+                        onclick="ReportsView.handleCostAlertsFilterChange('all')" style="font-weight: 700;">
+                    📋 Historial Completo (${totalAlerts})
+                </button>
             </div>
 
             <!-- TABLA DE AUDITORÍA -->
@@ -2041,43 +3168,26 @@ const ReportsView = {
                                 <th style="padding: 0.75rem; text-align: left;">Fecha y Hora</th>
                                 <th style="padding: 0.75rem; text-align: left;">Responsable</th>
                                 <th style="padding: 0.75rem; text-align: left;">Producto Afectado</th>
-                                <th style="padding: 0.75rem; text-align: left;">Modificación de Costo</th>
+                                <th style="padding: 0.75rem; text-align: right;">Costo Modificado</th>
+                                <th style="padding: 0.75rem; text-align: center;">Impacto en Margen</th>
+                                <th style="padding: 0.75rem; text-align: right; color: #059669;">Precio Venta Sugerido</th>
+                                <th style="padding: 0.75rem; text-align: right;">Riesgo en Stock</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${alerts.length === 0 ? `
-                                <tr><td colspan="4" style="text-align:center; padding: 3rem; color: #10b981; font-weight:700;">
+                            ${filteredAlerts.length === 0 ? `
+                                <tr><td colspan="7" style="text-align:center; padding: 3rem; color: #10b981; font-weight:700;">
                                     <div style="font-size: 2rem; margin-bottom: 0.5rem;">✅</div>
-                                    Sin modificaciones manuales de costos registradas.
+                                    ¡Excelente! No hay alertas de costos en esta sección.
                                 </td></tr>
-                            ` : alerts.map(a => {
-                                const changes = a.metadata?.changes || {};
-                                const costChange = changes.cost || changes.costBruto || changes.costNeto;
-
-                                let productName = a.metadata?.productName;
-                                if (!productName) {
-                                    if (a.summary && a.summary.includes('Producto #')) {
-                                        const match = a.summary.match(/Producto #\d+/);
-                                        productName = match ? match[0] : 'Producto #' + a.productId;
-                                    } else {
-                                        productName = 'Producto #' + a.productId;
-                                    }
-                                }
-
-                                let detailHTML = '';
-                                if (costChange) {
-                                    detailHTML = `
-                                        <div style="font-weight: 800; color: #d97706;">
-                                            ${formatCLP(costChange.old)} ➔ ${formatCLP(costChange.new)}
-                                        </div>
-                                    `;
-                                } else {
-                                    detailHTML = `<span class="badge badge-warning">Ajuste de Costo</span>`;
-                                }
+                            ` : filteredAlerts.map(a => {
+                                const isCritical = a.marginDiff <= -threshold;
+                                const costDiffSign = a.costDiffAmount > 0 ? '+' : '';
+                                const marginDiffSign = a.marginDiff > 0 ? '+' : '';
 
                                 return `
-                                    <tr style="border-bottom: 1px solid var(--border);">
-                                        <td style="padding: 0.75rem; font-size: 0.85rem; color: var(--secondary); white-space: nowrap;">
+                                    <tr style="border-bottom: 1px solid var(--border); ${isCritical ? 'background: rgba(239, 68, 68, 0.03);' : ''}">
+                                        <td style="padding: 0.75rem; font-size: 0.82rem; color: var(--secondary); white-space: nowrap;">
                                             ${formatDateTime(a.date)}
                                         </td>
                                         <td style="padding: 0.75rem;">
@@ -2085,11 +3195,45 @@ const ReportsView = {
                                                 <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color:#fff; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.7rem;">
                                                     ${(a.username || 'U').charAt(0).toUpperCase()}
                                                 </div>
-                                                <span style="font-weight: 700; color: var(--text-main);">${a.username || 'Sistema'}</span>
+                                                <span style="font-weight: 700; color: var(--text-main); font-size: 0.85rem;">${safeHTML(a.username || 'Sistema')}</span>
                                             </div>
                                         </td>
-                                        <td style="padding: 0.75rem; font-weight: 800; color: var(--text-main);">${productName}</td>
-                                        <td style="padding: 0.75rem;">${detailHTML}</td>
+                                        <td style="padding: 0.75rem;">
+                                            <div style="font-weight: 800; color: var(--text-main); font-size: 0.88rem;">${safeHTML(a.productName)}</div>
+                                            ${a.barcode ? `<small style="color: var(--secondary); font-size: 0.72rem;">Código: ${safeHTML(a.barcode)}</small>` : ''}
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: right;">
+                                            <div style="font-weight: 800; color: #d97706;">
+                                                ${formatCLP(a.oldCost)} ➔ ${formatCLP(a.newCost)}
+                                            </div>
+                                            <small style="font-size: 0.72rem; color: ${a.costDiffAmount > 0 ? '#dc2626' : '#059669'}; font-weight: 700;">
+                                                ${costDiffSign}${formatCLP(a.costDiffAmount)} (${costDiffSign}${a.costDiffPerc}%)
+                                            </small>
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: center;">
+                                            <div style="font-weight: 800; font-size: 0.85rem; color: var(--text-main);">
+                                                ${a.oldMargin}% ➔ ${a.newMargin}%
+                                            </div>
+                                            <span class="badge ${isCritical ? 'badge-danger' : (a.marginDiff < 0 ? 'badge-warning' : 'badge-success')}" style="font-size: 0.72rem; font-weight: 800; margin-top: 0.15rem;">
+                                                ${marginDiffSign}${a.marginDiff}% Margen
+                                            </span>
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: right;">
+                                            <div style="font-weight: 900; color: #059669; font-size: 0.9rem;">
+                                                ${formatCLP(a.suggestedNewPrice)}
+                                            </div>
+                                            <small style="color: var(--secondary); font-size: 0.72rem;">Actual: ${formatCLP(a.price)}</small>
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: right;">
+                                            ${a.stockImpact > 0 ? `
+                                                <div style="font-weight: 900; color: #dc2626; font-size: 0.9rem;">
+                                                    -${formatCLP(a.stockImpact)}
+                                                </div>
+                                                <small style="color: var(--secondary); font-size: 0.72rem;">en ${a.stock} un. stock</small>
+                                            ` : `
+                                                <span style="color: var(--secondary); font-size: 0.82rem;">-</span>
+                                            `}
+                                        </td>
                                     </tr>
                                 `;
                             }).join('')}
@@ -2116,12 +3260,22 @@ const ReportsView = {
             return;
         }
 
-        const headers = ['Fecha y Hora', 'Usuario', 'Producto', 'Detalle Cambio'];
+        const headers = ['Fecha y Hora', 'Usuario', 'Producto', 'Código', 'Costo Antiguo ($)', 'Costo Nuevo ($)', 'Variación Costo ($)', 'Margen Antiguo (%)', 'Margen Nuevo (%)', 'Impacto Margen (%)', 'Precio Actual ($)', 'Precio Sugerido ($)', 'Stock Actual', 'Riesgo en Stock ($)'];
         const rows = alerts.map(a => [
             `"${formatDateTime(a.date)}"`,
-            `"${a.username || 'Sistema'}"`,
-            `"${a.metadata?.productName || 'Producto #' + a.productId}"`,
-            `"${a.summary || 'Ajuste de costo'}"`
+            `"${(a.username || 'Sistema').replace(/"/g, '""')}"`,
+            `"${(a.productName || '').replace(/"/g, '""')}"`,
+            `"${a.barcode || ''}"`,
+            a.oldCost || 0,
+            a.newCost || 0,
+            a.costDiffAmount || 0,
+            a.oldMargin || 0,
+            a.newMargin || 0,
+            a.marginDiff || 0,
+            a.price || 0,
+            a.suggestedNewPrice || 0,
+            a.stock || 0,
+            a.stockImpact || 0
         ]);
 
         const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map(e => e.join(';'))].join('\n');
@@ -2135,106 +3289,232 @@ const ReportsView = {
         showNotification('📊 Alertas de Costo descargadas en Excel (CSV)', 'success');
     },
 
+    async handleDecisionMatrixTabChange(tab) {
+        this._decisionMatrixActiveTab = tab;
+        const content = await this.renderDecisionMatrix();
+        const container = document.getElementById('reportContent');
+        if (container) container.innerHTML = content;
+    },
+
+    async sortDecisionMatrixTable(key) {
+        if (!this._currentDecisionMatrixSort) this._currentDecisionMatrixSort = { key: 'dailyProfit', dir: 'desc' };
+        if (this._currentDecisionMatrixSort.key === key) {
+            this._currentDecisionMatrixSort.dir = this._currentDecisionMatrixSort.dir === 'desc' ? 'asc' : 'desc';
+        } else {
+            this._currentDecisionMatrixSort.key = key;
+            this._currentDecisionMatrixSort.dir = 'desc';
+        }
+        const content = await this.renderDecisionMatrix();
+        const container = document.getElementById('reportContent');
+        if (container) container.innerHTML = content;
+    },
+
+    _sortDecisionMatrixList(list, key, dir) {
+        list.sort((a, b) => {
+            let valA = a[key];
+            let valB = b[key];
+            if (typeof valA === 'string') valA = valA.toLowerCase();
+            if (typeof valB === 'string') valB = valB.toLowerCase();
+            if (valA === null || valA === undefined) valA = -999999;
+            if (valB === null || valB === undefined) valB = -999999;
+            if (valA < valB) return dir === 'asc' ? -1 : 1;
+            if (valA > valB) return dir === 'asc' ? 1 : -1;
+            return 0;
+        });
+    },
+
     async renderDecisionMatrix() {
         try {
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem('AUTH_TOKEN') || localStorage.getItem('token');
             const res = await fetch('/api/analytics/decision-matrix', {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!res.ok) throw new Error('Error al cargar la matriz');
-            const data = await res.json() || [];
-            this._lastDecisionMatrixData = data;
+            const rawData = await res.json() || [];
 
-            const totalEstrella = data.filter(p => p.matrixCategory === 'estrella').length;
-            const totalCaballo = data.filter(p => p.matrixCategory === 'caballo').length;
-            const totalLento = data.filter(p => p.matrixCategory === 'lento_rentable').length;
-            const totalPesoMuerto = data.filter(p => p.matrixCategory === 'peso_muerto' || (!['estrella','caballo','lento_rentable'].includes(p.matrixCategory))).length;
+            // Enriquecer datos con acciones tácticas
+            const enrichedData = rawData.map(p => {
+                let suggestedAction = '';
+                if (p.matrixCategory === 'estrella') {
+                    suggestedAction = '⭐ Prioridad 1: Mantener siempre stock y frente de tienda';
+                } else if (p.matrixCategory === 'caballo') {
+                    suggestedAction = '🐎 Motor de flujo: Subir $50-$100 o negociar costo';
+                } else if (p.matrixCategory === 'lento_rentable') {
+                    suggestedAction = '🐢 Joya oculta: Exhibir en cabecera o armar combo';
+                } else {
+                    suggestedAction = '💀 Liquidar: Rematar al costo y descatalogar';
+                }
+
+                return {
+                    ...p,
+                    suggestedAction: suggestedAction
+                };
+            });
+
+            this._lastDecisionMatrixData = enrichedData;
+
+            const totalEstrella = enrichedData.filter(p => p.matrixCategory === 'estrella').length;
+            const totalCaballo = enrichedData.filter(p => p.matrixCategory === 'caballo').length;
+            const totalLento = enrichedData.filter(p => p.matrixCategory === 'lento_rentable').length;
+            const totalPesoMuerto = enrichedData.filter(p => p.matrixCategory === 'peso_muerto' || (!['estrella','caballo','lento_rentable'].includes(p.matrixCategory))).length;
+            const totalDailyProfit = enrichedData.reduce((sum, p) => sum + (parseFloat(p.dailyProfit) || 0), 0);
+
+            const activeTab = this._decisionMatrixActiveTab || 'all';
+            let filteredData = enrichedData;
+            if (activeTab === 'estrella') filteredData = enrichedData.filter(p => p.matrixCategory === 'estrella');
+            else if (activeTab === 'caballo') filteredData = enrichedData.filter(p => p.matrixCategory === 'caballo');
+            else if (activeTab === 'lento_rentable') filteredData = enrichedData.filter(p => p.matrixCategory === 'lento_rentable');
+            else if (activeTab === 'peso_muerto') filteredData = enrichedData.filter(p => p.matrixCategory === 'peso_muerto' || (!['estrella','caballo','lento_rentable'].includes(p.matrixCategory)));
+
+            // Ordenamiento
+            this._currentDecisionMatrixSort = this._currentDecisionMatrixSort || { key: 'dailyProfit', dir: 'desc' };
+            this._sortDecisionMatrixList(filteredData, this._currentDecisionMatrixSort.key, this._currentDecisionMatrixSort.dir);
 
             return `
                 <!-- CABECERA Y ACCIONES -->
                 <div class="flex-between-wrap" style="margin-bottom: 1.25rem; gap: 1rem; align-items: center;">
                     <div>
                         <h3 style="margin: 0; font-size: 1.4rem; color: var(--text-main); display: flex; align-items: center; gap: 0.75rem;">
-                            📊 Matriz de Decisión Comercial (ABC / BCG)
+                            📊 Matriz de Decisión Comercial (Estrategia de Ventas)
                         </h3>
                         <p style="margin: 0.25rem 0 0 0; color: var(--secondary); font-size: 0.85rem;">
-                            Clasificación estratégica de productos por velocidad de venta y margen de utilidad
+                            Clasificación estratégica por velocidad de rotación, margen unitario y aporte diario a la caja
                         </p>
                     </div>
 
                     <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                        <input type="text" placeholder="🔍 Buscar producto..." 
+                        <input type="text" placeholder="🔍 Buscar producto o categoría..." 
                                onkeyup="ReportsView.filterDecisionMatrixTable(this.value)" class="form-control" 
                                style="width: 220px; padding: 0.4rem 0.75rem; border-radius: 0.75rem;">
 
                         <button class="btn btn-success" onclick="ReportsView.exportDecisionMatrixToCSV()" style="font-weight: 700;">
-                            📊 Exportar Excel (CSV)
+                            📊 Exportar Excel
                         </button>
                     </div>
                 </div>
 
-                <!-- TARJETAS COMPACTAS CLASIFICACIÓN BCG -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
-                    <div style="padding: 0.75rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 0.75rem; text-align: center;">
-                        <div style="font-size: 0.75rem; color: #059669; font-weight: 700; text-transform: uppercase;">⭐ Estrellas</div>
-                        <div style="font-size: 1.3rem; font-weight: 900; color: #059669;">${totalEstrella} SKUs</div>
-                        <small style="font-size: 0.7rem; color: #059669;">Alta rotación y ganancia</small>
+                <!-- TARJETAS DE CUADRANTES ESTRATÉGICOS -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+                    <div style="padding: 0.85rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem; text-align: center;">
+                        <div style="font-size: 0.72rem; color: #059669; font-weight: 800; text-transform: uppercase;">⭐ Estrellas</div>
+                        <div style="font-size: 1.35rem; font-weight: 900; color: #059669; margin: 0.2rem 0;">${totalEstrella} productos</div>
+                        <small style="font-size: 0.72rem; color: #059669;">Alta rotación y alta ganancia</small>
                     </div>
 
-                    <div style="padding: 0.75rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); border-radius: 0.75rem; text-align: center;">
-                        <div style="font-size: 0.75rem; color: #2563eb; font-weight: 700; text-transform: uppercase;">🐎 Caballos de Batalla</div>
-                        <div style="font-size: 1.3rem; font-weight: 900; color: #2563eb;">${totalCaballo} SKUs</div>
-                        <small style="font-size: 0.7rem; color: #2563eb;">Alta venta / bajo margen</small>
+                    <div style="padding: 0.85rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1.5px solid rgba(59, 130, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                        <div style="font-size: 0.72rem; color: #2563eb; font-weight: 800; text-transform: uppercase;">🐎 Caballos de Batalla</div>
+                        <div style="font-size: 1.35rem; font-weight: 900; color: #2563eb; margin: 0.2rem 0;">${totalCaballo} productos</div>
+                        <small style="font-size: 0.72rem; color: #2563eb;">Alta venta / bajo margen</small>
                     </div>
 
-                    <div style="padding: 0.75rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-radius: 0.75rem; text-align: center;">
-                        <div style="font-size: 0.75rem; color: #d97706; font-weight: 700; text-transform: uppercase;">🐢 Lentos Rentables</div>
-                        <div style="font-size: 1.3rem; font-weight: 900; color: #d97706;">${totalLento} SKUs</div>
-                        <small style="font-size: 0.7rem; color: #d97706;">Baja venta / alto margen</small>
+                    <div style="padding: 0.85rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1.5px solid rgba(245, 158, 11, 0.3); border-radius: 0.75rem; text-align: center;">
+                        <div style="font-size: 0.72rem; color: #d97706; font-weight: 800; text-transform: uppercase;">🐢 Lentos Rentables</div>
+                        <div style="font-size: 1.35rem; font-weight: 900; color: #d97706; margin: 0.2rem 0;">${totalLento} productos</div>
+                        <small style="font-size: 0.72rem; color: #d97706;">Baja venta / alto margen</small>
                     </div>
 
-                    <div style="padding: 0.75rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 0.75rem; text-align: center;">
-                        <div style="font-size: 0.75rem; color: #dc2626; font-weight: 700; text-transform: uppercase;">💀 Pesos Muertos</div>
-                        <div style="font-size: 1.3rem; font-weight: 900; color: #dc2626;">${totalPesoMuerto} SKUs</div>
-                        <small style="font-size: 0.7rem; color: #dc2626;">Sugerencia descatalogar</small>
+                    <div style="padding: 0.85rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1.5px solid rgba(239, 68, 68, 0.3); border-radius: 0.75rem; text-align: center;">
+                        <div style="font-size: 0.72rem; color: #dc2626; font-weight: 800; text-transform: uppercase;">💀 Pesos Muertos</div>
+                        <div style="font-size: 1.35rem; font-weight: 900; color: #dc2626; margin: 0.2rem 0;">${totalPesoMuerto} productos</div>
+                        <small style="font-size: 0.72rem; color: #dc2626;">Baja venta / baja ganancia</small>
                     </div>
+
+                    <div style="padding: 0.85rem 1rem; background: rgba(139, 92, 246, 0.08); border: 1.5px solid rgba(139, 92, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                        <div style="font-size: 0.72rem; color: #7c3aed; font-weight: 800; text-transform: uppercase;">💎 Ganancia Total Diaria</div>
+                        <div style="font-size: 1.35rem; font-weight: 900; color: #7c3aed; margin: 0.2rem 0;">${formatCLP(totalDailyProfit)}</div>
+                        <small style="font-size: 0.72rem; color: #7c3aed;">Aporte diario al negocio</small>
+                    </div>
+                </div>
+
+                <!-- PESTAÑAS DE FILTRO INTERACTIVO -->
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; flex-wrap: wrap;">
+                    <button class="btn btn-sm ${activeTab === 'all' ? 'btn-primary' : 'btn-ghost'}" 
+                            onclick="ReportsView.handleDecisionMatrixTabChange('all')" style="font-weight: 700;">
+                        🌟 Todos (${enrichedData.length})
+                    </button>
+                    <button class="btn btn-sm ${activeTab === 'estrella' ? 'btn-success' : 'btn-ghost'}" 
+                            onclick="ReportsView.handleDecisionMatrixTabChange('estrella')" style="font-weight: 800;">
+                        ⭐ Estrellas (${totalEstrella})
+                    </button>
+                    <button class="btn btn-sm ${activeTab === 'caballo' ? 'btn-info' : 'btn-ghost'}" 
+                            onclick="ReportsView.handleDecisionMatrixTabChange('caballo')" style="font-weight: 700;">
+                        🐎 Caballos de Batalla (${totalCaballo})
+                    </button>
+                    <button class="btn btn-sm ${activeTab === 'lento_rentable' ? 'btn-warning' : 'btn-ghost'}" 
+                            onclick="ReportsView.handleDecisionMatrixTabChange('lento_rentable')" style="font-weight: 700;">
+                        🐢 Lentos Rentables (${totalLento})
+                    </button>
+                    <button class="btn btn-sm ${activeTab === 'peso_muerto' ? 'btn-danger' : 'btn-ghost'}" 
+                            onclick="ReportsView.handleDecisionMatrixTabChange('peso_muerto')" style="font-weight: 700;">
+                        💀 Pesos Muertos (${totalPesoMuerto})
+                    </button>
                 </div>
 
                 <!-- TABLA DE MATRIZ DE DECISIÓN -->
                 <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">
+                        <span style="font-size: 0.85rem; color: var(--secondary); font-weight: 600;">
+                            💡 Haz clic en los encabezados para ordenar por Ganancia Diaria, Velocidad o Margen.
+                        </span>
+                    </div>
                     <div class="table-container">
                         <table id="reportDecisionMatrixTable" style="width: 100%; border-collapse: collapse;">
                             <thead>
                                 <tr style="border-bottom: 2px solid var(--border); font-size: 0.8rem; color: var(--secondary); text-transform: uppercase;">
-                                    <th style="padding: 0.75rem; text-align: left;">Producto</th>
-                                    <th style="padding: 0.75rem; text-align: center;">Categoría Matriz</th>
-                                    <th style="padding: 0.75rem; text-align: right;">Velocidad (unid/día)</th>
-                                    <th style="padding: 0.75rem; text-align: right; color: #10b981;">Margen Neto Unitario</th>
-                                    <th style="padding: 0.75rem; text-align: right;">Punto Pedido Sugerido</th>
+                                    <th style="padding: 0.75rem; text-align: left; cursor: pointer;" onclick="ReportsView.sortDecisionMatrixTable('name')">
+                                        Producto ↕
+                                    </th>
+                                    <th style="padding: 0.75rem; text-align: center;">Cuadrante</th>
+                                    <th style="padding: 0.75rem; text-align: right; cursor: pointer;" onclick="ReportsView.sortDecisionMatrixTable('velocity')">
+                                        Velocidad (un/día) ↕
+                                    </th>
+                                    <th style="padding: 0.75rem; text-align: right; color: #10b981; cursor: pointer;" onclick="ReportsView.sortDecisionMatrixTable('marginUnit')">
+                                        Margen Unitario ↕
+                                    </th>
+                                    <th style="padding: 0.75rem; text-align: right; color: #7c3aed; cursor: pointer;" onclick="ReportsView.sortDecisionMatrixTable('dailyProfit')">
+                                        Aporte Diario a Caja ↕
+                                    </th>
+                                    <th style="padding: 0.75rem; text-align: center;">Stock / Reposición</th>
+                                    <th style="padding: 0.75rem; text-align: left;">Acción Estratégica Recomendada</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                ${data.map(p => {
+                                ${filteredData.map(p => {
                                     let badge = '';
-                                    if (p.matrixCategory === 'estrella') badge = '<span class="badge badge-success">⭐ Estrella</span>';
-                                    else if (p.matrixCategory === 'caballo') badge = '<span class="badge badge-info">🐎 Caballo de Batalla</span>';
-                                    else if (p.matrixCategory === 'lento_rentable') badge = '<span class="badge badge-warning">🐢 Lento Rentable</span>';
-                                    else badge = '<span class="badge badge-danger">💀 Peso Muerto</span>';
+                                    if (p.matrixCategory === 'estrella') badge = '<span class="badge badge-success" style="font-weight: 800;">⭐ Estrella</span>';
+                                    else if (p.matrixCategory === 'caballo') badge = '<span class="badge badge-info" style="font-weight: 800;">🐎 Caballo</span>';
+                                    else if (p.matrixCategory === 'lento_rentable') badge = '<span class="badge badge-warning" style="font-weight: 800;">🐢 Lento Rentable</span>';
+                                    else badge = '<span class="badge badge-danger" style="font-weight: 800;">💀 Peso Muerto</span>';
 
                                     return `
                                         <tr style="border-bottom: 1px solid var(--border);">
                                             <td style="padding: 0.75rem;">
-                                                <div style="font-weight: 800; color: var(--text-main);">${p.name}</div>
-                                                <small style="color: var(--secondary);">Stock Actual: ${p.stock} un.</small>
+                                                <div style="font-weight: 800; color: var(--text-main); font-size: 0.88rem;">${safeHTML(p.name)}</div>
+                                                <small style="color: var(--secondary); font-size: 0.72rem;">${safeHTML(p.category || 'General')}</small>
                                             </td>
                                             <td style="padding: 0.75rem; text-align: center;">${badge}</td>
-                                            <td style="padding: 0.75rem; text-align: right; font-weight: 700;">${p.velocity}</td>
-                                            <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: #10b981;">${formatCLP(p.marginUnit)}</td>
-                                            <td style="padding: 0.75rem; text-align: right; font-weight: 800; color: var(--text-main);">${p.reorderPoint} un.</td>
+                                            <td style="padding: 0.75rem; text-align: right; font-weight: 800; font-size: 0.85rem;">
+                                                ${p.velocity} un/día
+                                            </td>
+                                            <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: #10b981; font-size: 0.9rem;">
+                                                ${formatCLP(p.marginUnit)}
+                                            </td>
+                                            <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: #7c3aed; font-size: 0.95rem;">
+                                                ${formatCLP(p.dailyProfit)}/día
+                                            </td>
+                                            <td style="padding: 0.75rem; text-align: center; font-size: 0.82rem;">
+                                                <span style="font-weight: 800; color: ${p.stock <= p.reorderPoint ? '#dc2626' : 'var(--text-main)'};">
+                                                    ${p.stock} un.
+                                                </span>
+                                                <div style="font-size: 0.68rem; color: var(--secondary);">Reponer a: ${p.reorderPoint} un.</div>
+                                            </td>
+                                            <td style="padding: 0.75rem; font-size: 0.8rem; color: var(--text-main); font-weight: 600;">
+                                                ${p.suggestedAction}
+                                            </td>
                                         </tr>
                                     `;
                                 }).join('')}
-                                ${data.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding: 2rem; color: var(--secondary);">No se encontraron datos para la matriz de decisión</td></tr>' : ''}
+                                ${filteredData.length === 0 ? '<tr><td colspan="7" style="text-align:center; padding: 2.5rem; color: var(--secondary); font-weight: 700;">No se encontraron productos en este cuadrante.</td></tr>' : ''}
                             </tbody>
                         </table>
                     </div>
@@ -2262,28 +3542,39 @@ const ReportsView = {
             return;
         }
 
-        const headers = ['Producto', 'Stock Actual', 'Categoría Matriz', 'Velocidad (unid/día)', 'Margen Unitario ($)', 'Punto Pedido Sugerido'];
+        const headers = ['Producto', 'Categoría', 'Stock Actual', 'Cuadrante Matriz', 'Velocidad (un/día)', 'Margen Unitario ($)', 'Aporte Diario ($/día)', 'Punto Reposición (un)', 'Acción Recomendada'];
         const rows = data.map(p => [
             `"${(p.name || '').replace(/"/g, '""')}"`,
+            `"${(p.category || 'General').replace(/"/g, '""')}"`,
             p.stock || 0,
             `"${p.matrixCategory || 'general'}"`,
             p.velocity || 0,
             p.marginUnit || 0,
-            p.reorderPoint || 0
+            p.dailyProfit || 0,
+            p.reorderPoint || 0,
+            `"${(p.suggestedAction || '').replace(/"/g, '""')}"`
         ]);
 
         const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map(e => e.join(';'))].join('\n');
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `matriz_decision_comercial_${new Date().toISOString().slice(0, 10)}.csv`;
+        link.download = `matriz_decision_estrategica_${new Date().toISOString().slice(0, 10)}.csv`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         showNotification('📊 Matriz de Decisión descargada en Excel (CSV)', 'success');
     },
 
-    async renderCierresReport(filterType = 'all') {
+    async handleCierresFilterChange(filterType, period = null) {
+        if (filterType !== undefined && filterType !== null) this.selectedCierresFilter = filterType;
+        if (period !== undefined && period !== null) this.selectedCierresPeriod = period;
+        const content = await this.renderCierresReport(this.selectedCierresFilter || 'all', this.selectedCierresPeriod || 'thisMonth');
+        const container = document.getElementById('reportContent');
+        if (container) container.innerHTML = content;
+    },
+
+    async renderCierresReport(filterType = 'all', period = 'thisMonth') {
         let allRegisters = [];
         try {
             allRegisters = await CashRegister.getAll() || [];
@@ -2292,33 +3583,68 @@ const ReportsView = {
         }
         this._lastCierresReportData = allRegisters;
         this.selectedCierresFilter = filterType;
+        this.selectedCierresPeriod = period;
 
-        const totalCierres = allRegisters.length;
-        const closedCount = allRegisters.filter(r => r.status === 'closed').length;
-        const discrepancyCount = allRegisters.filter(r => r.status === 'closed' && (r.difference || 0) !== 0).length;
+        // Filtrado por Período
+        const now = new Date();
+        let dateFiltered = allRegisters;
+        if (period === 'thisMonth') {
+            const startMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            dateFiltered = allRegisters.filter(r => new Date(r.openDate || r.createdAt) >= startMonth);
+        } else if (period === 'lastMonth') {
+            const startLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+            const endLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+            dateFiltered = allRegisters.filter(r => {
+                const d = new Date(r.openDate || r.createdAt);
+                return d >= startLastMonth && d <= endLastMonth;
+            });
+        }
+
+        const totalCierres = dateFiltered.length;
+        const closedRegisters = dateFiltered.filter(r => r.status === 'closed');
+        const closedCount = closedRegisters.length;
+        const discrepancyRegisters = closedRegisters.filter(r => (r.difference || 0) !== 0);
+        const discrepancyCount = discrepancyRegisters.length;
         const cleanCount = closedCount - discrepancyCount;
 
-        let filtered = allRegisters;
+        const totalMissingMoney = Math.abs(closedRegisters.filter(r => (r.difference || 0) < 0).reduce((sum, r) => sum + (r.difference || 0), 0));
+        const totalSurplusMoney = closedRegisters.filter(r => (r.difference || 0) > 0).reduce((sum, r) => sum + (r.difference || 0), 0);
+        const totalCollectedSales = dateFiltered.reduce((sum, r) => {
+            const ps = r.paymentSummary || {};
+            return sum + ((parseFloat(ps.cash) || 0) + (parseFloat(ps.card) || 0) + (parseFloat(ps.qr) || 0) + (parseFloat(ps.other) || 0));
+        }, 0);
+
+        let filtered = dateFiltered;
         if (filterType === 'discrepancy') {
-            filtered = allRegisters.filter(r => r.status === 'closed' && (r.difference || 0) !== 0);
+            filtered = dateFiltered.filter(r => r.status === 'closed' && (r.difference || 0) !== 0);
+        } else if (filterType === 'clean') {
+            filtered = dateFiltered.filter(r => r.status === 'closed' && (r.difference || 0) === 0);
         }
+
+        // Ordenar más recientes primero
+        filtered.sort((a, b) => new Date(b.openDate || b.createdAt) - new Date(a.openDate || a.createdAt));
 
         return `
             <!-- CABECERA Y ACCIONES -->
             <div class="flex-between-wrap" style="margin-bottom: 1.25rem; gap: 1rem; align-items: center;">
                 <div>
                     <h3 style="margin: 0; font-size: 1.4rem; color: var(--text-main); display: flex; align-items: center; gap: 0.75rem;">
-                        🔒 Historial de Cierres de Caja (Cierres Z)
+                        🔒 Historial de Cierres de Caja (Cierres Z y Arqueos)
                     </h3>
                     <p style="margin: 0.25rem 0 0 0; color: var(--secondary); font-size: 0.85rem;">
-                        Auditoría de apertura, cierre, arqueo de efectivo y descuadres por turno
+                        Auditoría de aperturas, cierres de turno, dinero en efectivo, ventas por medio de pago y descuadres
                     </p>
                 </div>
 
                 <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <!-- Selector de Período -->
                     <div style="display: flex; gap: 0.25rem; background: var(--surface-content); padding: 0.25rem; border-radius: 0.75rem; border: 1px solid var(--border);">
-                        <button class="btn btn-sm ${filterType === 'all' ? 'btn-primary' : 'btn-ghost'}" onclick="ReportsView.handleCierresFilterChange('all')">Todas (${totalCierres})</button>
-                        <button class="btn btn-sm ${filterType === 'discrepancy' ? 'btn-danger' : 'btn-ghost'}" onclick="ReportsView.handleCierresFilterChange('discrepancy')">🔴 Solo Descuadres (${discrepancyCount})</button>
+                        <button class="btn btn-sm ${period === 'thisMonth' ? 'btn-primary' : 'btn-ghost'}" 
+                                onclick="ReportsView.handleCierresFilterChange(null, 'thisMonth')">Este Mes</button>
+                        <button class="btn btn-sm ${period === 'lastMonth' ? 'btn-primary' : 'btn-ghost'}" 
+                                onclick="ReportsView.handleCierresFilterChange(null, 'lastMonth')">Mes Anterior</button>
+                        <button class="btn btn-sm ${period === 'all' ? 'btn-primary' : 'btn-ghost'}" 
+                                onclick="ReportsView.handleCierresFilterChange(null, 'all')">Histórico Completo</button>
                     </div>
 
                     <input type="text" placeholder="🔍 Buscar por cajero..." 
@@ -2326,77 +3652,140 @@ const ReportsView = {
                            style="width: 180px; padding: 0.4rem 0.75rem; border-radius: 0.75rem;">
 
                     <button class="btn btn-success" onclick="ReportsView.exportCierresToCSV()" style="font-weight: 700;">
-                        📊 Exportar Excel (CSV)
+                        📊 Exportar Excel
                     </button>
                 </div>
             </div>
 
-            <!-- TARJETAS COMPACTAS DE RESUMEN DE CIERRES -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
-                <div style="padding: 0.75rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: var(--secondary); font-weight: 700; text-transform: uppercase;">Total Registros</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: var(--text-main);">${totalCierres} cajas</div>
-                    <small style="font-size: 0.7rem; opacity: 0.7;">Histórico acumulado</small>
+            <!-- TARJETAS FINANCIERAS DE AUDITORÍA DE CAJA -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+                <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">Total Cierres</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: var(--text-main); margin: 0.2rem 0;">${totalCierres} turnos</div>
+                    <small style="font-size: 0.72rem; color: var(--secondary);">${closedCount} cerrados / ${totalCierres - closedCount} abiertos</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.75rem; color: #059669; font-weight: 700; text-transform: uppercase;">🟢 Cierres Limpios</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #059669;">${cleanCount} turnos</div>
-                    <small style="font-size: 0.7rem; color: #059669;">Sin descuadre de efectivo</small>
+                <div style="padding: 0.85rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #059669; font-weight: 800; text-transform: uppercase;">🟢 Cierres Cuadrados</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #059669; margin: 0.2rem 0;">${cleanCount} turnos</div>
+                    <small style="font-size: 0.72rem; color: #059669;">Sin descuadre ($0)</small>
                 </div>
 
-                <div style="padding: 0.75rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 0.75rem; text-align: center; cursor: pointer;"
-                     onclick="ReportsView.handleCierresFilterChange('discrepancy')">
-                    <div style="font-size: 0.75rem; color: #dc2626; font-weight: 700; text-transform: uppercase;">🔴 Cierres con Descuadre</div>
-                    <div style="font-size: 1.3rem; font-weight: 900; color: #dc2626;">${discrepancyCount} turnos</div>
-                    <small style="font-size: 0.7rem; color: #dc2626;">Sobrante o faltante</small>
+                <div style="padding: 0.85rem 1rem; background: ${totalMissingMoney > 0 ? 'rgba(239, 68, 68, 0.08)' : 'var(--surface-content)'}; border: 1.5px solid ${totalMissingMoney > 0 ? 'rgba(239, 68, 68, 0.3)' : 'var(--border)'}; border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #dc2626; font-weight: 800; text-transform: uppercase;">🔴 Pérdida en Faltantes</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #dc2626; margin: 0.2rem 0;">-${formatCLP(totalMissingMoney)}</div>
+                    <small style="font-size: 0.72rem; color: #dc2626;">Dinero que faltó en caja</small>
                 </div>
+
+                <div style="padding: 0.85rem 1rem; background: rgba(245, 158, 11, 0.08); border: 1.5px solid rgba(245, 158, 11, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #d97706; font-weight: 800; text-transform: uppercase;">🟡 Sobrantes de Caja</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #d97706; margin: 0.2rem 0;">+${formatCLP(totalSurplusMoney)}</div>
+                    <small style="font-size: 0.72rem; color: #d97706;">Dinero sobrante detectado</small>
+                </div>
+
+                <div style="padding: 0.85rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1.5px solid rgba(59, 130, 246, 0.3); border-radius: 0.75rem; text-align: center;">
+                    <div style="font-size: 0.72rem; color: #2563eb; font-weight: 800; text-transform: uppercase;">💳 Ventas Recaudadas</div>
+                    <div style="font-size: 1.35rem; font-weight: 900; color: #2563eb; margin: 0.2rem 0;">${formatCLP(totalCollectedSales)}</div>
+                    <small style="font-size: 0.72rem; color: #2563eb;">Efectivo + Tarjetas + QR</small>
+                </div>
+            </div>
+
+            <!-- PESTAÑAS DE FILTRO INTERACTIVO -->
+            <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; flex-wrap: wrap;">
+                <button class="btn btn-sm ${filterType === 'all' ? 'btn-primary' : 'btn-ghost'}" 
+                        onclick="ReportsView.handleCierresFilterChange('all')" style="font-weight: 700;">
+                    📋 Todas las Cajas (${totalCierres})
+                </button>
+                <button class="btn btn-sm ${filterType === 'discrepancy' ? 'btn-danger' : 'btn-ghost'}" 
+                        onclick="ReportsView.handleCierresFilterChange('discrepancy')" style="font-weight: 800;">
+                    🔴 Solo Descuadres (${discrepancyCount})
+                </button>
+                <button class="btn btn-sm ${filterType === 'clean' ? 'btn-success' : 'btn-ghost'}" 
+                        onclick="ReportsView.handleCierresFilterChange('clean')" style="font-weight: 700;">
+                    🟢 Solo Cierres Cuadrados ($0) (${cleanCount})
+                </button>
             </div>
 
             <!-- TABLA DE HISTORIAL DE CIERRES -->
             <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">
+                    <span style="font-size: 0.85rem; color: var(--secondary); font-weight: 600;">
+                        💡 Haz clic en el botón "Ver Detalle" de cualquier turno para auditar su comprobante Z completo.
+                    </span>
+                </div>
                 <div class="table-container">
                     <table id="reportCierresTable" style="width: 100%; border-collapse: collapse;">
                         <thead>
                             <tr style="border-bottom: 2px solid var(--border); font-size: 0.8rem; color: var(--secondary); text-transform: uppercase;">
                                 <th style="padding: 0.75rem; text-align: left;">Apertura</th>
                                 <th style="padding: 0.75rem; text-align: left;">Cierre</th>
-                                <th style="padding: 0.75rem; text-align: left;">Cajero</th>
+                                <th style="padding: 0.75rem; text-align: left;">Cajero / Usuario</th>
                                 <th style="padding: 0.75rem; text-align: right;">Fondo Inicial</th>
+                                <th style="padding: 0.75rem; text-align: right; color: #2563eb;">Ventas del Turno</th>
                                 <th style="padding: 0.75rem; text-align: right;">Efectivo Esperado</th>
-                                <th style="padding: 0.75rem; text-align: right;">Efectivo Contado</th>
+                                <th style="padding: 0.75rem; text-align: right; font-weight: 900;">Efectivo Contado</th>
                                 <th style="padding: 0.75rem; text-align: center;">Diferencia</th>
+                                <th style="padding: 0.75rem; text-align: center;">Acción</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${filtered.map(r => {
                                 const diff = r.difference || 0;
-                                let diffBadge = '<span class="badge badge-success">Exacto ($0)</span>';
+                                const actualAmount = r.finalAmount !== undefined ? r.finalAmount : (r.actualAmount || 0);
+                                const expectedAmount = r.expectedAmount || 0;
+                                const initialAmount = r.initialAmount || 0;
+                                const ps = r.paymentSummary || {};
+                                const turnTotalSales = (parseFloat(ps.cash) || 0) + (parseFloat(ps.card) || 0) + (parseFloat(ps.qr) || 0) + (parseFloat(ps.other) || 0);
+
+                                let diffBadge = '<span class="badge badge-success" style="font-weight: 800;">✅ Cuadrado ($0)</span>';
                                 if (r.status === 'open') {
-                                    diffBadge = '<span class="badge badge-info">Turno En Curso</span>';
+                                    diffBadge = '<span class="badge badge-info" style="font-weight: 800;">🟡 Turno Abierto</span>';
                                 } else if (diff > 0) {
-                                    diffBadge = `<span class="badge badge-warning">+$${diff} Sobrante</span>`;
+                                    diffBadge = `<span class="badge badge-warning" style="font-weight: 800;">+${formatCLP(diff)} Sobrante</span>`;
                                 } else if (diff < 0) {
-                                    diffBadge = `<span class="badge badge-danger">-$${Math.abs(diff)} Faltante</span>`;
+                                    diffBadge = `<span class="badge badge-danger" style="font-weight: 800;">-${formatCLP(Math.abs(diff))} Faltante</span>`;
                                 }
 
                                 return `
                                     <tr style="border-bottom: 1px solid var(--border);">
-                                        <td style="padding: 0.75rem; font-size: 0.85rem; color: var(--secondary); white-space: nowrap;">
-                                            ${formatDateTime(r.openDate)}
+                                        <td style="padding: 0.75rem; font-size: 0.82rem; color: var(--secondary); white-space: nowrap;">
+                                            ${formatDateTime(r.openDate || r.createdAt)}
                                         </td>
-                                        <td style="padding: 0.75rem; font-size: 0.85rem; color: var(--secondary); white-space: nowrap;">
-                                            ${r.closeDate ? formatDateTime(r.closeDate) : 'En curso'}
+                                        <td style="padding: 0.75rem; font-size: 0.82rem; color: var(--secondary); white-space: nowrap;">
+                                            ${r.closeDate ? formatDateTime(r.closeDate) : '<span style="color: #2563eb; font-weight: 800;">En curso...</span>'}
                                         </td>
-                                        <td style="padding: 0.75rem; font-weight: 800; color: var(--text-main);">${r.userName || r.user || 'Cajero'}</td>
-                                        <td style="padding: 0.75rem; text-align: right; color: var(--secondary);">${formatCLP(r.initialAmount || 0)}</td>
-                                        <td style="padding: 0.75rem; text-align: right; font-weight: 700; color: #2563eb;">${formatCLP(r.expectedAmount || 0)}</td>
-                                        <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: var(--text-main);">${formatCLP(r.actualAmount || 0)}</td>
-                                        <td style="padding: 0.75rem; text-align: center;">${diffBadge}</td>
+                                        <td style="padding: 0.75rem;">
+                                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                                <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--primary); color:#fff; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.7rem;">
+                                                    ${(r.userName || r.user || 'C').charAt(0).toUpperCase()}
+                                                </div>
+                                                <span style="font-weight: 800; color: var(--text-main); font-size: 0.85rem;">${safeHTML(r.userName || r.user || 'Cajero')}</span>
+                                            </div>
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: right; color: var(--secondary); font-size: 0.85rem;">
+                                            ${formatCLP(initialAmount)}
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: right; font-weight: 800; color: #2563eb; font-size: 0.88rem;">
+                                            ${formatCLP(turnTotalSales)}
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: right; font-weight: 700; color: var(--secondary); font-size: 0.85rem;">
+                                            ${formatCLP(expectedAmount)}
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: right; font-weight: 900; color: var(--text-main); font-size: 0.95rem;">
+                                            ${formatCLP(actualAmount)}
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: center;">
+                                            ${diffBadge}
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: center;">
+                                            <button class="btn btn-sm btn-ghost" onclick="ReportsView.showCierreDetailModal(${r.id})" style="font-weight: 700; font-size: 0.78rem;">
+                                                🔍 Ver Z
+                                            </button>
+                                        </td>
                                     </tr>
                                 `;
                             }).join('')}
-                            ${filtered.length === 0 ? '<tr><td colspan="7" style="text-align:center; padding: 2rem; color: var(--secondary);">No se encontraron cierres de caja</td></tr>' : ''}
+                            ${filtered.length === 0 ? '<tr><td colspan="9" style="text-align:center; padding: 2.5rem; color: var(--secondary); font-weight: 700;">No se encontraron registros de caja en este filtro.</td></tr>' : ''}
                         </tbody>
                     </table>
                 </div>
@@ -2404,10 +3793,123 @@ const ReportsView = {
         `;
     },
 
-    async handleCierresFilterChange(filterType) {
-        const content = await this.renderCierresReport(filterType);
-        const container = document.getElementById('reportContent');
-        if (container) container.innerHTML = content;
+    async showCierreDetailModal(registerId) {
+        const registers = this._lastCierresReportData || [];
+        const r = registers.find(item => item.id == registerId);
+        if (!r) {
+            showNotification('No se encontró el detalle de la caja', 'error');
+            return;
+        }
+
+        const ps = r.paymentSummary || {};
+        const cashSales = parseFloat(ps.cash) || 0;
+        const cardSales = parseFloat(ps.card) || 0;
+        const qrSales = parseFloat(ps.qr) || 0;
+        const otherSales = parseFloat(ps.other) || 0;
+        const totalSales = cashSales + cardSales + qrSales + otherSales;
+
+        const initialAmount = parseFloat(r.initialAmount) || 0;
+        const expectedAmount = parseFloat(r.expectedAmount) || 0;
+        const actualAmount = r.finalAmount !== undefined ? parseFloat(r.finalAmount) : (parseFloat(r.actualAmount) || 0);
+        const diff = parseFloat(r.difference) || 0;
+
+        let diffBanner = '';
+        if (r.status === 'open') {
+            diffBanner = `<div style="background: rgba(59, 130, 246, 0.1); border: 1.5px solid #2563eb; color: #2563eb; padding: 0.75rem; border-radius: 0.75rem; font-weight: 800; text-align: center;">🟡 ESTA CAJA SE ENCUENTRA ABIERTA Y EN CURSO</div>`;
+        } else if (diff === 0) {
+            diffBanner = `<div style="background: rgba(16, 185, 129, 0.1); border: 1.5px solid #059669; color: #059669; padding: 0.75rem; border-radius: 0.75rem; font-weight: 800; text-align: center;">✅ CIERRE PERFECTO: Dinero contado coincide exactamente con el sistema ($0)</div>`;
+        } else if (diff < 0) {
+            diffBanner = `<div style="background: rgba(239, 68, 68, 0.1); border: 1.5px solid #dc2626; color: #dc2626; padding: 0.75rem; border-radius: 0.75rem; font-weight: 800; text-align: center;">🔴 FALTANTE EN CAJA: Faltaron ${formatCLP(Math.abs(diff))} en el conteo de efectivo</div>`;
+        } else {
+            diffBanner = `<div style="background: rgba(245, 158, 11, 0.1); border: 1.5px solid #d97706; color: #d97706; padding: 0.75rem; border-radius: 0.75rem; font-weight: 800; text-align: center;">🟡 SOBRANTE EN CAJA: Sobraron +${formatCLP(diff)} en el conteo de efectivo</div>`;
+        }
+
+        const modalHtml = `
+            <div style="display: flex; flex-direction: column; gap: 1rem; font-size: 0.88rem;">
+                ${diffBanner}
+
+                <!-- DATOS GENERALES -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; background: var(--surface-content); padding: 0.85rem; border-radius: 0.75rem; border: 1px solid var(--border);">
+                    <div>
+                        <span style="color: var(--secondary); font-size: 0.75rem; font-weight: 700; text-transform: uppercase;">Cajero Responsable:</span>
+                        <div style="font-weight: 800; color: var(--text-main); font-size: 0.95rem;">${safeHTML(r.userName || r.user || 'Cajero')}</div>
+                    </div>
+                    <div>
+                        <span style="color: var(--secondary); font-size: 0.75rem; font-weight: 700; text-transform: uppercase;">Estado del Turno:</span>
+                        <div style="font-weight: 800; color: ${r.status === 'open' ? '#2563eb' : '#059669'};">${r.status === 'open' ? 'Abierto' : 'Cerrado'}</div>
+                    </div>
+                    <div>
+                        <span style="color: var(--secondary); font-size: 0.75rem; font-weight: 700;">Apertura:</span>
+                        <div style="font-weight: 700; color: var(--text-main); font-size: 0.82rem;">${formatDateTime(r.openDate || r.createdAt)}</div>
+                    </div>
+                    <div>
+                        <span style="color: var(--secondary); font-size: 0.75rem; font-weight: 700;">Cierre:</span>
+                        <div style="font-weight: 700; color: var(--text-main); font-size: 0.82rem;">${r.closeDate ? formatDateTime(r.closeDate) : 'En curso...'}</div>
+                    </div>
+                </div>
+
+                <!-- DESGLOSE DE VENTAS POR MÉTODO DE PAGO -->
+                <div style="background: var(--surface-content); padding: 0.85rem; border-radius: 0.75rem; border: 1px solid var(--border);">
+                    <div style="font-weight: 800; color: var(--text-main); margin-bottom: 0.5rem; font-size: 0.88rem;">💳 Ventas Recaudadas en el Turno</div>
+                    <div style="display: flex; justify-content: space-between; padding: 0.25rem 0; border-bottom: 1px solid var(--border);">
+                        <span>💵 Efectivo:</span>
+                        <strong>${formatCLP(cashSales)}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 0.25rem 0; border-bottom: 1px solid var(--border);">
+                        <span>💳 Tarjeta (Débito / Crédito):</span>
+                        <strong>${formatCLP(cardSales)}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 0.25rem 0; border-bottom: 1px solid var(--border);">
+                        <span>📱 Transferencia / QR:</span>
+                        <strong>${formatCLP(qrSales)}</strong>
+                    </div>
+                    ${otherSales > 0 ? `
+                        <div style="display: flex; justify-content: space-between; padding: 0.25rem 0; border-bottom: 1px solid var(--border);">
+                            <span>Otros Medios:</span>
+                            <strong>${formatCLP(otherSales)}</strong>
+                        </div>
+                    ` : ''}
+                    <div style="display: flex; justify-content: space-between; padding: 0.4rem 0 0 0; font-weight: 900; color: #2563eb; font-size: 0.95rem;">
+                        <span>Total Ventas Turno:</span>
+                        <span>${formatCLP(totalSales)}</span>
+                    </div>
+                </div>
+
+                <!-- ARQUEO DE EFECTIVO -->
+                <div style="background: var(--surface-content); padding: 0.85rem; border-radius: 0.75rem; border: 1px solid var(--border);">
+                    <div style="font-weight: 800; color: var(--text-main); margin-bottom: 0.5rem; font-size: 0.88rem;">🧮 Conciliación y Arqueo de Efectivo</div>
+                    <div style="display: flex; justify-content: space-between; padding: 0.25rem 0;">
+                        <span>Fondo Inicial de Caja:</span>
+                        <strong>+${formatCLP(initialAmount)}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 0.25rem 0;">
+                        <span>Ventas Cobradas en Efectivo:</span>
+                        <strong>+${formatCLP(cashSales)}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 0.35rem 0; border-top: 1px solid var(--border); font-weight: 800;">
+                        <span>Efectivo Esperado en Gaveta:</span>
+                        <span>${formatCLP(expectedAmount)}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 0.35rem 0; font-weight: 900; color: #059669; font-size: 1rem;">
+                        <span>Efectivo Real Contado por Cajero:</span>
+                        <span>${formatCLP(actualAmount)}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; padding: 0.4rem 0; border-top: 2px solid var(--border); font-weight: 900; font-size: 1.05rem; color: ${diff < 0 ? '#dc2626' : (diff > 0 ? '#d97706' : '#059669')};">
+                        <span>Diferencia / Descuadre Final:</span>
+                        <span>${diff < 0 ? '-' + formatCLP(Math.abs(diff)) : (diff > 0 ? '+' + formatCLP(diff) : '$0')}</span>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; margin-top: 0.5rem;">
+                    <button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>
+                </div>
+            </div>
+        `;
+
+        showModal(modalHtml, {
+            title: `🔒 Comprobante Cierre Z - Turno #${registerId}`,
+            width: '550px'
+        });
     },
 
     filterCierresTable(query) {
@@ -2426,17 +3928,24 @@ const ReportsView = {
             return;
         }
 
-        const headers = ['Apertura', 'Cierre', 'Cajero', 'Fondo Inicial ($)', 'Efectivo Esperado ($)', 'Efectivo Contado ($)', 'Diferencia ($)', 'Estado'];
-        const rows = registers.map(r => [
-            `"${formatDateTime(r.openDate)}"`,
-            `"${r.closeDate ? formatDateTime(r.closeDate) : 'En curso'}"`,
-            `"${r.userName || r.user || 'Cajero'}"`,
-            r.initialAmount || 0,
-            r.expectedAmount || 0,
-            r.actualAmount || 0,
-            r.difference || 0,
-            `"${r.status || 'closed'}"`
-        ]);
+        const headers = ['Apertura', 'Cierre', 'Cajero', 'Fondo Inicial ($)', 'Ventas Efectivo ($)', 'Ventas Tarjetas ($)', 'Ventas QR ($)', 'Efectivo Esperado ($)', 'Efectivo Contado ($)', 'Diferencia ($)', 'Estado'];
+        const rows = registers.map(r => {
+            const ps = r.paymentSummary || {};
+            const actualAmount = r.finalAmount !== undefined ? r.finalAmount : (r.actualAmount || 0);
+            return [
+                `"${formatDateTime(r.openDate || r.createdAt)}"`,
+                `"${r.closeDate ? formatDateTime(r.closeDate) : 'En curso'}"`,
+                `"${(r.userName || r.user || 'Cajero').replace(/"/g, '""')}"`,
+                r.initialAmount || 0,
+                ps.cash || 0,
+                ps.card || 0,
+                ps.qr || 0,
+                r.expectedAmount || 0,
+                actualAmount,
+                r.difference || 0,
+                `"${r.status || 'closed'}"`
+            ];
+        });
 
         const csvContent = '\uFEFF' + [headers.join(';'), ...rows.map(e => e.join(';'))].join('\n');
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });

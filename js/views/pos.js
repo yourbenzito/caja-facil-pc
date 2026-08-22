@@ -690,9 +690,10 @@ const POSView = {
 
         closeModal();
 
-
         const isWeight = product.type === 'weight';
         const unitPriceRounded = Math.round(product.price / 10) * 10;
+        const initialQty = isWeight ? '' : '1';
+        const modalOpenedAt = Date.now();
 
         const content = `
             <div class="modal-form-header">
@@ -702,7 +703,7 @@ const POSView = {
             </div>
             <div class="form-group">
                 <label style="font-weight: 800; color: var(--text-muted); margin-bottom: 0.5rem; display: block;">${isWeight ? '⚖️ PESO (KG):' : '📦 CANTIDAD:'}</label>
-                <input type="number" id="productQuantity" class="form-control huge-input" step="any" min="0.001" value="" placeholder="${isWeight ? '0.000' : '1'}" autofocus>
+                <input type="number" id="productQuantity" class="form-control huge-input" step="any" min="0.001" value="${initialQty}" placeholder="${isWeight ? '0.000' : '1'}" autofocus>
             </div>
             <div class="form-group" style="margin-top: 1.5rem;">
                 <label style="font-weight: 800; color: var(--text-muted); margin-bottom: 0.5rem; display: block;">💰 AJUSTAR PRECIO:</label>
@@ -735,7 +736,6 @@ const POSView = {
             const p = parseNumber(pInput.value) || 0;
             
             // LEY 20.956: Redondeo a la decena para TODOS los productos en la vista previa
-            // Esto asegura que el usuario vea el precio final exacto que se cobrará
             const calculatedVal = roundPrice(q * p);
             document.getElementById('calculatedTotal').textContent = formatCLP(calculatedVal, true);
         };
@@ -746,9 +746,11 @@ const POSView = {
             if (e.key === 'Enter') {
                 e.preventDefault();
                 e.stopPropagation();
+                // ponytail: Cooldown de 250ms para evitar que el Enter de selección de búsqueda autoconfirme el modal
+                if (Date.now() - modalOpenedAt < 250) {
+                    return;
+                }
                 const qValue = qInput.value.trim();
-                // Si el campo de cantidad está vacío y es por unidad, o ya tiene valor, procesar.
-                // Si es pesable y está vacío, quizás el usuario quiera ir al precio o completar.
                 if (qValue !== '' || !isWeight) {
                     this.addProductFromModal(product.id);
                 } else {
@@ -761,47 +763,59 @@ const POSView = {
         qInput.addEventListener('keydown', handleEnter);
         pInput.addEventListener('keydown', handleEnter);
 
-        // CRITICAL FIX: Retardo para evitar que el escáner "filtre" dígitos en la cantidad
         setTimeout(() => {
-            if (document.getElementById('productQuantity')) {
-                qInput.focus();
-                // Opcional: seleccionar texto por si acaso
-                qInput.select();
+            const input = document.getElementById('productQuantity');
+            if (input) {
+                input.focus();
+                input.select();
             }
         }, 150);
     },
 
     async addProductFromModal(productId) {
-        const product = await Product.getById(productId);
-        const isWeight = product.type === 'weight';
-        const qStr = document.getElementById('productQuantity').value;
+        if (this._isAddingProduct) return;
+        this._isAddingProduct = true;
 
-        // Si el campo está vacío y es por unidad, el valor por defecto es 1
-        let q = parseNumber(qStr);
-        if (qStr === '' && !isWeight) {
-            q = 1;
+        try {
+            const product = await Product.getById(productId);
+            if (!product) return;
+
+            const isWeight = product.type === 'weight';
+            const qInput = document.getElementById('productQuantity');
+            if (!qInput) return;
+            const qStr = qInput.value;
+
+            // Si el campo está vacío y es por unidad, el valor por defecto es 1
+            let q = parseNumber(qStr);
+            if ((qStr === '' || isNaN(q)) && !isWeight) {
+                q = 1;
+            }
+
+            const pInput = document.getElementById('productPrice');
+            const p = pInput ? parseNumber(pInput.value) : product.price;
+
+            if (!q || q <= 0) { showNotification('Cantidad inválida', 'warning'); return; }
+
+            const check = await posController.validateStock(productId, q);
+            if (!check.valid) { showNotification(check.error, 'warning'); return; }
+
+            posController.addToCart(product, q, p);
+            this.updateCart();
+            closeModal();
+            
+            // Solo limpiamos el buscador si el producto se agregó exitosamente
+            const searchInput = document.getElementById('productSearch');
+            if (searchInput) {
+                searchInput.value = '';
+                const results = document.getElementById('searchResults');
+                if (results) results.style.display = 'none';
+                searchInput.focus();
+            }
+            
+            showNotification(`${product.name} agregado`, 'success');
+        } finally {
+            setTimeout(() => { this._isAddingProduct = false; }, 200);
         }
-
-        const p = parseNumber(document.getElementById('productPrice').value);
-
-        if (!q || q <= 0) { showNotification('Cantidad inválida', 'warning'); return; }
-
-        const check = await posController.validateStock(productId, q);
-        if (!check.valid) { showNotification(check.error, 'warning'); return; }
-
-        posController.addToCart(product, q, p);
-        this.updateCart();
-        closeModal();
-        
-        // Solo limpiamos el buscador si el producto se agregó exitosamente
-        const searchInput = document.getElementById('productSearch');
-        if (searchInput) {
-            searchInput.value = '';
-            const results = document.getElementById('searchResults');
-            if (results) results.style.display = 'none';
-        }
-        
-        showNotification(`${product.name} agregado`, 'success');
     },
 
     updateCart() {
@@ -1416,112 +1430,119 @@ const POSView = {
     },
 
     async processUnifiedSale() {
-        const summary = posController.getCartSummary();
-        const total = summary.total;
+        if (this._isProcessingSale) return;
+        this._isProcessingSale = true;
 
-        const cash = parseFloat(document.getElementById('pay_cash').value) || 0;
-        const card = parseFloat(document.getElementById('pay_card').value) || 0;
-        const other = parseFloat(document.getElementById('pay_other').value) || 0;
-        const debt = document.getElementById('pay_debt') ? (parseFloat(document.getElementById('pay_debt').value) || 0) : 0;
-        const creditBalance = document.getElementById('pay_credit') ? (parseFloat(document.getElementById('pay_credit').value) || 0) : 0;
-
-        const totalIn = cash + card + other + debt + creditBalance;
-        
-        const includeDebtChk = document.getElementById('include_previous_debt');
-        const isPreviousDebtIncluded = includeDebtChk ? includeDebtChk.checked : false;
-        const customer = posController.currentCustomer;
-        const oldDebt = isPreviousDebtIncluded && customer ? (parseFloat(customer.totalDebt) || 0) : 0;
-
-        let salePaidDetails = { cash: 0, card: 0, other: 0, debt: 0, creditBalance: 0 };
-        let paymentsToCreate = [];
-        let calculatedChange = 0;
-        let finalSaleTotal = summary.roundedTotal;
-
-        if (isPreviousDebtIncluded && oldDebt > 0) {
-            const remainingPayment = { cash, card, other, creditBalance };
-
-            // 1. Pagar la venta actual primero
-            let saleRemaining = summary.roundedTotal;
-            const methodsOrder = ['creditBalance', 'cash', 'card', 'other'];
-            for (const method of methodsOrder) {
-                if (saleRemaining <= 0) break;
-                const amount = Math.min(remainingPayment[method], saleRemaining);
-                if (amount > 0) {
-                    salePaidDetails[method] = amount;
-                    remainingPayment[method] -= amount;
-                    saleRemaining -= amount;
-                }
-            }
-            if (saleRemaining > 0) {
-                salePaidDetails.debt = saleRemaining;
-            }
-
-            // 2. Distribuir el excedente a las ventas pendientes anteriores
-            const balance = await CustomerAccountService.getCustomerBalance(customer.id);
-            const pendingSales = balance.pendingSales || [];
-            
-            const excessPayments = [];
-            for (const method of methodsOrder) {
-                const amt = remainingPayment[method];
-                if (amt > 0) {
-                    excessPayments.push({ method, amount: amt });
-                }
-            }
-
-            for (const excess of excessPayments) {
-                let remainingExcess = excess.amount;
-                for (const pendingSale of pendingSales) {
-                    if (remainingExcess <= 0) break;
-                    const pendingRemaining = parseFloat(pendingSale.remaining) || 0;
-                    if (pendingRemaining <= 0) continue;
-
-                    const payAmt = Math.min(pendingRemaining, remainingExcess);
-                    if (payAmt > 0) {
-                        paymentsToCreate.push({
-                            saleId: pendingSale.saleId,
-                            amount: payAmt,
-                            paymentMethod: excess.method === 'creditBalance' ? 'credit' : (excess.method === 'other' ? 'other' : excess.method)
-                        });
-                        pendingSale.remaining = pendingRemaining - payAmt;
-                        remainingExcess -= payAmt;
-                    }
-                }
-                if (remainingExcess > 0) {
-                    calculatedChange += remainingExcess;
-                }
-            }
-
-            const totalInForNewSale = salePaidDetails.cash + salePaidDetails.card + salePaidDetails.other + salePaidDetails.creditBalance + salePaidDetails.debt;
-            finalSaleTotal = (totalInForNewSale > summary.roundedTotal) ? summary.roundedTotal : totalInForNewSale;
-        } else {
-            salePaidDetails = { cash, card, other, debt, creditBalance };
-            calculatedChange = Math.max(0, totalIn - summary.roundedTotal);
-            finalSaleTotal = (totalIn > summary.roundedTotal) ? summary.roundedTotal : totalIn;
-            
-            if (calculatedChange > 0 && cash > 0) {
-                salePaidDetails.cash = Math.max(0, cash - calculatedChange);
-            }
+        const btn = document.getElementById('btn_process_payment');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> PROCESANDO...';
         }
 
-        // Determine method name for history based on salePaidDetails
-        let mainMethod = 'mixed';
-        const scash = salePaidDetails.cash;
-        const scard = salePaidDetails.card;
-        const sother = salePaidDetails.other;
-        const sdebt = salePaidDetails.debt;
-        const scred = salePaidDetails.creditBalance;
-        
-        if (scash > 0 && scard === 0 && sother === 0 && sdebt === 0 && scred === 0) mainMethod = 'cash';
-        else if (scard > 0 && scash === 0 && sother === 0 && sdebt === 0 && scred === 0) mainMethod = 'card';
-        else if (sdebt > 0 && scash === 0 && scard === 0 && sother === 0 && scred === 0) mainMethod = 'pending';
-
-        // Boleta forzada si hay tarjeta (opcional, según requerimiento de usuario)
-        // El usuario pidió separar ventas, pero legalmente la tarjeta suele implicar boleta.
-        // Lo mantendremos para consistencia a menos que se elija expresamente Interno.
-        let docType = this.selectedDocType;
-        if (card > 0 && docType !== 'sin_boleta') docType = 'boleta';
-
         try {
+            const summary = posController.getCartSummary();
+            const total = summary.total;
+
+            const cash = parseFloat(document.getElementById('pay_cash').value) || 0;
+            const card = parseFloat(document.getElementById('pay_card').value) || 0;
+            const other = parseFloat(document.getElementById('pay_other').value) || 0;
+            const debt = document.getElementById('pay_debt') ? (parseFloat(document.getElementById('pay_debt').value) || 0) : 0;
+            const creditBalance = document.getElementById('pay_credit') ? (parseFloat(document.getElementById('pay_credit').value) || 0) : 0;
+
+            const totalIn = cash + card + other + debt + creditBalance;
+            
+            const includeDebtChk = document.getElementById('include_previous_debt');
+            const isPreviousDebtIncluded = includeDebtChk ? includeDebtChk.checked : false;
+            const customer = posController.currentCustomer;
+            const oldDebt = isPreviousDebtIncluded && customer ? (parseFloat(customer.totalDebt) || 0) : 0;
+
+            let salePaidDetails = { cash: 0, card: 0, other: 0, debt: 0, creditBalance: 0 };
+            let paymentsToCreate = [];
+            let calculatedChange = 0;
+            let finalSaleTotal = summary.roundedTotal;
+
+            if (isPreviousDebtIncluded && oldDebt > 0) {
+                const remainingPayment = { cash, card, other, creditBalance };
+
+                // 1. Pagar la venta actual primero
+                let saleRemaining = summary.roundedTotal;
+                const methodsOrder = ['creditBalance', 'cash', 'card', 'other'];
+                for (const method of methodsOrder) {
+                    if (saleRemaining <= 0) break;
+                    const amount = Math.min(remainingPayment[method], saleRemaining);
+                    if (amount > 0) {
+                        salePaidDetails[method] = amount;
+                        remainingPayment[method] -= amount;
+                        saleRemaining -= amount;
+                    }
+                }
+                if (saleRemaining > 0) {
+                    salePaidDetails.debt = saleRemaining;
+                }
+
+                // 2. Distribuir el excedente a las ventas pendientes anteriores
+                const balance = await CustomerAccountService.getCustomerBalance(customer.id);
+                const pendingSales = balance.pendingSales || [];
+                
+                const excessPayments = [];
+                for (const method of methodsOrder) {
+                    const amt = remainingPayment[method];
+                    if (amt > 0) {
+                        excessPayments.push({ method, amount: amt });
+                    }
+                }
+
+                for (const excess of excessPayments) {
+                    let remainingExcess = excess.amount;
+                    for (const pendingSale of pendingSales) {
+                        if (remainingExcess <= 0) break;
+                        const pendingRemaining = parseFloat(pendingSale.remaining) || 0;
+                        if (pendingRemaining <= 0) continue;
+
+                        const payAmt = Math.min(pendingRemaining, remainingExcess);
+                        if (payAmt > 0) {
+                            paymentsToCreate.push({
+                                saleId: pendingSale.saleId,
+                                amount: payAmt,
+                                paymentMethod: excess.method === 'creditBalance' ? 'credit' : (excess.method === 'other' ? 'other' : excess.method)
+                            });
+                            pendingSale.remaining = pendingRemaining - payAmt;
+                            remainingExcess -= payAmt;
+                        }
+                    }
+                    if (remainingExcess > 0) {
+                        calculatedChange += remainingExcess;
+                    }
+                }
+
+                const totalInForNewSale = salePaidDetails.cash + salePaidDetails.card + salePaidDetails.other + salePaidDetails.creditBalance + salePaidDetails.debt;
+                finalSaleTotal = (totalInForNewSale > summary.roundedTotal) ? summary.roundedTotal : totalInForNewSale;
+            } else {
+                salePaidDetails = { cash, card, other, debt, creditBalance };
+                calculatedChange = Math.max(0, totalIn - summary.roundedTotal);
+                finalSaleTotal = (totalIn > summary.roundedTotal) ? summary.roundedTotal : totalIn;
+                
+                if (calculatedChange > 0 && cash > 0) {
+                    salePaidDetails.cash = Math.max(0, cash - calculatedChange);
+                }
+            }
+
+            // Determine method name for history based on salePaidDetails
+            let mainMethod = 'mixed';
+            const scash = salePaidDetails.cash;
+            const scard = salePaidDetails.card;
+            const sother = salePaidDetails.other;
+            const sdebt = salePaidDetails.debt;
+            const scred = salePaidDetails.creditBalance;
+            
+            if (scash > 0 && scard === 0 && sother === 0 && sdebt === 0 && scred === 0) mainMethod = 'cash';
+            else if (scard > 0 && scash === 0 && sother === 0 && sdebt === 0 && scred === 0) mainMethod = 'card';
+            else if (sdebt > 0 && scash === 0 && scard === 0 && sother === 0 && scred === 0) mainMethod = 'pending';
+
+            // Boleta forzada si hay tarjeta (opcional, según requerimiento de usuario)
+            let docType = this.selectedDocType;
+            if (card > 0 && docType !== 'sin_boleta') docType = 'boleta';
+
             const isDebtOnly = salePaidDetails.debt > 0 && (scash + scard + sother + scred) === 0;
             
             const sale = await posController.completeSale(mainMethod, isDebtOnly, salePaidDetails, docType, finalSaleTotal);
@@ -1550,7 +1571,6 @@ const POSView = {
             }
 
             // C10: Limpiar la pantalla INMEDIATAMENTE después de la venta exitosa
-            // No esperamos a que el recibo se cierre para dejar el POS listo para el siguiente.
             this.startNewSale();
             this.updateRecentSalesUI();
             closeModal();
@@ -1559,6 +1579,13 @@ const POSView = {
             this.showSaleReceipt(sale, salePaidDetails.debt > 0, totalIn, calculatedChange);
         } catch (e) {
             showNotification(e.message, 'error');
+        } finally {
+            this._isProcessingSale = false;
+            const currentBtn = document.getElementById('btn_process_payment');
+            if (currentBtn && document.getElementById('paymentSummaryBox')) {
+                currentBtn.disabled = false;
+                currentBtn.textContent = 'CONFIRMAR VENTA';
+            }
         }
     },
 

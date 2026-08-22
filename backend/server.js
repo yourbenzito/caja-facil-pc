@@ -101,14 +101,19 @@ async function initializeDefaultData() {
             return;
         }
 
-        console.log('[Setup] Base de datos vacía detectada. Creando datos iniciales...');
+        console.log('[Setup] Verificando datos iniciales del sistema...');
 
-        const bizResult = await dbRun(
-            "INSERT INTO businesses (name, slug, createdAt, isActive, plan) VALUES (?, ?, ?, 1, 'basic')",
-            ['Mi Negocio', 'mi-negocio', new Date().toISOString()]
-        );
-        const businessId = bizResult.lastID;
-        console.log(`[Setup] Negocio por defecto creado (id=${businessId})`);
+        let businessId = (businesses && businesses.length > 0) ? businesses[0].id : null;
+        if (!businessId) {
+            const bizResult = await dbRun(
+                "INSERT INTO businesses (name, slug, createdAt, isActive, plan) VALUES (?, ?, ?, 1, 'basic')",
+                ['Mi Negocio', 'mi-negocio', new Date().toISOString()]
+            );
+            businessId = bizResult.lastID;
+            console.log(`[Setup] Negocio por defecto creado (id=${businessId})`);
+        } else {
+            console.log(`[Setup] Vinculando usuario administrador a negocio existente (id=${businessId})`);
+        }
 
         const defaultPassword = 'Admin@2024!';
         const hashedPassword = await bcrypt.hash(defaultPassword, 10);
@@ -121,7 +126,7 @@ async function initializeDefaultData() {
         console.log('✅ [Setup] Usuario por defecto creado:');
         console.log('   👤 Usuario  : admin');
         console.log('   🔑 Contraseña: Admin@2024!');
-        console.log('   🏪 Negocio  : Mi Negocio');
+        console.log('   🏪 Negocio ID: ' + businessId);
         console.log('   ⚠️  SERÁ OBLIGADO A CAMBIAR CONTRASEÑA en primer login.');
     } catch (err) {
         console.error('[Setup] Error creando datos iniciales:', err.message);
