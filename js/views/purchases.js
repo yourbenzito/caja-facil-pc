@@ -13,7 +13,9 @@ const PurchasesView = {
     limit: 50,
     hasMore: true,
     isLoadingMore: false,
-    listFilter: 'all', // Cambiado a 'all' por defecto para nueva lógica
+    listFilter: 'today', // Por defecto compras de HOY
+    showCalendar: false,
+    searchTerm: '',
     dateFrom: null,
     dateTo: null,
     _calendarYear: null,
@@ -874,55 +876,113 @@ const PurchasesView = {
         const purchasesTableHtml = await this.renderPurchasesTable(this.allPurchases);
 
         return `
-            <div class="view-header">
+            <div class="view-header" style="margin-bottom: 1.25rem;">
                 <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
                     <div>
-                        <h1>Compras a Proveedores</h1>
-                        <p>Registra compras y administra documentos tributarios</p>
+                        <h1 style="font-size: 1.85rem; font-weight: 900; color: var(--text-main); margin: 0; letter-spacing: -0.5px;">Compras a Proveedores</h1>
+                        <p style="color: var(--secondary); margin-top: 0.25rem; font-size: 0.9rem; font-weight: 600;">Registra recepción de facturas, control de costos y cuentas por pagar</p>
                     </div>
-                     <div style="display: flex; gap: 0.5rem;">
+                    <div style="display: flex; gap: 0.6rem; align-items: center;">
                         ${this.getDraft() ? `
-                        <div style="display: flex; gap: 0.75rem;">
-                            <button class="btn" onclick="PurchasesView.restoreDraft()" style="background: var(--warning); color: #000; font-weight: 800; border: none; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25);">
-                                📦 Continuar Compra
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="btn btn-warning" onclick="PurchasesView.restoreDraft()" style="font-weight: 900; border-radius: 0.75rem; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.25); display: flex; align-items: center; gap: 0.4rem;">
+                                <span>📦</span>
+                                <span>Continuar Borrador</span>
                             </button>
-                            <button class="btn btn-outline-danger" onclick="if(confirm('¿Seguro que quieres borrar la compra pausada?')) { PurchasesView.clearDraft(); PurchasesView.refresh(); }" style="font-weight: 700;">
-                                🗑️ Cancelar Borrador
+                            <button class="btn btn-outline-danger" onclick="if(confirm('¿Seguro que deseas descartar la compra pausada?')) { PurchasesView.clearDraft(); PurchasesView.refresh(); }" style="font-weight: 800; border-radius: 0.75rem;">
+                                🗑️
                             </button>
                         </div>
                         ` : ''}
                         ${PermissionService.can('purchases.create') ? `
-                        <button class="btn btn-primary" onclick="PurchasesView.showPurchaseForm()">
-                            📋 Nueva Compra
+                        <button class="btn btn-primary" onclick="PurchasesView.showPurchaseForm()" style="font-weight: 900; font-size: 0.95rem; border-radius: 0.75rem; padding: 0.65rem 1.35rem; display: flex; align-items: center; gap: 0.45rem; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.3);">
+                            <span>📋</span>
+                            <span>Nueva Compra</span>
                         </button>` : ''}
                     </div>
                 </div>
             </div>
             
-            <div class="grid grid-4" style="margin-bottom: 2rem;">
-                <div class="stat-card">
-                    <h3>Total Compras</h3>
-                    <div class="value">${totalPurchasesCount}</div>
+            <!-- 4 TARJETAS DE MÉTRICAS EJECUTIVAS -->
+            <div class="grid grid-4" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.25rem;">
+                <div class="stat-card" style="background: var(--surface); border: 2px solid var(--border); border-radius: 1rem; padding: 1.15rem 1.25rem; box-shadow: 0 4px 15px rgba(0,0,0,0.03); transition: all 0.2s;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                        <span style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Compras (Periodo)</span>
+                        <span style="font-size: 1.3rem;">📦</span>
+                    </div>
+                    <div style="font-size: 1.75rem; font-weight: 950; color: var(--text-main); line-height: 1;">${totalPurchasesCount}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; margin-top: 0.35rem;">Facturas en el filtro actual</div>
                 </div>
-                <div class="stat-card">
-                    <h3>Total del Mes</h3>
-                    <div class="value" style="color: var(--primary);">${formatCLP(currentMonthTotal)}</div>
+
+                <div class="stat-card" style="background: var(--surface); border: 2px solid var(--primary); border-radius: 1rem; padding: 1.15rem 1.25rem; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.08); transition: all 0.2s;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                        <span style="font-size: 0.75rem; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px;">Total del Mes</span>
+                        <span style="font-size: 1.3rem;">📈</span>
+                    </div>
+                    <div style="font-size: 1.75rem; font-weight: 950; color: var(--primary); line-height: 1;">${formatCLP(currentMonthTotal)}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; margin-top: 0.35rem;">Gasto acumulado en mercadería</div>
                 </div>
-                <div class="stat-card">
-                    <h3>Cuentas por Pagar</h3>
-                    <div class="value" style="color: var(--danger);">${formatCLP(accountsPayable)}</div>
+
+                <div class="stat-card" style="background: ${accountsPayable > 0 ? 'rgba(239, 68, 68, 0.04)' : 'var(--surface)'}; border: 2px solid ${accountsPayable > 0 ? 'var(--danger)' : 'var(--border)'}; border-radius: 1rem; padding: 1.15rem 1.25rem; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.06); transition: all 0.2s;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                        <span style="font-size: 0.75rem; font-weight: 800; color: var(--danger); text-transform: uppercase; letter-spacing: 0.5px;">Cuentas por Pagar</span>
+                        <span style="font-size: 1.3rem;">⚠️</span>
+                    </div>
+                    <div style="font-size: 1.75rem; font-weight: 950; color: var(--danger); line-height: 1;">${formatCLP(accountsPayable)}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; margin-top: 0.35rem;">Deuda pendiente a distribuidores</div>
                 </div>
-                <div class="stat-card">
-                    <h3>Facturas por Pagar</h3>
-                    <div class="value" style="color: #64748b;">${totalPendingCount}</div>
+
+                <div class="stat-card" style="background: var(--surface); border: 2px solid var(--border); border-radius: 1rem; padding: 1.15rem 1.25rem; box-shadow: 0 4px 15px rgba(0,0,0,0.03); transition: all 0.2s;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+                        <span style="font-size: 0.75rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Facturas por Pagar</span>
+                        <span style="font-size: 1.3rem;">📄</span>
+                    </div>
+                    <div style="font-size: 1.75rem; font-weight: 950; color: #64748b; line-height: 1;">${totalPendingCount}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 700; margin-top: 0.35rem;">Documentos pendientes de pago</div>
                 </div>
             </div>
 
             <div id="accountsPayableSummary"></div>
 
-            <div class="sales-history-filters" style="margin-bottom: 1.5rem; background: #fff; border-radius: 1rem; border: 1px solid var(--border); overflow: hidden;">
-                <div class="sales-filter-row" style="padding: 1.5rem; border-bottom: 1px solid var(--border);">
-                    <label style="font-weight: 800; color: var(--text-main); margin-bottom: 1rem; display: block; font-size: 1.1rem;">📅 Filtrar por Fecha / Calendario Histórico</label>
+            <!-- BARRA DE CONTROL: FILTROS RÁPIDOS Y BUSCADOR EN TIEMPO REAL -->
+            <div class="purchases-control-bar" style="background: var(--surface); border: 2px solid var(--border); border-radius: 1rem; padding: 0.75rem 1rem; margin-bottom: 1.25rem; display: flex; align-items: center; justify-content: space-between; gap: 0.85rem; flex-wrap: wrap; box-shadow: 0 4px 15px rgba(0,0,0,0.02);">
+                <!-- Filtros rápidos de fecha -->
+                <div style="display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-sm ${this.listFilter === 'today' && !this.dateFrom && !this.showCalendar ? 'btn-primary' : 'btn-outline-secondary'}" onclick="PurchasesView.setFilter('today')" style="font-weight: 800; border-radius: 0.6rem; padding: 0.45rem 0.85rem;">
+                        📅 Hoy
+                    </button>
+                    <button type="button" class="btn btn-sm ${this.listFilter === 'week' && !this.showCalendar ? 'btn-primary' : 'btn-outline-secondary'}" onclick="PurchasesView.setFilter('week')" style="font-weight: 800; border-radius: 0.6rem; padding: 0.45rem 0.85rem;">
+                        📅 Esta Semana
+                    </button>
+                    <button type="button" class="btn btn-sm ${this.listFilter === 'month' && !this.showCalendar ? 'btn-primary' : 'btn-outline-secondary'}" onclick="PurchasesView.setFilter('month')" style="font-weight: 800; border-radius: 0.6rem; padding: 0.45rem 0.85rem;">
+                        📅 Este Mes
+                    </button>
+                    <button type="button" class="btn btn-sm ${this.showCalendar || this.dateFrom ? 'btn-warning' : 'btn-outline-secondary'}" onclick="PurchasesView.toggleCalendarView()" style="font-weight: 800; border-radius: 0.6rem; padding: 0.45rem 0.85rem;">
+                        📆 Calendario / Rango
+                    </button>
+                    <button type="button" class="btn btn-sm ${this.listFilter === 'all' && !this.dateFrom && !this.showCalendar ? 'btn-primary' : 'btn-outline-secondary'}" onclick="PurchasesView.setFilter('all')" style="font-weight: 800; border-radius: 0.6rem; padding: 0.45rem 0.85rem;">
+                        🔍 Ver Todas
+                    </button>
+                </div>
+
+                <!-- Buscador en tiempo real por N° de Factura o Proveedor -->
+                <div style="position: relative; min-width: 260px; flex: 1; max-width: 400px;">
+                    <span style="position: absolute; left: 0.85rem; top: 50%; transform: translateY(-50%); font-size: 1rem; color: var(--text-muted); pointer-events: none;">🔍</span>
+                    <input type="text" id="purchaseSearchQuery" 
+                           placeholder="Buscar por N° Factura o Proveedor..." 
+                           value="${safeHTML(this.searchTerm || '')}"
+                           oninput="PurchasesView.onSearchInput(this.value)"
+                           style="width: 100%; height: 40px; padding-left: 2.3rem; padding-right: 1rem; font-size: 0.9rem; font-weight: 700; border: 2px solid var(--border); border-radius: 0.65rem; background: var(--surface-content); box-sizing: border-box;">
+                </div>
+            </div>
+
+            <!-- SECCIÓN COLAPSABLE DEL CALENDARIO HISTÓRICO -->
+            <div id="purchaseCalendarSection" class="sales-history-filters" style="display: ${this.showCalendar ? 'block' : 'none'}; margin-bottom: 1.5rem; background: #fff; border-radius: 1rem; border: 2px solid var(--border); overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.03);">
+                <div class="sales-filter-row" style="padding: 1.25rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <label style="font-weight: 850; color: var(--text-main); margin: 0; font-size: 1.05rem;">📅 Calendario Histórico de Compras</label>
+                        <button type="button" class="btn btn-xs btn-outline-secondary" onclick="PurchasesView.toggleCalendarView()">✕ Cerrar Calendario</button>
+                    </div>
                     <div class="cash-history-filter" style="margin-bottom: 0;">
                         <div class="cash-history-filter-selects">
                             <label>
@@ -1247,61 +1307,92 @@ const PurchasesView = {
     },
 
     async renderPurchasesTable(purchases) {
-        if (!purchases || purchases.length === 0) {
+        let displayList = purchases || [];
+
+        // Filtro en memoria por término de búsqueda (Factura o Proveedor)
+        if (this.searchTerm && this.searchTerm.trim() !== '') {
+            const query = this.searchTerm.toLowerCase().trim();
+            displayList = displayList.filter(p => {
+                const suppName = (this.supplierNameMap && this.supplierNameMap.get(p.supplierId)) || (p.supplierName || '');
+                const invNum = (p.invoiceNumber || '').toString().toLowerCase();
+                const pNum = (p.purchaseNumber || p.id || '').toString().toLowerCase();
+                return suppName.toLowerCase().includes(query) || invNum.includes(query) || pNum.includes(query);
+            });
+        }
+
+        if (displayList.length === 0) {
             return `
-                <div class="card" style="padding: 4rem 2rem; text-align: center; background: #fff; border: 2px dashed var(--border); border-radius: 1.5rem;">
-                    <div style="font-size: 4rem; margin-bottom: 1.5rem; opacity: 0.3;">🛒</div>
-                    <h3 style="color: var(--text-main); font-weight: 800; margin-bottom: 0.5rem;">No se encontraron compras</h3>
-                    <p style="color: var(--secondary); margin-bottom: 1.5rem;">Prueba ajustando los filtros o el rango de fechas para ver otros resultados.</p>
-                    <div style="display: flex; justify-content: center; gap: 0.75rem;">
-                        <button class="btn btn-primary" onclick="PurchasesView.selectToday()">Ver hoy</button>
-                        <button class="btn btn-secondary" onclick="PurchasesView.clearDateFilter()">Ver todas</button>
-                    </div>
-                    
-                    <div class="purchase-filter-chips" style="display: flex; gap: 0.75rem; justify-content: center; margin-top: 2rem; flex-wrap: wrap;">
-                        <button class="filter-chip ${this.listFilter === 'today' ? 'active' : ''}" onclick="PurchasesView.selectToday()">Hoy</button>
-                        <button class="filter-chip ${this.listFilter === 'week' ? 'active' : ''}" onclick="PurchasesView.setFilter('week')">Semana</button>
-                        <button class="filter-chip ${this.listFilter === 'month' ? 'active' : ''}" onclick="PurchasesView.setFilter('month')">Mes</button>
-                        <button class="filter-chip ${this.listFilter === 'all' ? 'active' : ''}" onclick="PurchasesView.setFilter('all')">Todo</button>
+                <div class="card" style="padding: 3.5rem 2rem; text-align: center; background: var(--surface); border: 2px dashed var(--border); border-radius: 1.25rem;">
+                    <div style="font-size: 3.5rem; margin-bottom: 1rem; opacity: 0.4;">📦</div>
+                    <h3 style="color: var(--text-main); font-weight: 850; margin-bottom: 0.35rem; font-size: 1.25rem;">No se encontraron compras</h3>
+                    <p style="color: var(--secondary); margin-bottom: 1.25rem; font-size: 0.9rem;">
+                        ${this.searchTerm ? `No hay resultados para la búsqueda "${safeHTML(this.searchTerm)}".` : 'No hay compras registradas en este período de tiempo.'}
+                    </p>
+                    <div style="display: flex; justify-content: center; gap: 0.6rem;">
+                        <button class="btn btn-primary" onclick="PurchasesView.selectToday()" style="font-weight: 800; border-radius: 0.65rem; padding: 0.5rem 1.15rem;">Ver compras de Hoy</button>
+                        <button class="btn btn-outline-secondary" onclick="PurchasesView.clearDateFilter()" style="font-weight: 800; border-radius: 0.65rem; padding: 0.5rem 1.15rem;">Ver todas</button>
                     </div>
                 </div>
             `;
         }
 
-        const isFiltered = this.dateFrom || this.dateTo;
         let filterTitle = 'Historial General';
         if (this.listFilter === 'today') filterTitle = 'Compras de Hoy';
         if (this.listFilter === 'week') filterTitle = 'Compras de esta Semana';
         if (this.listFilter === 'month') filterTitle = 'Compras de este Mes';
-        if (this.listFilter === 'custom') filterTitle = `Rango: ${this.dateFrom} ${this.dateTo ? ' al ' + this.dateTo : ''}`;
+        if (this.listFilter === 'custom' || this.dateFrom) filterTitle = `Rango: ${this.dateFrom} ${this.dateTo ? ' al ' + this.dateTo : ''}`;
 
         return `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
-                <h2 style="margin: 0; font-weight: 850; color: var(--text-main); font-size: 1.4rem;">${filterTitle}</h2>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+                <h2 style="margin: 0; font-weight: 900; color: var(--text-main); font-size: 1.2rem; display: flex; align-items: center; gap: 0.5rem;">
+                    <span>📋</span>
+                    <span>${filterTitle}</span>
+                    <span style="background: var(--primary); color: #fff; padding: 0.1rem 0.5rem; border-radius: 0.4rem; font-size: 0.75rem; font-weight: 900;">${displayList.length}</span>
+                </h2>
             </div>
 
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 1.5rem;">
-                ${purchases.map(p => this.renderPurchaseRow(p)).join('')}
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 1.25rem;">
+                ${displayList.map(p => this.renderPurchaseRow(p)).join('')}
             </div>
 
-            ${this.hasMore ? `
-            <div style="text-align: center; padding: 2.5rem; margin-top: 2rem; background: #f8fafc; border-radius: 1rem; border: 1px solid var(--border);">
+            ${this.hasMore && (!this.searchTerm || this.searchTerm.trim() === '') ? `
+            <div style="text-align: center; padding: 2rem; margin-top: 1.5rem; background: var(--surface); border-radius: 1rem; border: 2px solid var(--border);">
                 <button id="btnLoadMorePurchases" class="btn btn-secondary" onclick="PurchasesView.loadMore()" 
-                        style="padding: 0.75rem 2.5rem; font-weight: 800; min-width: 240px; border-radius: 0.75rem; box-shadow: var(--shadow-sm);">
+                        style="padding: 0.75rem 2.5rem; font-weight: 850; min-width: 220px; border-radius: 0.75rem; box-shadow: var(--shadow-sm);">
                     ⬇️ CARGAR MÁS COMPRAS
                 </button>
-                <p style="margin-top: 0.75rem; font-size: 0.85rem; color: var(--secondary); font-weight: 600;">
-                    Viendo ${this.allPurchases.length} compras en este filtro
-                </p>
             </div>
             ` : ''}
         `;
+    },
+
+    toggleCalendarView() {
+        this.showCalendar = !this.showCalendar;
+        const calSec = document.getElementById('purchaseCalendarSection');
+        if (calSec) {
+            calSec.style.display = this.showCalendar ? 'block' : 'none';
+        }
+    },
+
+    onSearchInput(val) {
+        this.searchTerm = val;
+        // Debounce / instant render
+        clearTimeout(this._searchDebounce);
+        this._searchDebounce = setTimeout(() => {
+            const tableDiv = document.getElementById('purchasesSectionContent');
+            if (tableDiv) {
+                this.renderPurchasesTable(this.allPurchases).then(html => {
+                    tableDiv.innerHTML = html;
+                });
+            }
+        }, 150);
     },
 
     async setFilter(filter) {
         this.listFilter = filter;
         this.dateFrom = null;
         this.dateTo = null;
+        this.showCalendar = false;
         this.offset = 0;
         this.allPurchases = [];
         this.hasMore = true;
