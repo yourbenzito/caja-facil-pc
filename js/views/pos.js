@@ -30,73 +30,70 @@ const POSView = {
             <div class="pos-screen-layout" style="display: flex; flex-direction: column; height: calc(100vh - 65px); overflow: hidden; padding: 0.6rem 1rem 0; box-sizing: border-box; gap: 0.5rem;">
                 
                 <!-- 1. CABECERA SUPERIOR DE CONTROL UNIFICADA (FIJA Y STICKY) -->
-                <div class="pos-top-control-bar" style="background: var(--surface); border: 2px solid var(--border); border-radius: 1rem; padding: 0.55rem 0.85rem; box-shadow: 0 4px 15px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 0.45rem; z-index: 50; flex-shrink: 0;">
+                <div class="pos-top-control-bar" style="background: var(--surface); border: 2px solid var(--border); border-radius: 1rem; padding: 0.65rem 0.95rem; box-shadow: 0 4px 15px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 0.55rem; z-index: 50; flex-shrink: 0;">
                     
-                    <!-- Fila Superior: Total + Buscador + Botonera de Acción -->
-                    <div style="display: flex; align-items: center; gap: 0.65rem; width: 100%;">
+                    <!-- Fila 1 Superior: Total a Pagar + Buscador Central + Finalizar Cobro -->
+                    <div style="display: flex; align-items: stretch; gap: 0.75rem; width: 100%;">
                         
-                        <!-- Total Gigante Destacado (Único Total Principal) -->
-                        <div style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(99, 102, 241, 0.15) 100%); border: 2px solid var(--primary); border-radius: 0.75rem; padding: 0.35rem 0.85rem; display: flex; flex-direction: column; align-items: flex-start; min-width: 155px; flex-shrink: 0;">
-                            <span style="font-size: 0.68rem; font-weight: 900; color: var(--primary); text-transform: uppercase; letter-spacing: 0.8px;">TOTAL A PAGAR</span>
-                            <strong id="cartTotal" style="font-size: 1.85rem; font-weight: 950; color: var(--primary); line-height: 1.1;">$0</strong>
+                        <!-- 1. Total Gigante Destacado (Ancho y prominente) -->
+                        <div style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.1) 0%, rgba(99, 102, 241, 0.18) 100%); border: 2.5px solid var(--primary); border-radius: 0.85rem; padding: 0.4rem 1.15rem; display: flex; flex-direction: column; justify-content: center; min-width: 220px; flex-shrink: 0; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.12);">
+                            <span style="font-size: 0.72rem; font-weight: 900; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; line-height: 1;">TOTAL A PAGAR</span>
+                            <strong id="cartTotal" style="font-size: 2.15rem; font-weight: 950; color: var(--primary); line-height: 1.1; margin-top: 0.15rem;">$0</strong>
                         </div>
 
-                        <!-- Buscador de Productos / Escáner Integrado -->
-                        <div style="flex: 1; position: relative; min-width: 180px;">
-                            <div style="position: relative; display: flex; align-items: center;">
-                                <span style="position: absolute; left: 0.85rem; font-size: 1.1rem; color: var(--text-muted); pointer-events: none;">🔍</span>
+                        <!-- 2. Buscador de Productos / Escáner (Más grande, con bordes y sombra de foco llamativa) -->
+                        <div style="flex: 1; position: relative; min-width: 220px; display: flex;">
+                            <div style="position: relative; display: flex; align-items: center; width: 100%;">
+                                <span style="position: absolute; left: 1rem; font-size: 1.25rem; color: var(--primary); pointer-events: none;">🔍</span>
                                 <input type="text" id="productSearch" class="form-control" 
-                                       placeholder="Escanear código o escribir nombre del producto (F1)..." 
+                                       placeholder="Escanear código de barra o buscar por nombre (F1)..." 
                                        autofocus autocomplete="off"
-                                       style="width: 100%; height: 46px; padding-left: 2.5rem; padding-right: 1rem; font-size: 1rem; font-weight: 700; border: 2px solid var(--border); border-radius: 0.75rem; background: var(--surface-content); transition: all 0.2s;">
+                                       style="width: 100%; height: 56px; padding-left: 2.85rem; padding-right: 1.25rem; font-size: 1.1rem; font-weight: 800; border: 2.5px solid #6366f1; border-radius: 0.85rem; background: #ffffff; box-shadow: 0 4px 15px rgba(99, 102, 241, 0.12); transition: all 0.2s;">
                             </div>
-                            <div id="searchResults" class="pos-search-results" style="position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1000; max-height: 350px; overflow-y: auto; background: var(--surface); border: 2px solid var(--primary); border-radius: 0.75rem; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: none;"></div>
+                            <div id="searchResults" class="pos-search-results" style="position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1000; max-height: 350px; overflow-y: auto; background: var(--surface); border: 2.5px solid var(--primary); border-radius: 0.85rem; box-shadow: 0 12px 30px rgba(0,0,0,0.18); display: none;"></div>
                         </div>
 
-                        <!-- Botonera de Acción en Encabezado -->
-                        <div style="display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0;">
+                        <!-- 3. Botón Principal [F2] FINALIZAR (Grande, llamativo e interactivo) -->
+                        <button type="button" class="btn btn-primary" onclick="POSView.showPaymentModal()" title="Finalizar Cobro [F2]"
+                                style="height: 56px; min-width: 200px; padding: 0 1.5rem; font-weight: 950; font-size: 1.05rem; border-radius: 0.85rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; white-space: nowrap; background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); border: 2px solid #312e81; box-shadow: 0 6px 20px rgba(79, 70, 229, 0.4); letter-spacing: 0.5px; transition: all 0.2s; cursor: pointer;">
+                            <span style="font-size: 1.25rem;">💸</span>
+                            <span>[F2] FINALIZAR</span>
+                        </button>
+                    </div>
+
+                    <!-- Fila 2 Inferior: Espera / Clientes / Métodos Express / Herramientas -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; border-top: 1.5px solid var(--border); padding-top: 0.45rem;">
+                        
+                        <!-- Bloque Izquierdo: Pestañas de Espera (renderizado dinámicamente) -->
+                        <div id="heldSalesTabBar" style="display: flex; gap: 0.45rem; align-items: center; overflow-x: auto; scrollbar-width: none;"></div>
+                        
+                        <!-- Bloque Derecho: Botones de Gestión Operativa -->
+                        <div style="display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;">
                             <div id="customerInfo">
                                 <button type="button" class="btn btn-outline-primary" onclick="POSView.selectCustomer()" 
-                                        style="height: 46px; padding: 0 0.75rem; font-weight: 800; font-size: 0.8rem; border-radius: 0.75rem; border: 2px solid var(--primary); display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; transition: all 0.2s;">
+                                        style="height: 38px; padding: 0 0.85rem; font-weight: 800; font-size: 0.82rem; border-radius: 0.65rem; border: 2px solid var(--primary); display: flex; align-items: center; gap: 0.35rem; white-space: nowrap; transition: all 0.2s;">
                                     <span>👤</span>
                                     <span>(F3) CLIENTE</span>
                                 </button>
                             </div>
 
-                            <button type="button" class="btn btn-warning" onclick="POSView.holdCurrentSale()" 
-                                    style="height: 46px; padding: 0 0.75rem; font-weight: 800; font-size: 0.8rem; border-radius: 0.75rem; border: 2px solid #f59e0b; display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; transition: all 0.2s;">
-                                <span>⏸️</span>
-                                <span>[F6] ESPERA</span>
-                            </button>
-
-                            <button type="button" class="btn btn-success" onclick="POSView.quickPayExactCash()" 
-                                    style="height: 46px; padding: 0 0.75rem; font-weight: 900; font-size: 0.8rem; border-radius: 0.75rem; display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25); transition: all 0.2s;">
+                            <button type="button" class="btn btn-success" onclick="POSView.quickPayExactCash()" title="Cobro instantáneo en efectivo exacto"
+                                    style="height: 38px; padding: 0 0.85rem; font-weight: 900; font-size: 0.82rem; border-radius: 0.65rem; display: flex; align-items: center; gap: 0.35rem; white-space: nowrap; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25); transition: all 0.2s;">
                                 <span>⚡</span>
-                                <span>EFECTIVO</span>
+                                <span>EFECTIVO EXACTO</span>
                             </button>
 
-                            <button type="button" class="btn btn-outline-primary" onclick="POSView.quickPayCard()" 
-                                    style="height: 46px; padding: 0 0.75rem; font-weight: 900; font-size: 0.8rem; border-radius: 0.75rem; border: 2px solid var(--primary); background: var(--surface); display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; transition: all 0.2s;">
+                            <button type="button" class="btn btn-outline-primary" onclick="POSView.quickPayCard()" title="Cobro instantáneo con tarjeta"
+                                    style="height: 38px; padding: 0 0.85rem; font-weight: 900; font-size: 0.82rem; border-radius: 0.65rem; border: 2px solid var(--primary); background: var(--surface); display: flex; align-items: center; gap: 0.35rem; white-space: nowrap; transition: all 0.2s;">
                                 <span>⚡</span>
-                                <span>TARJETA</span>
+                                <span>TARJETA RÁPIDA</span>
                             </button>
 
-                            <button type="button" class="btn btn-primary" onclick="POSView.showPaymentModal()" 
-                                    style="height: 46px; padding: 0 1.15rem; font-weight: 950; font-size: 0.92rem; border-radius: 0.75rem; display: flex; align-items: center; gap: 0.4rem; white-space: nowrap; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.35); letter-spacing: 0.5px; transition: all 0.2s;">
-                                <span>💸</span>
-                                <span>[F2] FINALIZAR</span>
-                            </button>
-                        </div>
-                    </div>
+                            <div style="width: 1px; height: 26px; background: var(--border); margin: 0 0.2rem;"></div>
 
-                    <!-- Fila Inferior de la Cabecera: Pestañas de Espera + Herramientas de Carrito -->
-                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; border-top: 1px dashed var(--border); padding-top: 0.35rem;">
-                        <div id="heldSalesTabBar" style="display: flex; gap: 0.45rem; align-items: center; overflow-x: auto; scrollbar-width: none; flex: 1;"></div>
-                        
-                        <div style="display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0;">
-                            <button type="button" class="btn btn-xs btn-outline-warning" onclick="POSView.showDiscountModal()" style="font-weight: 800; border-radius: 0.4rem; padding: 0.2rem 0.5rem; font-size: 0.75rem;">[Alt+D] 🏷️ DESC</button>
-                            <button type="button" class="btn btn-xs btn-outline-info" onclick="POSView.toggleFiscal()" style="font-weight: 800; border-radius: 0.4rem; padding: 0.2rem 0.5rem; font-size: 0.75rem;">[Alt+I] 📊 IVA</button>
-                            <button type="button" class="btn btn-xs btn-outline-danger" onclick="POSView.clearCart()" style="font-weight: 800; border-radius: 0.4rem; padding: 0.2rem 0.5rem; font-size: 0.75rem;">[F8] 🗑️ LIMPIAR</button>
+                            <button type="button" class="btn btn-xs btn-outline-warning" onclick="POSView.showDiscountModal()" style="height: 34px; font-weight: 800; border-radius: 0.5rem; padding: 0 0.65rem; font-size: 0.78rem;">[Alt+D] 🏷️ DESC</button>
+                            <button type="button" class="btn btn-xs btn-outline-info" onclick="POSView.toggleFiscal()" style="height: 34px; font-weight: 800; border-radius: 0.5rem; padding: 0 0.65rem; font-size: 0.78rem;">[Alt+I] 📊 IVA</button>
+                            <button type="button" class="btn btn-xs btn-outline-danger" onclick="POSView.clearCart()" style="height: 34px; font-weight: 800; border-radius: 0.5rem; padding: 0 0.65rem; font-size: 0.78rem;">[F8] 🗑️ LIMPIAR</button>
                         </div>
                     </div>
                 </div>
@@ -1688,36 +1685,28 @@ const POSView = {
         const tabBar = document.getElementById('heldSalesTabBar');
         if (!tabBar) return;
 
-        const summary = posController.getCartSummary();
         const sales = posController.heldSales || [];
 
         let html = `
-            <div class="pos-held-tab active" style="display: flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.75rem; border-radius: 0.6rem; border: 2px solid var(--primary); background: rgba(79, 70, 229, 0.1); color: var(--primary); font-weight: 800; font-size: 0.8rem; white-space: nowrap;">
-                <span>🛒 Venta Actual</span>
-                <span style="background: var(--primary); color: #fff; padding: 0.1rem 0.4rem; border-radius: 0.35rem; font-size: 0.72rem; font-weight: 900;">${formatCLP(summary.total)}</span>
-            </div>
+            <button type="button" class="btn btn-sm btn-warning" onclick="POSView.holdCurrentSale()" title="Poner venta actual en espera [F6]" 
+                    style="height: 38px; padding: 0 0.85rem; border-radius: 0.65rem; border: 2px solid #d97706; background: rgba(245, 158, 11, 0.15); color: #b45309; font-weight: 900; font-size: 0.82rem; white-space: nowrap; display: flex; align-items: center; gap: 0.35rem; transition: all 0.2s; cursor: pointer;">
+                <span style="font-size: 1rem;">➕</span>
+                <span>[F6] EN ESPERA</span>
+            </button>
         `;
 
         sales.forEach(s => {
             const total = s.cart.reduce((sum, item) => sum + item.total, 0);
             html += `
-                <div class="pos-held-tab" style="display: flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.65rem; border-radius: 0.6rem; border: 1.5px solid #f59e0b; background: rgba(245, 158, 11, 0.08); color: #d97706; font-weight: 800; font-size: 0.78rem; white-space: nowrap;">
+                <div class="pos-held-tab" style="height: 38px; display: flex; align-items: center; gap: 0.45rem; padding: 0 0.75rem; border-radius: 0.65rem; border: 2px solid #f59e0b; background: rgba(245, 158, 11, 0.1); color: #d97706; font-weight: 800; font-size: 0.82rem; white-space: nowrap;">
                     <span onclick="POSView.resumeHeldSale(${s.id})" style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
                         <span>⏸️ ${safeHTML(s.name)}</span>
-                        <strong style="background: #f59e0b; color: #fff; padding: 0.1rem 0.4rem; border-radius: 0.35rem; font-size: 0.72rem;">${formatCLP(total)}</strong>
+                        <strong style="background: #f59e0b; color: #fff; padding: 0.15rem 0.45rem; border-radius: 0.4rem; font-size: 0.75rem; font-weight: 900;">${formatCLP(total)}</strong>
                     </span>
-                    <button type="button" onclick="event.stopPropagation(); POSView.discardHeldSale(${s.id})" title="Descartar venta" style="border: none; background: transparent; color: #ef4444; font-weight: 900; font-size: 0.85rem; cursor: pointer; padding: 0 0.15rem; line-height: 1;">✕</button>
+                    <button type="button" onclick="event.stopPropagation(); POSView.discardHeldSale(${s.id})" title="Descartar venta" style="border: none; background: transparent; color: #ef4444; font-weight: 900; font-size: 0.95rem; cursor: pointer; padding: 0 0.15rem; line-height: 1;">✕</button>
                 </div>
             `;
         });
-
-        html += `
-            <button type="button" class="btn btn-sm btn-ghost" onclick="POSView.holdCurrentSale()" title="Poner venta actual en espera [F6]" 
-                    style="border: 1.5px dashed var(--border); border-radius: 0.6rem; font-weight: 800; font-size: 0.75rem; padding: 0.3rem 0.65rem; white-space: nowrap; display: flex; align-items: center; gap: 0.25rem;">
-                <span>➕</span>
-                <span>En Espera [F6]</span>
-            </button>
-        `;
 
         tabBar.innerHTML = html;
     },
