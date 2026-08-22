@@ -27,156 +27,96 @@ const POSView = {
         }
 
         return `
-            <!-- TOP BAR (STICKY) -->
-            <div class="pos-header">
-                <div class="pos-header-panel">
+            <div class="pos-screen-layout" style="display: flex; flex-direction: column; height: calc(100vh - 65px); overflow: hidden; padding: 0.6rem 1rem 0; box-sizing: border-box; gap: 0.5rem;">
+                
+                <!-- 1. CABECERA SUPERIOR DE CONTROL UNIFICADA (FIJA Y STICKY) -->
+                <div class="pos-top-control-bar" style="background: var(--surface); border: 2px solid var(--border); border-radius: 1rem; padding: 0.55rem 0.85rem; box-shadow: 0 4px 15px rgba(0,0,0,0.04); display: flex; flex-direction: column; gap: 0.45rem; z-index: 50; flex-shrink: 0;">
                     
-                    <!-- THE DISPLAY -->
-                    <div class="pos-display-card">
-                        <span class="pos-display-label">Total a Pagar</span>
-                        <div id="cartTotal" class="pos-display-value">${formatCLP(0, true)}</div>
-                    </div>
-
-                    <!-- ACTIONS -->
-                    <div class="pos-header-actions">
-                        <div id="customerInfo" class="pos-customer-selector">
-                        <button type="button" class="btn btn-outline-primary btn-customer-select" onclick="POSView.selectCustomer()">
-                                (F3) 👤 SELECCIONAR CLIENTE
-                        </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="pos-container">
-                <!-- COL LEFT: SEARCH & CART -->
-                <div class="pos-main">
-                    
-                    <!-- Search Container -->
-                    <div class="white-panel pos-search-bar">
-                        <div class="pos-search-flex">
-                            <div class="pos-search-input-wrap" style="flex: 1;">
-                                <span class="pos-search-icon">🔍</span>
-                                <input type="text" id="productSearch" class="form-control pos-search-input" placeholder="Escanear código o buscar por nombre..." autofocus autocomplete="off">
-                                <div id="searchResults" class="pos-search-results"></div>
-                            </div>
-                        </div>
+                    <!-- Fila Superior: Total + Buscador + Botonera de Acción -->
+                    <div style="display: flex; align-items: center; gap: 0.65rem; width: 100%;">
                         
-                        <!-- Teclado numérico -->
-                        <div id="numericKeypad" style="display: none; margin-top: 1rem; padding: 1rem; background: #f9fafb; border: 2px solid #d1d5db; border-radius: 0.75rem;">
-                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;">
-                                <button type="button" class="btn btn-secondary" style="padding: 1rem; font-size: 1.2rem; font-weight: 700;" onclick="POSView.numericKeypadInput('7')">7</button>
-                                <button type="button" class="btn btn-secondary" style="padding: 1rem; font-size: 1.2rem; font-weight: 700;" onclick="POSView.numericKeypadInput('8')">8</button>
-                                <button type="button" class="btn btn-secondary" style="padding: 1rem; font-size: 1.2rem; font-weight: 700;" onclick="POSView.numericKeypadInput('9')">9</button>
-                                <button type="button" class="btn btn-secondary" style="padding: 1rem; font-size: 1.2rem; font-weight: 700;" onclick="POSView.numericKeypadInput('4')">4</button>
-                                <button type="button" class="btn btn-secondary" style="padding: 1rem; font-size: 1.2rem; font-weight: 700;" onclick="POSView.numericKeypadInput('5')">5</button>
-                                <button type="button" class="btn btn-secondary" style="padding: 1rem; font-size: 1.2rem; font-weight: 700;" onclick="POSView.numericKeypadInput('6')">6</button>
-                                <button type="button" class="btn btn-secondary" style="padding: 1rem; font-size: 1.2rem; font-weight: 700;" onclick="POSView.numericKeypadInput('1')">1</button>
-                                <button type="button" class="btn btn-secondary" style="padding: 1rem; font-size: 1.2rem; font-weight: 700;" onclick="POSView.numericKeypadInput('2')">2</button>
-                                <button type="button" class="btn btn-secondary" style="padding: 1rem; font-size: 1.2rem; font-weight: 700;" onclick="POSView.numericKeypadInput('3')">3</button>
-                                <button type="button" class="btn btn-secondary" style="padding: 1rem; font-size: 1.2rem; font-weight: 700;" onclick="POSView.numericKeypadInput('0')">0</button>
-                                <button type="button" class="btn btn-secondary" style="padding: 1rem; font-size: 1.2rem; font-weight: 700;" onclick="POSView.numericKeypadInput('.')">.</button>
-                                <button type="button" class="btn btn-danger" style="padding: 1rem; font-size: 1.2rem; font-weight: 700;" onclick="POSView.numericKeypadInput('backspace')">⌫</button>
-                            </div>
-                            <button type="button" class="btn btn-outline-secondary" style="width: 100%; margin-top: 0.5rem;" onclick="POSView.toggleNumericKeypad()">Ocultar Teclado</button>
-                        </div>
-                    </div>
-
-                    <!-- BARRA DE PESTAÑAS DE CLIENTES EN ESPERA (MULTI-CARRITO) -->
-                    <div id="heldSalesTabBar" style="display: flex; gap: 0.5rem; align-items: center; overflow-x: auto; padding: 0.25rem 0; margin-bottom: 0.5rem; scrollbar-width: none;"></div>
-
-                    <!-- Cart -->
-                    <div class="white-panel pos-cart-panel">
-                        <div class="pos-cart-header">
-                            <div class="pos-cart-header-main">
-                                <h3 class="pos-cart-title">LISTA DE PRODUCTOS</h3>
-                                <div class="pos-cart-actions-group">
-                                    <button type="button" class="btn btn-xs btn-outline-warning" onclick="POSView.showDiscountModal()">[Alt+D] 🏷️ DESC</button>
-                                    <button type="button" class="btn btn-xs btn-outline-info" onclick="POSView.toggleFiscal()">[Alt+I] 📊 IVA</button>
-                                    <button type="button" class="btn btn-xs btn-outline-danger" onclick="POSView.clearCart()">[F8] LIMPIAR</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div id="cartItems" class="pos-cart-items-container"></div>
-                    </div>
-                </div>
-
-                <!-- COL RIGHT: SIDEBAR -->
-                <div class="pos-sidebar">
-                    
-                    <div class="pos-summary-panel">
-                        <h4 style="margin: 0; font-size: 0.95rem; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px;">Resumen</h4>
-                        
-                        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                            <div style="display: flex; justify-content: space-between; font-size: 1.15rem; font-weight: 600;">
-                                <span>Subtotal</span>
-                                <strong id="cartSubtotal">$0</strong>
-                            </div>
-                            <div id="cartDiscountSection" style="display:none; justify-content: space-between; color: var(--danger); font-weight: 700;">
-                                <span>Descuento</span>
-                                <strong id="cartDiscountAmount">$0</strong>
-                            </div>
-                            <div id="fiscalBreakdown" style="display:none; justify-content: space-between; color: var(--text-muted); font-size: 0.9rem;">
-                                <span>IVA (19%)</span>
-                                <strong id="fiscalIVA">$0</strong>
-                            </div>
+                        <!-- Total Gigante Destacado (Único Total Principal) -->
+                        <div style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.08) 0%, rgba(99, 102, 241, 0.15) 100%); border: 2px solid var(--primary); border-radius: 0.75rem; padding: 0.35rem 0.85rem; display: flex; flex-direction: column; align-items: flex-start; min-width: 155px; flex-shrink: 0;">
+                            <span style="font-size: 0.68rem; font-weight: 900; color: var(--primary); text-transform: uppercase; letter-spacing: 0.8px;">TOTAL A PAGAR</span>
+                            <strong id="cartTotal" style="font-size: 1.85rem; font-weight: 950; color: var(--primary); line-height: 1.1;">$0</strong>
                         </div>
 
-                        <hr style="border: 0; border-top: 1px solid var(--border); margin: 0;">
-
-                        <div class="pos-summary-total-display">
-                            <span style="font-size: 0.8rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;" class="only-mobile">Total a Pagar</span>
-                            <strong id="cartSummaryTotal" style="font-size: 1.8rem; color: var(--primary); font-weight: 900; line-height: 1;">$0</strong>
+                        <!-- Buscador de Productos / Escáner Integrado -->
+                        <div style="flex: 1; position: relative; min-width: 180px;">
+                            <div style="position: relative; display: flex; align-items: center;">
+                                <span style="position: absolute; left: 0.85rem; font-size: 1.1rem; color: var(--text-muted); pointer-events: none;">🔍</span>
+                                <input type="text" id="productSearch" class="form-control" 
+                                       placeholder="Escanear código o escribir nombre del producto (F1)..." 
+                                       autofocus autocomplete="off"
+                                       style="width: 100%; height: 46px; padding-left: 2.5rem; padding-right: 1rem; font-size: 1rem; font-weight: 700; border: 2px solid var(--border); border-radius: 0.75rem; background: var(--surface-content); transition: all 0.2s;">
+                            </div>
+                            <div id="searchResults" class="pos-search-results" style="position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 1000; max-height: 350px; overflow-y: auto; background: var(--surface); border: 2px solid var(--primary); border-radius: 0.75rem; box-shadow: 0 10px 25px rgba(0,0,0,0.15); display: none;"></div>
                         </div>
 
-                        <button type="button" class="btn btn-primary pos-total-btn" onclick="POSView.showPaymentModal()">
-                            <span>💸</span>
-                            <span>[F2] FINALIZAR</span>
-                        </button>
+                        <!-- Botonera de Acción en Encabezado -->
+                        <div style="display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0;">
+                            <div id="customerInfo">
+                                <button type="button" class="btn btn-outline-primary" onclick="POSView.selectCustomer()" 
+                                        style="height: 46px; padding: 0 0.75rem; font-weight: 800; font-size: 0.8rem; border-radius: 0.75rem; border: 2px solid var(--primary); display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; transition: all 0.2s;">
+                                    <span>👤</span>
+                                    <span>(F3) CLIENTE</span>
+                                </button>
+                            </div>
 
-                        <!-- BOTONES DE COBRO EXPRESS (1 SOLO CLIC) -->
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; margin-top: 0.5rem;">
-                            <button type="button" class="btn btn-success" onclick="POSView.quickPayExactCash()" title="Cobro instantáneo en efectivo exacto"
-                                    style="padding: 0.55rem 0.35rem; font-weight: 900; font-size: 0.78rem; border-radius: 0.65rem; display: flex; align-items: center; justify-content: center; gap: 0.3rem; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);">
-                                <span>⚡</span>
-                                <span>EFECTIVO EXACTO</span>
+                            <button type="button" class="btn btn-warning" onclick="POSView.holdCurrentSale()" 
+                                    style="height: 46px; padding: 0 0.75rem; font-weight: 800; font-size: 0.8rem; border-radius: 0.75rem; border: 2px solid #f59e0b; display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; transition: all 0.2s;">
+                                <span>⏸️</span>
+                                <span>[F6] ESPERA</span>
                             </button>
-                            <button type="button" class="btn btn-outline-primary" onclick="POSView.quickPayCard()" title="Cobro instantáneo con tarjeta"
-                                    style="padding: 0.55rem 0.35rem; font-weight: 900; font-size: 0.78rem; border-radius: 0.65rem; display: flex; align-items: center; justify-content: center; gap: 0.3rem; border: 2px solid var(--primary); background: var(--surface);">
+
+                            <button type="button" class="btn btn-success" onclick="POSView.quickPayExactCash()" 
+                                    style="height: 46px; padding: 0 0.75rem; font-weight: 900; font-size: 0.8rem; border-radius: 0.75rem; display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25); transition: all 0.2s;">
                                 <span>⚡</span>
-                                <span>TARJETA RÁPIDA</span>
+                                <span>EFECTIVO</span>
+                            </button>
+
+                            <button type="button" class="btn btn-outline-primary" onclick="POSView.quickPayCard()" 
+                                    style="height: 46px; padding: 0 0.75rem; font-weight: 900; font-size: 0.8rem; border-radius: 0.75rem; border: 2px solid var(--primary); background: var(--surface); display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; transition: all 0.2s;">
+                                <span>⚡</span>
+                                <span>TARJETA</span>
+                            </button>
+
+                            <button type="button" class="btn btn-primary" onclick="POSView.showPaymentModal()" 
+                                    style="height: 46px; padding: 0 1.15rem; font-weight: 950; font-size: 0.92rem; border-radius: 0.75rem; display: flex; align-items: center; gap: 0.4rem; white-space: nowrap; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.35); letter-spacing: 0.5px; transition: all 0.2s;">
+                                <span>💸</span>
+                                <span>[F2] FINALIZAR</span>
                             </button>
                         </div>
                     </div>
 
-                    <div class="white-panel" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
-                        <button type="button" class="btn btn-warning" style="width: 100%; height: 50px; border-radius: 0.75rem; border-width: 2px; display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-weight: 900; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);" onclick="POSView.holdCurrentSale()">
-                            <span style="font-size: 1.15rem;">⏸️</span>
-                            <span>[F6] PAUSAR / ESPERA</span>
-                        </button>
-
-                        <div id="heldSalesListContainer" style="display: none; border-top: 1px dashed var(--border); padding-top: 1rem;">
-                            <div style="font-size: 0.75rem; font-weight: 950; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
-                                <span>Ventas en Pausa</span>
-                                <span id="heldSalesBadge" style="background: var(--warning); color: white; padding: 1px 8px; border-radius: 10px; font-size: 0.7rem;">0</span>
-                            </div>
-                            <div id="heldSalesListItems" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 250px; overflow-y: auto;"></div>
-                        </div>
-
-                        <!-- PANEL DE VENTAS RECIENTES (CORRECCIÓN RÁPIDA) -->
-                        <div id="recentSalesPanel" style="display: none; border-top: 1px dashed var(--border); padding-top: 1rem; margin-top: auto;">
-                            <div style="font-size: 0.75rem; font-weight: 950; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
-                                <span>Últimas Ventas (Turno Actual)</span>
-                            </div>
-                            <div id="recentSalesListItems" style="display: flex; flex-direction: column; gap: 0.5rem;">
-                                <!-- Se llenará dinámicamente -->
-                            </div>
-                        </div>
+                    <!-- Fila Inferior de la Cabecera: Pestañas de Espera + Herramientas de Carrito -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; border-top: 1px dashed var(--border); padding-top: 0.35rem;">
+                        <div id="heldSalesTabBar" style="display: flex; gap: 0.45rem; align-items: center; overflow-x: auto; scrollbar-width: none; flex: 1;"></div>
                         
+                        <div style="display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0;">
+                            <button type="button" class="btn btn-xs btn-outline-warning" onclick="POSView.showDiscountModal()" style="font-weight: 800; border-radius: 0.4rem; padding: 0.2rem 0.5rem; font-size: 0.75rem;">[Alt+D] 🏷️ DESC</button>
+                            <button type="button" class="btn btn-xs btn-outline-info" onclick="POSView.toggleFiscal()" style="font-weight: 800; border-radius: 0.4rem; padding: 0.2rem 0.5rem; font-size: 0.75rem;">[Alt+I] 📊 IVA</button>
+                            <button type="button" class="btn btn-xs btn-outline-danger" onclick="POSView.clearCart()" style="font-weight: 800; border-radius: 0.4rem; padding: 0.2rem 0.5rem; font-size: 0.75rem;">[F8] 🗑️ LIMPIAR</button>
+                        </div>
                     </div>
                 </div>
-            </div>
 
+                <!-- 2. VISTA PRINCIPAL DEL CARRITO (OCUPA TODO EL ALTO Y ANCHO RESTANTE) -->
+                <div class="pos-cart-panel" style="flex: 1; background: var(--surface); border: 2px solid var(--border); border-radius: 1rem; padding: 0.75rem 1rem; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.03);">
+                    <div class="pos-cart-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem; padding-bottom: 0.35rem; border-bottom: 1px solid var(--border);">
+                        <h3 class="pos-cart-title" style="margin: 0; font-size: 0.9rem; font-weight: 900; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">
+                            🛒 LISTA DE PRODUCTOS
+                        </h3>
+                        <div style="display: flex; gap: 1rem; font-size: 0.82rem; font-weight: 800; color: var(--text-muted);">
+                            <span id="cartDiscountSection" style="display: none; color: var(--danger);">Desc: <strong id="cartDiscountAmount">$0</strong></span>
+                            <span id="fiscalBreakdown" style="display: none; color: var(--primary);">IVA: <strong id="fiscalIVA">$0</strong></span>
+                            <span>Subtotal: <strong id="cartSubtotal" style="color: var(--text-main); font-size: 0.95rem;">$0</strong></span>
+                        </div>
+                    </div>
+
+                    <div id="cartItems" class="pos-cart-items-container" style="flex: 1; overflow-y: auto; padding-right: 0.35rem;"></div>
+                </div>
+            </div>
         `;
     },
 
@@ -931,31 +871,33 @@ const POSView = {
 
             cartDiv.innerHTML = `
                 ${lossBanner}
-                <div class="pos-cart-list">
+                <div class="pos-cart-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
                 ${summary.items.map((item, index) => {
                 const isLoss = (parseFloat(item.cost) || 0) > 0 && parseFloat(item.unitPrice) < parseFloat(item.cost);
                 const stockWarn = (item.stock !== undefined) && (item.quantity > item.stock);
                 const stockNeg  = (item.stock !== undefined) && (item.stock <= 0);
                 return `
-                        <div class="pos-cart-item ${isLoss ? 'is-loss' : ''} ${stockWarn ? 'stock-warn' : ''}">
-                            <div class="pos-cart-item-info">
-                                <strong class="pos-cart-item-title">${safeHTML(item.name)}</strong>
-                                ${isLoss ? '<span class="badge-loss" style="background: #ef4444; color: #fff; font-weight: 900; font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 0.3rem;">⚠️ VENTA BAJO COSTO</span>' : ''}
-                                ${stockNeg ? '<span class="badge-stock-critical">📦 SIN STOCK</span>' : (stockWarn ? '<span class="badge-stock-warn">📦 STOCK INSUF.</span>' : '')}
-                                <div class="pos-cart-item-controls">
-                                    <div class="pos-cart-item-control-group">
-                                        <span class="pos-cart-item-label">CANT:</span>
-                                        <input type="number" value="${item.quantity}" step="${item.type === 'weight' ? '0.001' : '1'}" onchange="POSView.updateQuantity(${item.productId}, this.value)" onkeydown="if(event.key==='Enter') { event.preventDefault(); this.blur(); }" class="pos-cart-item-input">
+                        <div class="pos-cart-item ${isLoss ? 'is-loss' : ''} ${stockWarn ? 'stock-warn' : ''}" style="background: var(--surface-content); border: 2px solid var(--border); border-radius: 0.85rem; padding: 0.65rem 1.15rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; transition: all 0.2s;">
+                            <div class="pos-cart-item-info" style="flex: 1; min-width: 0;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.35rem;">
+                                    <strong style="font-size: 1.1rem; font-weight: 900; color: var(--text-main);">${safeHTML(item.name)}</strong>
+                                    ${isLoss ? '<span class="badge-loss" style="background: #ef4444; color: #fff; font-weight: 900; font-size: 0.7rem; padding: 0.12rem 0.45rem; border-radius: 0.35rem; margin: 0;">⚠️ VENTA BAJO COSTO</span>' : ''}
+                                    ${stockNeg ? '<span class="badge-stock-critical" style="margin: 0; background: #fee2e2; color: #991b1b; border: 1.5px solid #fca5a5; font-size: 0.72rem; font-weight: 900; padding: 0.12rem 0.45rem; border-radius: 0.35rem;">📦 SIN STOCK</span>' : (stockWarn ? '<span class="badge-stock-warn" style="margin: 0; background: #fef3c7; color: #92400e; border: 1.5px solid #fcd34d; font-size: 0.72rem; font-weight: 900; padding: 0.12rem 0.45rem; border-radius: 0.35rem;">📦 STOCK INSUF.</span>' : '')}
+                                </div>
+                                <div class="pos-cart-item-controls" style="display: flex; gap: 1.25rem; align-items: center;">
+                                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                        <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 800; text-transform: uppercase;">CANT:</span>
+                                        <input type="number" value="${item.quantity}" step="${item.type === 'weight' ? '0.001' : '1'}" onchange="POSView.updateQuantity(${item.productId}, this.value)" onkeydown="if(event.key==='Enter') { event.preventDefault(); this.blur(); }" style="width: 75px; height: 34px; text-align: center; font-weight: 900; font-size: 1rem; border: 2px solid var(--border); border-radius: 0.5rem; background: var(--surface);">
                                     </div>
-                                    <div class="pos-cart-item-control-group">
-                                        <span class="pos-cart-item-label">PRECIO:</span>
-                                        <input type="number" value="${item.unitPrice}" step="10" onchange="POSView.updatePrice(${item.productId}, this.value)" onkeydown="if(event.key==='Enter') { event.preventDefault(); this.blur(); }" class="pos-cart-item-input" style="width: 100px;">
+                                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                        <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 800; text-transform: uppercase;">PRECIO:</span>
+                                        <input type="number" value="${item.unitPrice}" step="10" onchange="POSView.updatePrice(${item.productId}, this.value)" onkeydown="if(event.key==='Enter') { event.preventDefault(); this.blur(); }" style="width: 105px; height: 34px; text-align: center; font-weight: 900; font-size: 1rem; border: 2px solid var(--border); border-radius: 0.5rem; background: var(--surface);">
                                     </div>
                                 </div>
                             </div>
-                            <div class="pos-cart-item-totals">
-                                <div class="pos-cart-item-price-total">${formatCLP(item.total, true)}</div>
-                                <button type="button" class="btn btn-sm btn-outline-danger btn-remove-item" onclick="POSView.removeItem(${item.productId})">🗑️</button>
+                            <div style="display: flex; align-items: center; gap: 1.25rem; flex-shrink: 0;">
+                                <div style="font-size: 1.45rem; font-weight: 950; color: var(--primary);">${formatCLP(item.total, true)}</div>
+                                <button type="button" class="btn btn-outline-danger" onclick="POSView.removeItem(${item.productId})" title="Quitar producto" style="width: 38px; height: 38px; border-radius: 0.6rem; border: 2px solid var(--danger); display: flex; align-items: center; justify-content: center; font-size: 1rem; padding: 0; transition: all 0.2s;">🗑️</button>
                             </div>
                         </div>
                     `;
