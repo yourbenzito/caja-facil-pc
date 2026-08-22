@@ -108,58 +108,96 @@
     </style>
 
     <div id="app" style="display: none;">
-        <button id="mobile-menu-btn" class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
-        <div id="mobile-overlay"
-            style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:99;"
-            onclick="toggleSidebar()"></div>
-
-        <nav id="sidebar">
-            <div class="sidebar-content">
-                <div class="logo">
-                    <h2 id="sidebar-business-name">🛒 CajaFácil</h2>
-                    <small style="opacity: 0.7; font-size: 0.75rem;">v1.4.2</small>
-                </div>
-                <div class="sidebar-top-row">
-                    <div class="sidebar-status-group">
-                        <span class="sidebar-label">Caja abierta:</span>
-                        <span class="sidebar-value" id="currentCashStatus">No</span>
-                    </div>
-                    <div class="sidebar-status-group">
-                        <span class="sidebar-label">Usuario:</span>
-                        <strong class="sidebar-value" id="currentUserName">Administrador</strong>
-                        <span class="sidebar-role-badge" id="currentUserRole"
-                            style="font-size: 0.65rem; padding: 0.1rem 0.4rem; border-radius: 0.25rem; background: rgba(99,102,241,0.3); color: #a5b4fc; margin-left: 0.3rem;"></span>
-                    </div>
-                    <div class="sidebar-top-actions" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; margin-top: 0.5rem;">
-                        <button class="btn btn-secondary btn-sm" onclick="AuthManager.logout()">Cerrar sesión</button>
-                        <button class="btn btn-secondary btn-sm" onclick="ShortcutHelper.show()">⌨️ Atajos</button>
-                        <button class="btn btn-secondary btn-sm" onclick="NotificationCenter.show()" style="grid-column: span 2; display: flex; align-items: center; justify-content: center; gap: 0.25rem; background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25); color: #a5b4fc; font-weight: 700; border-radius: 0.5rem; padding: 0.45rem 0; cursor: pointer; transition: background 0.2s;">
-                            🔔 Avisos y Alertas <span id="nav-notification-badge" style="display: none;"></span>
-                        </button>
-                    </div>
-                </div>
-                <ul class="nav-menu">
-                    <li><a href="#" data-view="dashboard"><span class="icon">📊</span> Dashboard</a></li>
-                    <li><a href="#" data-view="pos" class="active"><span class="icon">🛒</span> Punto de Venta</a></li>
-                    <li><a href="#" data-view="products"><span class="icon">📦</span> Productos</a></li>
-                    <li><a href="#" data-view="customers"><span class="icon">👥</span> Clientes</a></li>
-                    <li><a href="#" data-view="suppliers"><span class="icon">🚚</span> Provedores</a></li>
-                    <li><a href="#" data-view="purchases"><span class="icon">📋</span> Compras</a></li>
-                    <li><a href="#" data-view="cash"><span class="icon">💰</span> Caja</a></li>
-                    <li><a href="#" data-view="expenses"><span class="icon">💸</span> Gastos</a></li>
-                    <li><a href="#" data-view="inventory"><span class="icon">📊</span> Control Stock</a></li>
-                    <li><a href="#" data-view="reports"><span class="icon">📈</span> Reportes</a></li>
-                    <li><a href="#" data-view="sales"><span class="icon">📋</span> Historial Ventas</a></li>
-                    <li><a href="#" data-view="creditNotes"><span class="icon">↩️</span> Notas de Crédito</a></li>
-                    <li><a href="#" data-view="settings"><span class="icon">⚙️</span> Configuración</a></li>
-                    <li><a href="#" data-view="auditLogs"><span class="icon">🕵️</span> Auditoría Sist.</a></li>
-                </ul>
-            </div>
-        </nav>
-
         <main id="main-content">
             <div id="view-container"></div>
         </main>
+
+        <!-- BARRA DE NAVEGACIÓN INFERIOR (BOTTOM DOCK) -->
+        <nav id="bottom-nav" class="bottom-nav">
+            <a href="#" data-view="pos" class="nav-item active" onclick="app.navigate('pos')">
+                <span class="nav-icon">🛒</span>
+                <span class="nav-label">Punto de Venta</span>
+            </a>
+            <a href="#" data-view="customers" class="nav-item" onclick="app.navigate('customers')">
+                <span class="nav-icon">👥</span>
+                <span class="nav-label">Clientes</span>
+            </a>
+            <a href="#" data-view="purchases" class="nav-item" onclick="app.navigate('purchases')">
+                <span class="nav-icon">📋</span>
+                <span class="nav-label">Compras</span>
+            </a>
+            <a href="#" data-view="cash" class="nav-item" onclick="app.navigate('cash')">
+                <span class="nav-icon">💰</span>
+                <span class="nav-label">Caja</span>
+            </a>
+            <button type="button" class="nav-item nav-more-btn" onclick="app.toggleMoreMenu()">
+                <span class="nav-icon">☰</span>
+                <span class="nav-label">Más Módulos</span>
+            </button>
+        </nav>
+
+        <!-- MENÚ DESPLEGABLE "MÁS MÓDULOS" -->
+        <div id="more-menu-overlay" class="more-menu-overlay" style="display: none;" onclick="app.toggleMoreMenu(false)">
+            <div class="more-menu-container" onclick="event.stopPropagation()">
+                <div class="more-menu-header">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--primary); color:#fff; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 900;">👤</div>
+                        <div>
+                            <strong id="currentUserName" style="font-size: 0.95rem; color: var(--text-main);">Administrador</strong>
+                            <div style="font-size: 0.75rem; color: var(--secondary);">Caja abierta: <span id="currentCashStatus" style="font-weight: 800; color: #10b981;">Sí</span></div>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-ghost" onclick="app.toggleMoreMenu(false)" style="font-size: 1.1rem; font-weight: 900; padding: 0.3rem 0.6rem;">✕</button>
+                </div>
+                <div class="more-menu-grid">
+                    <a href="#" data-view="dashboard" class="more-menu-item" onclick="app.navigate('dashboard'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">📊</span>
+                        <span class="item-title">Dashboard</span>
+                    </a>
+                    <a href="#" data-view="products" class="more-menu-item" onclick="app.navigate('products'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">📦</span>
+                        <span class="item-title">Productos</span>
+                    </a>
+                    <a href="#" data-view="inventory" class="more-menu-item" onclick="app.navigate('inventory'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">📋</span>
+                        <span class="item-title">Control Stock</span>
+                    </a>
+                    <a href="#" data-view="suppliers" class="more-menu-item" onclick="app.navigate('suppliers'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">🚚</span>
+                        <span class="item-title">Proveedores</span>
+                    </a>
+                    <a href="#" data-view="expenses" class="more-menu-item" onclick="app.navigate('expenses'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">💸</span>
+                        <span class="item-title">Gastos</span>
+                    </a>
+                    <a href="#" data-view="sales" class="more-menu-item" onclick="app.navigate('sales'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">🧾</span>
+                        <span class="item-title">Historial Ventas</span>
+                    </a>
+                    <a href="#" data-view="reports" class="more-menu-item" onclick="app.navigate('reports'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">📈</span>
+                        <span class="item-title">Reportes</span>
+                    </a>
+                    <a href="#" data-view="creditNotes" class="more-menu-item" onclick="app.navigate('creditNotes'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">↩️</span>
+                        <span class="item-title">Devoluciones</span>
+                    </a>
+                    <a href="#" data-view="settings" class="more-menu-item" onclick="app.navigate('settings'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">⚙️</span>
+                        <span class="item-title">Configuración</span>
+                    </a>
+                    <a href="#" data-view="auditLogs" class="more-menu-item" onclick="app.navigate('auditLogs'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">🕵️</span>
+                        <span class="item-title">Auditoría</span>
+                    </a>
+                </div>
+                <div class="more-menu-footer">
+                    <button class="btn btn-sm btn-ghost" onclick="ShortcutHelper.show(); app.toggleMoreMenu(false);" style="font-weight: 700;">⌨️ Atajos</button>
+                    <button class="btn btn-sm btn-ghost" onclick="NotificationCenter.show(); app.toggleMoreMenu(false);" style="font-weight: 700;">🔔 Avisos</button>
+                    <button class="btn btn-sm btn-danger" onclick="AuthManager.logout()" style="font-weight: 800;">🚪 Cerrar Sesión</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div id="modal-overlay" class="modal-overlay"></div>

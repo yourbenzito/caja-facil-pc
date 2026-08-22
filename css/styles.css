@@ -854,17 +854,173 @@ button,
 }
 
 #main-content {
-    margin-left: var(--sidebar-width);
+    margin-left: 0 !important;
     flex: 1;
-    padding: 2rem;
-    width: calc(100% - var(--sidebar-width));
+    padding: 1.25rem 1.5rem 80px 1.5rem !important;
+    width: 100% !important;
     background: var(--surface);
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1.25rem;
     position: relative;
     color: var(--text);
-    transition: margin-left 0.3s ease, width 0.3s ease;
+    box-sizing: border-box;
+}
+
+/* ==========================================
+   BOTTOM NAVIGATION DOCK & MORE MODULES DRAWER
+   ========================================== */
+.bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 64px;
+    background: var(--surface);
+    border-top: 2px solid var(--border);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 0 0.75rem;
+    z-index: 999;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+    backdrop-filter: blur(12px);
+}
+
+.bottom-nav .nav-item {
+    flex: 1;
+    max-width: 150px;
+    height: 50px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    color: var(--secondary);
+    text-decoration: none;
+    border-radius: 0.75rem;
+    transition: all 0.2s ease;
+    border: 1.5px solid transparent;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.bottom-nav .nav-item .nav-icon {
+    font-size: 1.35rem;
+    line-height: 1;
+    transition: transform 0.2s ease;
+}
+
+.bottom-nav .nav-item .nav-label {
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.2px;
+    white-space: nowrap;
+}
+
+.bottom-nav .nav-item:hover {
+    color: var(--primary);
+    background: rgba(79, 70, 229, 0.06);
+    border-color: rgba(79, 70, 229, 0.2);
+    transform: translateY(-2px);
+}
+
+.bottom-nav .nav-item.active {
+    color: var(--primary);
+    background: rgba(79, 70, 229, 0.12);
+    border-color: var(--primary);
+    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.2);
+}
+
+.bottom-nav .nav-item.active .nav-icon {
+    transform: scale(1.15);
+}
+
+.more-menu-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(6px);
+    z-index: 1050;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.more-menu-container {
+    width: 100%;
+    max-width: 720px;
+    background: var(--surface);
+    border: 2px solid var(--border);
+    border-radius: 1.5rem 1.5rem 0 0;
+    padding: 1.5rem;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.25);
+    margin-bottom: 64px;
+    animation: slideUpMenu 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideUpMenu {
+    from { transform: translateY(100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+.more-menu-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 0.85rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1.25rem;
+}
+
+.more-menu-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.more-menu-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0.85rem 0.5rem;
+    background: var(--surface-content);
+    border: 1.5px solid var(--border);
+    border-radius: 0.85rem;
+    text-decoration: none;
+    color: var(--text-main);
+    transition: all 0.2s ease;
+    text-align: center;
+    gap: 0.35rem;
+}
+
+.more-menu-item .item-icon {
+    font-size: 1.6rem;
+}
+
+.more-menu-item .item-title {
+    font-size: 0.8rem;
+    font-weight: 800;
+}
+
+.more-menu-item:hover {
+    border-color: var(--primary);
+    background: rgba(79, 70, 229, 0.08);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.more-menu-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--border);
+    gap: 0.5rem;
 }
 
 /* Responsividad General */

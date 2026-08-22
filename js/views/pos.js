@@ -55,12 +55,11 @@ const POSView = {
                     <!-- Search Container -->
                     <div class="white-panel pos-search-bar">
                         <div class="pos-search-flex">
-                            <div class="pos-search-input-wrap">
+                            <div class="pos-search-input-wrap" style="flex: 1;">
                                 <span class="pos-search-icon">🔍</span>
                                 <input type="text" id="productSearch" class="form-control pos-search-input" placeholder="Escanear código o buscar por nombre..." autofocus autocomplete="off">
                                 <div id="searchResults" class="pos-search-results"></div>
                             </div>
-                            <button type="button" class="btn btn-primary btn-scanner-open" onclick="POSView.openScanner()" title="Escáner">📷</button>
                         </div>
                         
                         <!-- Teclado numérico -->
@@ -82,6 +81,9 @@ const POSView = {
                             <button type="button" class="btn btn-outline-secondary" style="width: 100%; margin-top: 0.5rem;" onclick="POSView.toggleNumericKeypad()">Ocultar Teclado</button>
                         </div>
                     </div>
+
+                    <!-- BARRA DE PESTAÑAS DE CLIENTES EN ESPERA (MULTI-CARRITO) -->
+                    <div id="heldSalesTabBar" style="display: flex; gap: 0.5rem; align-items: center; overflow-x: auto; padding: 0.25rem 0; margin-bottom: 0.5rem; scrollbar-width: none;"></div>
 
                     <!-- Cart -->
                     <div class="white-panel pos-cart-panel">
@@ -131,12 +133,26 @@ const POSView = {
                             <span>💸</span>
                             <span>[F2] FINALIZAR</span>
                         </button>
+
+                        <!-- BOTONES DE COBRO EXPRESS (1 SOLO CLIC) -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.4rem; margin-top: 0.5rem;">
+                            <button type="button" class="btn btn-success" onclick="POSView.quickPayExactCash()" title="Cobro instantáneo en efectivo exacto"
+                                    style="padding: 0.55rem 0.35rem; font-weight: 900; font-size: 0.78rem; border-radius: 0.65rem; display: flex; align-items: center; justify-content: center; gap: 0.3rem; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);">
+                                <span>⚡</span>
+                                <span>EFECTIVO EXACTO</span>
+                            </button>
+                            <button type="button" class="btn btn-outline-primary" onclick="POSView.quickPayCard()" title="Cobro instantáneo con tarjeta"
+                                    style="padding: 0.55rem 0.35rem; font-weight: 900; font-size: 0.78rem; border-radius: 0.65rem; display: flex; align-items: center; justify-content: center; gap: 0.3rem; border: 2px solid var(--primary); background: var(--surface);">
+                                <span>⚡</span>
+                                <span>TARJETA RÁPIDA</span>
+                            </button>
+                        </div>
                     </div>
 
                     <div class="white-panel" style="padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
-                        <button type="button" class="btn btn-warning" style="width: 100%; height: 54px; border-radius: 0.75rem; border-width: 2px; display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-weight: 900; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);" onclick="POSView.holdCurrentSale()">
-                            <span style="font-size: 1.2rem;">⏸️</span>
-                            <span>[F6] PAUSAR VENTA</span>
+                        <button type="button" class="btn btn-warning" style="width: 100%; height: 50px; border-radius: 0.75rem; border-width: 2px; display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-weight: 900; box-shadow: 0 4px 12px rgba(245, 158, 11, 0.2);" onclick="POSView.holdCurrentSale()">
+                            <span style="font-size: 1.15rem;">⏸️</span>
+                            <span>[F6] PAUSAR / ESPERA</span>
                         </button>
 
                         <div id="heldSalesListContainer" style="display: none; border-top: 1px dashed var(--border); padding-top: 1rem;">
@@ -896,22 +912,35 @@ const POSView = {
             }
         }
 
+        // Renderizar barra de pestañas de clientes en espera
+        this.renderHeldSalesTabs();
+
         const cartDiv = document.getElementById('cartItems');
         if (!cartDiv) return;
 
         if (summary.items.length === 0) {
             cartDiv.innerHTML = `<div class="cart-empty-state">🛒 Carrito vacío</div>`;
         } else {
-            cartDiv.innerHTML = `<div class="pos-cart-list">
+            const hasLoss = summary.items.some(item => (parseFloat(item.cost) || 0) > 0 && parseFloat(item.unitPrice) < parseFloat(item.cost));
+            const lossBanner = hasLoss ? `
+                <div style="background: rgba(239, 68, 68, 0.1); border: 1.5px solid #dc2626; color: #dc2626; padding: 0.45rem 0.75rem; border-radius: 0.6rem; font-size: 0.78rem; font-weight: 800; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
+                    <span>⚠️</span>
+                    <span>AVISO PREVENTIVO: Hay producto(s) vendiéndose por debajo de su costo de compra</span>
+                </div>
+            ` : '';
+
+            cartDiv.innerHTML = `
+                ${lossBanner}
+                <div class="pos-cart-list">
                 ${summary.items.map((item, index) => {
-                const isLoss = item.unitPrice < item.cost;
+                const isLoss = (parseFloat(item.cost) || 0) > 0 && parseFloat(item.unitPrice) < parseFloat(item.cost);
                 const stockWarn = (item.stock !== undefined) && (item.quantity > item.stock);
                 const stockNeg  = (item.stock !== undefined) && (item.stock <= 0);
                 return `
                         <div class="pos-cart-item ${isLoss ? 'is-loss' : ''} ${stockWarn ? 'stock-warn' : ''}">
                             <div class="pos-cart-item-info">
                                 <strong class="pos-cart-item-title">${safeHTML(item.name)}</strong>
-                                ${isLoss ? '<span class="badge-loss">⚠️ PÉRDIDA</span>' : ''}
+                                ${isLoss ? '<span class="badge-loss" style="background: #ef4444; color: #fff; font-weight: 900; font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 0.3rem;">⚠️ VENTA BAJO COSTO</span>' : ''}
                                 ${stockNeg ? '<span class="badge-stock-critical">📦 SIN STOCK</span>' : (stockWarn ? '<span class="badge-stock-warn">📦 STOCK INSUF.</span>' : '')}
                                 <div class="pos-cart-item-controls">
                                     <div class="pos-cart-item-control-group">
@@ -1023,31 +1052,31 @@ const POSView = {
         const isCustomerSelected = !!customer;
 
         const content = `
-            <div class="payment-modal-pro">
+            <div class="payment-modal-pro" style="display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 1.25rem; align-items: stretch; max-height: 80vh;">
                 <!-- Columna Izquierda: Entradas de Dinero -->
-                <div class="payment-methods-list">
+                <div class="payment-methods-list" style="display: flex; flex-direction: column; gap: 0.75rem;">
                     
                     <!-- SELECTOR DE DOCUMENTO (BOLETA / INTERNO) -->
-                    <div class="payment-doc-type-selector">
-                        <div class="payment-mini-label">TIPO DE VENTA</div>
-                        <div class="pos-doc-toggle">
-                            <button id="docBoletaBtn" class="btn btn-sm btn-doc-toggle" style="${this.selectedDocType === 'boleta' ? 'background: var(--primary); color: white; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);' : 'background: transparent; color: var(--text-muted);'}" onclick="POSView.setDocType('boleta')">📄 BOLETA (CON IVA)</button>
-                            <button id="docInternoBtn" class="btn btn-sm btn-doc-toggle" style="${this.selectedDocType === 'sin_boleta' || this.selectedDocType === 'interno' ? 'background: var(--warning); color: white; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);' : 'background: transparent; color: var(--text-muted);'}" onclick="POSView.setDocType('sin_boleta')">🏠 INTERNO (SIN IVA)</button>
+                    <div class="payment-doc-type-selector" style="border: 2px solid var(--border); border-radius: 0.85rem; padding: 0.5rem 0.75rem; background: var(--surface-content);">
+                        <div class="payment-mini-label" style="font-size: 0.7rem; font-weight: 800; color: var(--secondary); text-transform: uppercase; margin-bottom: 0.35rem;">TIPO DE VENTA</div>
+                        <div class="pos-doc-toggle" style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                            <button id="docBoletaBtn" class="btn btn-sm btn-doc-toggle" style="${this.selectedDocType === 'boleta' ? 'background: var(--primary); color: white; font-weight: 900; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);' : 'background: transparent; color: var(--text-muted); font-weight: 700; border: 1.5px solid var(--border);'}" onclick="POSView.setDocType('boleta')">📄 BOLETA (CON IVA)</button>
+                            <button id="docInternoBtn" class="btn btn-sm btn-doc-toggle" style="${this.selectedDocType === 'sin_boleta' || this.selectedDocType === 'interno' ? 'background: var(--warning); color: white; font-weight: 900; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);' : 'background: transparent; color: var(--text-muted); font-weight: 700; border: 1.5px solid var(--border);'}" onclick="POSView.setDocType('sin_boleta')">🏠 INTERNO (SIN IVA)</button>
                         </div>
                     </div>
 
                     ${isCustomerSelected ? `
-                    <div class="payment-customer-badge" style="height: auto; min-height: 60px; padding: 1rem 1.25rem; display: flex; align-items: flex-start; gap: 1rem; margin-bottom: 1rem;">
-                        <div class="payment-customer-icon" style="margin-top: 0.15rem; font-size: 1.6rem;">👤</div>
-                        <div class="payment-customer-info">
-                            <div class="payment-customer-label" style="font-size: 0.7rem; font-weight: 800; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 0.2rem;">Cliente Seleccionado</div>
-                            <div class="payment-customer-name" style="font-size: 1.15rem; font-weight: 900; color: var(--text-color);">${safeHTML(customer.name)}</div>
+                    <div class="payment-customer-badge" style="padding: 0.75rem 1rem; display: flex; align-items: flex-start; gap: 0.75rem; border: 2px solid var(--primary); border-radius: 0.85rem; background: rgba(79, 70, 229, 0.05);">
+                        <div class="payment-customer-icon" style="font-size: 1.5rem;">👤</div>
+                        <div class="payment-customer-info" style="flex: 1;">
+                            <div class="payment-customer-label" style="font-size: 0.68rem; font-weight: 800; color: var(--primary); text-transform: uppercase;">Cliente Seleccionado</div>
+                            <div class="payment-customer-name" style="font-size: 1.05rem; font-weight: 900; color: var(--text-color);">${safeHTML(customer.name)}</div>
                             ${(parseFloat(customer.totalDebt) || 0) > 0 ? `
-                            <div id="payment-customer-debt-toggle" style="margin-top: 0.75rem; display: flex; align-items: center; gap: 0.75rem; background: rgba(100, 116, 139, 0.05); padding: 0.6rem 1rem; border-radius: 0.6rem; border: 1px solid #cbd5e1; cursor: pointer; transition: all 0.2s; width: 100%; box-sizing: border-box;" onclick="const chk = document.getElementById('include_previous_debt'); if (event.target !== chk && event.target.tagName !== 'LABEL') { chk.checked = !chk.checked; chk.dispatchEvent(new Event('change')); }">
-                                <input type="checkbox" id="include_previous_debt" style="width: 18px; height: 18px; cursor: pointer; margin: 0;" onchange="if(typeof POSView._updateModalUI === 'function') POSView._updateModalUI();">
-                                <label for="include_previous_debt" id="include_previous_debt_label" style="font-weight: 800; color: #64748b; cursor: pointer; font-size: 0.85rem; margin: 0; user-select: none; flex: 1; display: flex; justify-content: space-between; align-items: center;">
+                            <div id="payment-customer-debt-toggle" style="margin-top: 0.4rem; display: flex; align-items: center; gap: 0.5rem; background: rgba(100, 116, 139, 0.05); padding: 0.4rem 0.75rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1; cursor: pointer;" onclick="const chk = document.getElementById('include_previous_debt'); if (event.target !== chk && event.target.tagName !== 'LABEL') { chk.checked = !chk.checked; chk.dispatchEvent(new Event('change')); }">
+                                <input type="checkbox" id="include_previous_debt" style="width: 16px; height: 16px; cursor: pointer; margin: 0;" onchange="if(typeof POSView._updateModalUI === 'function') POSView._updateModalUI();">
+                                <label for="include_previous_debt" id="include_previous_debt_label" style="font-weight: 800; color: #64748b; cursor: pointer; font-size: 0.8rem; margin: 0; user-select: none; flex: 1; display: flex; justify-content: space-between; align-items: center;">
                                     <span>Incluir deuda anterior</span>
-                                    <strong style="font-size: 1rem; margin-left: 0.5rem; color: var(--danger); font-weight: 900;">+ ${formatCLP(customer.totalDebt)}</strong>
+                                    <strong style="font-size: 0.9rem; margin-left: 0.5rem; color: var(--danger); font-weight: 900;">+ ${formatCLP(customer.totalDebt)}</strong>
                                 </label>
                             </div>
                             ` : ''}
@@ -1055,114 +1084,170 @@ const POSView = {
                     </div>
                     ` : ''}
 
-                    <div class="payment-method-card" id="card_cash">
-                        <div class="payment-icon" style="background: var(--info-bg); color: var(--info-text);">💵</div>
-                        <div class="payment-method-body">
-                            <div class="payment-method-header">
-                                <div class="payment-method-label">EFECTIVO</div>
-                                <button class="btn-fill-diff" onclick="POSView.fillAmount('pay_cash')">TODO</button>
+                    <!-- 💵 EFECTIVO -->
+                    <div class="payment-method-card" id="card_cash" style="border: 2px solid var(--border); border-radius: 0.85rem; padding: 0.65rem 0.85rem; background: var(--surface-content); transition: all 0.2s;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+                            <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                <span style="font-size: 1.15rem;">💵</span>
+                                <strong style="font-size: 0.88rem; color: var(--text-main); text-transform: uppercase; font-weight: 800;">Efectivo</strong>
                             </div>
-                            <input type="number" id="pay_cash" class="pay-input-pro pay-input" placeholder="0" data-rounding="true" value="${initialMethod === 'cash' ? roundedTotal : ''}">
+                        </div>
+                        <!-- Barra de monto con botón TODO grande integrado -->
+                        <div style="display: flex; gap: 0.4rem; align-items: stretch; margin-bottom: 0.4rem;">
+                            <div style="position: relative; flex: 1;">
+                                <span style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); font-weight: 800; color: var(--secondary); font-size: 1.05rem;">$</span>
+                                <input type="number" id="pay_cash" class="pay-input-pro pay-input" placeholder="0" data-rounding="true" 
+                                       value="${initialMethod === 'cash' ? roundedTotal : ''}" 
+                                       style="width: 100%; padding: 0.5rem 0.6rem 0.5rem 1.8rem; font-size: 1.15rem; font-weight: 900; border: 2px solid var(--border); border-radius: 0.6rem; background: var(--surface); box-sizing: border-box;">
+                            </div>
+                            <button type="button" class="btn btn-primary" onclick="POSView.fillAmount('pay_cash')" 
+                                    style="padding: 0 1.25rem; font-weight: 900; font-size: 0.95rem; border-radius: 0.6rem; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);">
+                                TODO
+                            </button>
+                        </div>
+                        <!-- Botones rápidos de billetes -->
+                        <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                            <button type="button" class="btn btn-sm btn-ghost" onclick="POSView.fillAmount('pay_cash')" style="border: 1.5px solid var(--border); font-weight: 800; font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem;">Exacto</button>
+                            <button type="button" class="btn btn-sm btn-ghost" onclick="POSView.setCashAmount(1000)" style="border: 1.5px solid var(--border); font-weight: 800; font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem;">$1.000</button>
+                            <button type="button" class="btn btn-sm btn-ghost" onclick="POSView.setCashAmount(2000)" style="border: 1.5px solid var(--border); font-weight: 800; font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem;">$2.000</button>
+                            <button type="button" class="btn btn-sm btn-ghost" onclick="POSView.setCashAmount(5000)" style="border: 1.5px solid var(--border); font-weight: 800; font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem;">$5.000</button>
+                            <button type="button" class="btn btn-sm btn-ghost" onclick="POSView.setCashAmount(10000)" style="border: 1.5px solid var(--border); font-weight: 800; font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem;">$10.000</button>
+                            <button type="button" class="btn btn-sm btn-ghost" onclick="POSView.setCashAmount(20000)" style="border: 1.5px solid var(--border); font-weight: 800; font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem;">$20.000</button>
                         </div>
                     </div>
 
-                    <div class="payment-method-card" id="card_card">
-                        <div class="payment-icon" style="background: var(--success-bg); color: var(--success-text);">💳</div>
-                        <div class="payment-method-body">
-                            <div class="payment-method-header">
-                                <div class="payment-method-label">TARJETA / QR</div>
-                                <button class="btn-fill-diff" onclick="POSView.fillAmount('pay_card')">TODO</button>
+                    <!-- 💳 TARJETA / QR -->
+                    <div class="payment-method-card" id="card_card" style="border: 2px solid var(--border); border-radius: 0.85rem; padding: 0.65rem 0.85rem; background: var(--surface-content); transition: all 0.2s;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+                            <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                <span style="font-size: 1.15rem;">💳</span>
+                                <strong style="font-size: 0.88rem; color: var(--text-main); text-transform: uppercase; font-weight: 800;">Tarjeta / Transbank</strong>
                             </div>
-                            <input type="number" id="pay_card" class="pay-input-pro pay-input" placeholder="0" value="${initialMethod === 'card' ? total : ''}">
+                        </div>
+                        <div style="display: flex; gap: 0.4rem; align-items: stretch;">
+                            <div style="position: relative; flex: 1;">
+                                <span style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); font-weight: 800; color: var(--secondary); font-size: 1.05rem;">$</span>
+                                <input type="number" id="pay_card" class="pay-input-pro pay-input" placeholder="0" 
+                                       value="${initialMethod === 'card' ? total : ''}" 
+                                       style="width: 100%; padding: 0.5rem 0.6rem 0.5rem 1.8rem; font-size: 1.15rem; font-weight: 900; border: 2px solid var(--border); border-radius: 0.6rem; background: var(--surface); box-sizing: border-box;">
+                            </div>
+                            <button type="button" class="btn btn-success" onclick="POSView.fillAmount('pay_card')" 
+                                    style="padding: 0 1.25rem; font-weight: 900; font-size: 0.95rem; border-radius: 0.6rem; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);">
+                                TODO
+                            </button>
                         </div>
                     </div>
 
-                    <div class="payment-method-card" id="card_other">
-                        <div class="payment-icon" style="background: var(--warning-bg); color: var(--warning-text);">🏦</div>
-                        <div class="payment-method-body">
-                            <div class="payment-method-header">
-                                <div class="payment-method-label">TRANSFERENCIA</div>
-                                <button class="btn-fill-diff" onclick="POSView.fillAmount('pay_other')">TODO</button>
+                    <!-- 🏦 TRANSFERENCIA -->
+                    <div class="payment-method-card" id="card_other" style="border: 2px solid var(--border); border-radius: 0.85rem; padding: 0.65rem 0.85rem; background: var(--surface-content); transition: all 0.2s;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+                            <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                <span style="font-size: 1.15rem;">🏦</span>
+                                <strong style="font-size: 0.88rem; color: var(--text-main); text-transform: uppercase; font-weight: 800;">Transferencia / QR</strong>
                             </div>
-                            <input type="number" id="pay_other" class="pay-input-pro pay-input" placeholder="0" value="${initialMethod === 'other' ? total : ''}">
+                        </div>
+                        <div style="display: flex; gap: 0.4rem; align-items: stretch;">
+                            <div style="position: relative; flex: 1;">
+                                <span style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); font-weight: 800; color: var(--secondary); font-size: 1.05rem;">$</span>
+                                <input type="number" id="pay_other" class="pay-input-pro pay-input" placeholder="0" 
+                                       value="${initialMethod === 'other' ? total : ''}" 
+                                       style="width: 100%; padding: 0.5rem 0.6rem 0.5rem 1.8rem; font-size: 1.15rem; font-weight: 900; border: 2px solid var(--border); border-radius: 0.6rem; background: var(--surface); box-sizing: border-box;">
+                            </div>
+                            <button type="button" class="btn btn-warning" onclick="POSView.fillAmount('pay_other')" 
+                                    style="padding: 0 1.25rem; font-weight: 900; font-size: 0.95rem; border-radius: 0.6rem; letter-spacing: 0.5px;">
+                                TODO
+                            </button>
                         </div>
                     </div>
 
                     ${isCustomerSelected ? `
-                    <div class="payment-method-card" id="card_debt" style="border-color: var(--danger); background: var(--danger-bg);">
-                        <div class="payment-icon" style="background: white; color: var(--danger);">📓</div>
-                        <div class="payment-method-body">
-                            <div class="payment-method-header">
-                                <div class="payment-method-label" style="color: var(--danger-text);">ANOTAR DEUDA</div>
-                                <button class="btn-fill-diff" onclick="POSView.fillAmount('pay_debt')" id="btn_fill_debt">[F4] DIFERENCIA</button>
+                    <div class="payment-method-card" id="card_debt" style="border: 2px solid var(--danger); border-radius: 0.85rem; padding: 0.65rem 0.85rem; background: var(--danger-bg);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+                            <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                <span style="font-size: 1.15rem;">📓</span>
+                                <strong style="font-size: 0.88rem; color: var(--danger-text); text-transform: uppercase; font-weight: 800;">Anotar Deuda (Fiado)</strong>
                             </div>
-                            <input type="number" id="pay_debt" class="pay-input-pro pay-input" style="color: var(--danger) !important;" placeholder="0" value="${initialMethod === 'debt' ? total : ''}">
+                        </div>
+                        <div style="display: flex; gap: 0.4rem; align-items: stretch;">
+                            <div style="position: relative; flex: 1;">
+                                <span style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); font-weight: 800; color: var(--danger); font-size: 1.05rem;">$</span>
+                                <input type="number" id="pay_debt" class="pay-input-pro pay-input" style="width: 100%; padding: 0.5rem 0.6rem 0.5rem 1.8rem; font-size: 1.15rem; font-weight: 900; border: 2px solid var(--danger); border-radius: 0.6rem; background: #fff; color: var(--danger) !important; box-sizing: border-box;" placeholder="0" value="${initialMethod === 'debt' ? total : ''}">
+                            </div>
+                            <button type="button" class="btn btn-danger" onclick="POSView.fillAmount('pay_debt')" id="btn_fill_debt" style="padding: 0 1.25rem; font-weight: 900; font-size: 0.88rem; border-radius: 0.6rem;">
+                                [F4] RESTO
+                            </button>
                         </div>
                     </div>
                     
                     ${(parseFloat(customer.balanceCredit) || 0) > 0 && (parseFloat(customer.totalDebt) || 0) <= 0 ? `
-                    <div class="payment-method-card" id="card_credit" style="border-color: var(--accent); background: var(--success-bg);">
-                        <div class="payment-icon" style="background: white; color: var(--accent);">💰</div>
-                        <div class="payment-method-body">
-                            <div class="payment-method-header">
-                                <div class="payment-method-label" style="color: var(--success-text);">USAR SALDO A FAVOR (${formatCLP(customer.balanceCredit)})</div>
-                                <button class="btn-fill-diff" onclick="POSView.fillAmount('pay_credit')">TODO</button>
+                    <div class="payment-method-card" id="card_credit" style="border: 2px solid var(--accent); border-radius: 0.85rem; padding: 0.65rem 0.85rem; background: var(--success-bg);">
+                        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem;">
+                            <div style="display: flex; align-items: center; gap: 0.4rem;">
+                                <span style="font-size: 1.15rem;">💰</span>
+                                <strong style="font-size: 0.88rem; color: var(--success-text); text-transform: uppercase; font-weight: 800;">Saldo a Favor (${formatCLP(customer.balanceCredit)})</strong>
                             </div>
-                            <input type="number" id="pay_credit" class="pay-input-pro pay-input" style="color: var(--success-text) !important;" placeholder="0">
+                        </div>
+                        <div style="display: flex; gap: 0.4rem; align-items: stretch;">
+                            <div style="position: relative; flex: 1;">
+                                <span style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); font-weight: 800; color: var(--success-text); font-size: 1.05rem;">$</span>
+                                <input type="number" id="pay_credit" class="pay-input-pro pay-input" style="width: 100%; padding: 0.5rem 0.6rem 0.5rem 1.8rem; font-size: 1.15rem; font-weight: 900; border: 2px solid var(--accent); border-radius: 0.6rem; background: #fff; color: var(--success-text) !important; box-sizing: border-box;" placeholder="0">
+                            </div>
+                            <button type="button" class="btn btn-success" onclick="POSView.fillAmount('pay_credit')" style="padding: 0 1.25rem; font-weight: 900; font-size: 0.88rem; border-radius: 0.6rem;">
+                                TODO
+                            </button>
                         </div>
                     </div>
                     ` : ''}
                     ` : ''}
                 </div>
 
-                <!-- Columna Derecha: Resumen y Acción -->
-                <div class="payment-summary-card" id="paymentSummaryBox">
+                <!-- Columna Derecha: Resumen Azul y Confirmar -->
+                <div class="payment-summary-card" id="paymentSummaryBox" style="border-radius: 1rem; padding: 1.25rem; display: flex; flex-direction: column; justify-content: space-between; box-shadow: 0 8px 30px rgba(79, 70, 229, 0.3);">
                     <div class="payment-summary-content">
-                        <div class="payment-total-header">
-                            <div class="payment-total-label">TOTAL A COBRAR</div>
-                            <div id="modalTotalToPay" class="payment-total-value-huge">${formatCLP(total, true)}</div>
+                        <div class="payment-total-header" style="text-align: center; margin-bottom: 0.75rem;">
+                            <div class="payment-total-label" style="font-size: 0.78rem; font-weight: 800; color: rgba(255,255,255,0.8); text-transform: uppercase; letter-spacing: 1px;">TOTAL A COBRAR</div>
+                            <div id="modalTotalToPay" class="payment-total-value-huge" style="font-size: 2.3rem; font-weight: 900; color: #fff; margin-top: 0.25rem; line-height: 1;">${formatCLP(total, true)}</div>
                         </div>
 
-                        <div class="payment-summary-details">
+                        <div class="payment-summary-details" style="display: flex; flex-direction: column; gap: 0.5rem;">
                             <!-- DESGLOSE FISCAL DINÁMICO -->
-                            <div id="modalFiscalBreakdown" class="modal-fiscal-breakdown">
-                                <div class="fiscal-row">
+                            <div id="modalFiscalBreakdown" class="modal-fiscal-breakdown" style="background: rgba(255,255,255,0.1); padding: 0.5rem 0.75rem; border-radius: 0.5rem; font-size: 0.82rem; color: #fff;">
+                                <div class="fiscal-row" style="display: flex; justify-content: space-between;">
                                     <span>Neto:</span>
                                     <strong id="modalNeto">$0</strong>
                                 </div>
-                                <div class="fiscal-row">
+                                <div class="fiscal-row" style="display: flex; justify-content: space-between;">
                                     <span>IVA (19%):</span>
                                     <strong id="modalIVA">$0</strong>
                                 </div>
                             </div>
 
-                            <div class="payment-status-section">
-                                <div class="payment-status-label">Estado del Pago</div>
-                                <div id="payment_status_text" class="payment-status-value">PENDIENTE</div>
+                            <div class="payment-status-section" style="text-align: center; padding: 0.4rem; background: rgba(0,0,0,0.15); border-radius: 0.5rem;">
+                                <div class="payment-status-label" style="font-size: 0.7rem; color: rgba(255,255,255,0.7); text-transform: uppercase; font-weight: 700;">Estado del Pago</div>
+                                <div id="payment_status_text" class="payment-status-value" style="font-size: 1.1rem; font-weight: 900; color: #fbbf24;">PENDIENTE</div>
                             </div>
-                            
-                            <hr class="payment-divider">
 
-                            <div class="payment-summary-row">
+                            <div class="payment-summary-row" style="display: flex; justify-content: space-between; color: #fff; font-size: 0.95rem; font-weight: 700;">
                                 <span class="summary-label">Recibido:</span>
                                 <strong id="sum_paid" class="summary-value">${formatCLP(0, true)}</strong>
                             </div>
 
-                            <div class="payment-summary-row">
+                            <div class="payment-summary-row" style="display: flex; justify-content: space-between; color: #fff; font-size: 1.25rem; font-weight: 900; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 0.4rem;">
                                 <span id="diff_label" class="summary-label-big">Resta:</span>
                                 <strong id="sum_diff" class="summary-value-huge">${formatCLP(total, true)}</strong>
                             </div>
 
                             <!-- Cálculo de vuelto automático -->
-                            <div id="changeSection" style="display: none; margin-top: 1rem; padding: 1rem; background: #dcfce7; border: 2px solid #22c55e; border-radius: 0.75rem;">
-                                <div style="font-size: 0.85rem; font-weight: 700; color: #166534; margin-bottom: 0.5rem;">💵 Vuelto a Entregar</div>
-                                <div id="changeAmount" style="font-size: 1.5rem; font-weight: 800; color: #15803d;">$0</div>
+                            <div id="changeSection" style="display: none; margin-top: 0.5rem; padding: 0.6rem 0.75rem; background: #dcfce7; border: 2px solid #22c55e; border-radius: 0.6rem; text-align: center;">
+                                <div style="font-size: 0.78rem; font-weight: 800; color: #166534;">💵 VUELTO A ENTREGAR</div>
+                                <div id="changeAmount" style="font-size: 1.5rem; font-weight: 900; color: #15803d; line-height: 1.1;">$0</div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="payment-actions">
-                        <button id="btn_process_payment" class="btn btn-primary btn-process-payment" disabled onclick="POSView.processUnifiedSale()">
+                    <div class="payment-actions" style="margin-top: 0.75rem;">
+                        <button id="btn_process_payment" class="btn btn-primary btn-process-payment" disabled onclick="POSView.processUnifiedSale()" 
+                                style="width: 100%; height: 50px; font-size: 1.1rem; font-weight: 900; border-radius: 0.75rem; border: 2px solid #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.2); letter-spacing: 0.5px;">
                             CONFIRMAR VENTA
                         </button>
                     </div>
@@ -1170,8 +1255,8 @@ const POSView = {
             </div>
         `;
 
-        const footer = `<button class="btn btn-outline-secondary" onclick="closeModal()">Cancelar</button>`;
-        showModal(content, { title: '💰 Proceso de Pago', footer, width: '850px' });
+        const footer = `<button class="btn btn-outline-secondary" onclick="closeModal()" style="font-weight: 700; padding: 0.4rem 1.25rem; border-radius: 0.5rem;">Cancelar</button>`;
+        showModal(content, { title: '💰 Proceso de Pago', footer, width: '960px' });
 
         const inputs = document.querySelectorAll('.pay-input');
         const update = () => {
@@ -1402,6 +1487,16 @@ const POSView = {
         }
     },
 
+    setCashAmount(amount) {
+        const payCashInput = document.getElementById('pay_cash');
+        if (payCashInput) {
+            payCashInput.value = amount;
+            payCashInput.dispatchEvent(new Event('input'));
+            const btn = document.getElementById('btn_process_payment');
+            if (btn && !btn.disabled) btn.focus();
+        }
+    },
+
     fillRemainingDebt(total) {
         const cash = parseFloat(document.getElementById('pay_cash').value) || 0;
         const card = parseFloat(document.getElementById('pay_card').value) || 0;
@@ -1589,7 +1684,113 @@ const POSView = {
         }
     },
 
-    // Note: showMixedPaymentModal and completeSalePending were replaced by showPaymentModal
+    async quickPayExactCash() {
+        if (this._isProcessingSale) return;
+        const summary = posController.getCartSummary();
+        if (summary.items.length === 0) {
+            showNotification('El carrito está vacío', 'warning');
+            return;
+        }
+
+        const salePaidDetails = {
+            cash: summary.roundedTotal,
+            card: 0,
+            other: 0,
+            debt: 0,
+            creditBalance: 0
+        };
+
+        await this._executeSaleDirectly(salePaidDetails, summary.roundedTotal, 0, this.selectedDocType || 'boleta');
+    },
+
+    async quickPayCard() {
+        if (this._isProcessingSale) return;
+        const summary = posController.getCartSummary();
+        if (summary.items.length === 0) {
+            showNotification('El carrito está vacío', 'warning');
+            return;
+        }
+
+        const salePaidDetails = {
+            cash: 0,
+            card: summary.total,
+            other: 0,
+            debt: 0,
+            creditBalance: 0
+        };
+
+        await this._executeSaleDirectly(salePaidDetails, summary.total, 0, 'boleta');
+    },
+
+    async _executeSaleDirectly(salePaidDetails, finalSaleTotal, calculatedChange = 0, forcedDocType = 'boleta') {
+        if (this._isProcessingSale) return;
+        this._isProcessingSale = true;
+
+        try {
+            let mainMethod = salePaidDetails.cash > 0 ? 'cash' : (salePaidDetails.card > 0 ? 'card' : 'other');
+            const sale = await posController.completeSale(mainMethod, false, salePaidDetails, forcedDocType, finalSaleTotal);
+            
+            this.startNewSale();
+            this.updateRecentSalesUI();
+            
+            showNotification(`✅ Venta #${sale.saleNumber || ''} procesada al instante`, 'success');
+            this.showSaleReceipt(sale, false, finalSaleTotal, calculatedChange);
+        } catch (e) {
+            showNotification(e.message || 'Error al procesar cobro rápido', 'error');
+        } finally {
+            this._isProcessingSale = false;
+        }
+    },
+
+    renderHeldSalesTabs() {
+        const tabBar = document.getElementById('heldSalesTabBar');
+        if (!tabBar) return;
+
+        const summary = posController.getCartSummary();
+        const sales = posController.heldSales || [];
+
+        let html = `
+            <div class="pos-held-tab active" style="display: flex; align-items: center; gap: 0.4rem; padding: 0.35rem 0.75rem; border-radius: 0.6rem; border: 2px solid var(--primary); background: rgba(79, 70, 229, 0.1); color: var(--primary); font-weight: 800; font-size: 0.8rem; white-space: nowrap;">
+                <span>🛒 Venta Actual</span>
+                <span style="background: var(--primary); color: #fff; padding: 0.1rem 0.4rem; border-radius: 0.35rem; font-size: 0.72rem; font-weight: 900;">${formatCLP(summary.total)}</span>
+            </div>
+        `;
+
+        sales.forEach(s => {
+            const total = s.cart.reduce((sum, item) => sum + item.total, 0);
+            html += `
+                <div class="pos-held-tab" style="display: flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.65rem; border-radius: 0.6rem; border: 1.5px solid #f59e0b; background: rgba(245, 158, 11, 0.08); color: #d97706; font-weight: 800; font-size: 0.78rem; white-space: nowrap;">
+                    <span onclick="POSView.resumeHeldSale(${s.id})" style="display: flex; align-items: center; gap: 0.35rem; cursor: pointer;">
+                        <span>⏸️ ${safeHTML(s.name)}</span>
+                        <strong style="background: #f59e0b; color: #fff; padding: 0.1rem 0.4rem; border-radius: 0.35rem; font-size: 0.72rem;">${formatCLP(total)}</strong>
+                    </span>
+                    <button type="button" onclick="event.stopPropagation(); POSView.discardHeldSale(${s.id})" title="Descartar venta" style="border: none; background: transparent; color: #ef4444; font-weight: 900; font-size: 0.85rem; cursor: pointer; padding: 0 0.15rem; line-height: 1;">✕</button>
+                </div>
+            `;
+        });
+
+        html += `
+            <button type="button" class="btn btn-sm btn-ghost" onclick="POSView.holdCurrentSale()" title="Poner venta actual en espera [F6]" 
+                    style="border: 1.5px dashed var(--border); border-radius: 0.6rem; font-weight: 800; font-size: 0.75rem; padding: 0.3rem 0.65rem; white-space: nowrap; display: flex; align-items: center; gap: 0.25rem;">
+                <span>➕</span>
+                <span>En Espera [F6]</span>
+            </button>
+        `;
+
+        tabBar.innerHTML = html;
+    },
+
+    discardHeldSale(id) {
+        if (confirm('¿Deseas descartar esta venta en espera?')) {
+            const index = posController.heldSales.findIndex(s => s.id === id);
+            if (index !== -1) {
+                posController.heldSales.splice(index, 1);
+                localStorage.setItem('heldSales', JSON.stringify(posController.heldSales));
+                this.updateCart();
+                showNotification('Venta en espera descartada', 'info');
+            }
+        }
+    },
 
     showSaleReceipt(sale, isPending = false, tendered = null, change = null) {
         // Guardar referencia para copias

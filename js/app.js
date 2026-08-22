@@ -205,14 +205,14 @@ const app = {
 
         this.currentView = viewName;
 
-        document.querySelectorAll('.nav-menu a').forEach(link => {
+        document.querySelectorAll('#bottom-nav .nav-item, .more-menu-item').forEach(link => {
             link.classList.remove('active');
         });
 
-        const activeLink = document.querySelector(`[data-view="${viewName}"]`);
-        if (activeLink) {
-            activeLink.classList.add('active');
-        }
+        const activeLinks = document.querySelectorAll(`[data-view="${viewName}"]`);
+        activeLinks.forEach(link => {
+            link.classList.add('active');
+        });
 
         const container = document.getElementById('view-container');
         if (container) {
@@ -248,6 +248,16 @@ const app = {
         }
     },
 
+    toggleMoreMenu(forceState = null) {
+        const overlay = document.getElementById('more-menu-overlay');
+        if (!overlay) return;
+        if (forceState !== null) {
+            overlay.style.display = forceState ? 'flex' : 'none';
+        } else {
+            overlay.style.display = (overlay.style.display === 'none' || overlay.style.display === '') ? 'flex' : 'none';
+        }
+    },
+
     async updateCashStatus() {
         const isOpen = await CashController.checkCashStatus();
         const currentCashStatus = document.getElementById('currentCashStatus');
@@ -277,13 +287,12 @@ const app = {
     },
 
     applyPermissionsToSidebar() {
-        const navLinks = document.querySelectorAll('.nav-menu a[data-view]');
+        const navLinks = document.querySelectorAll('#bottom-nav [data-view], .more-menu-item[data-view]');
         navLinks.forEach(link => {
             const view = link.dataset.view;
             const permission = 'nav.' + view;
-            const li = link.closest('li');
-            if (li) {
-                li.style.display = PermissionService.can(permission) ? '' : 'none';
+            if (link) {
+                link.style.display = PermissionService.can(permission) ? '' : 'none';
             }
         });
     },
