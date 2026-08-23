@@ -99,6 +99,14 @@ async function runSchemaMigrations() {
         console.warn('[Schema] Error asegurando índices de saleReturns:', e.message);
     }
 
+    // ponytail: Crear índice único para categories por negocio y nombre para blindar contra duplicados
+    try {
+        await dbRun("CREATE UNIQUE INDEX IF NOT EXISTS idx_categories_unique_name ON categories(business_id, LOWER(name))");
+        console.log('[Schema] Índice único para categories creado.');
+    } catch (e) {
+        console.warn('[Schema] Error asegurando índice único de categories:', e.message);
+    }
+
     // Migración: Autolimpieza de compras con saldos residuales decimales/insignificantes (<= $2.5 CLP)
     try {
         const residualPurchases = await dbAll(

@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reporte de Auditoría de Inventario - Caja Fácil POS</title>
+    <style>
+        :root {
+            --primary: #4f46e5;
+            --primary-dark: #3730a3;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+            --bg: #f8fafc;
+            --card-bg: #ffffff;
+            --text-main: #0f172a;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.5;
+            padding: 2rem 1rem;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header-card {
+            background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%);
+            color: white;
+            padding: 2.5rem 2rem;
+            border-radius: 1rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 25px -5px rgba(49, 46, 129, 0.2);
+            position: relative;
+        }
+
+        .header-card h1 {
+            font-size: 1.8rem;
+            font-weight: 800;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.02em;
+        }
+
+        .header-card p {
+            color: #c7d2fe;
+            font-size: 0.95rem;
+        }
+
+        .header-meta {
+            display: flex;
+            gap: 1.5rem;
+            margin-top: 1.25rem;
+            font-size: 0.85rem;
+            color: #a5b4fc;
+        }
+
+        .print-btn {
+            position: absolute;
+            top: 2rem;
+            right: 2rem;
+            background-color: #ffffff;
+            color: #4338ca;
+            font-weight: 700;
+            padding: 0.6rem 1.2rem;
+            border-radius: 0.5rem;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .print-btn:hover {
+            background-color: #f1f5f9;
+            transform: translateY(-1px);
+        }
+
+        .section-card {
+            background: var(--card-bg);
+            border-radius: 0.85rem;
+            border: 1px solid var(--border);
+            padding: 1.75rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-main);
+            margin-bottom: 0.5rem;
+        }
+
+        .section-desc {
+            font-size: 0.88rem;
+            color: var(--text-muted);
+            margin-bottom: 1.25rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+            text-align: left;
+        }
+
+        th {
+            background-color: #f1f5f9;
+            color: #475569;
+            font-weight: 700;
+            padding: 0.75rem 1rem;
+            border-bottom: 2px solid var(--border);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.05em;
+        }
+
+        td {
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover td {
+            background-color: #f8fafc;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.2rem 0.6rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 700;
+        }
+
+        .badge-danger {
+            background-color: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .badge-warning {
+            background-color: #fef3c7;
+            color: #b45309;
+        }
+
+        .badge-category {
+            background-color: #e0e7ff;
+            color: #4338ca;
+        }
+
+        .badge-id {
+            background-color: #f1f5f9;
+            color: #64748b;
+            font-family: monospace;
+            font-weight: 700;
+        }
+
+        .num {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
+        th.num {
+            text-align: right;
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 2rem;
+        }
+
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            .print-btn {
+                display: none;
+            }
+            .section-card {
+                box-shadow: none;
+                border: 1px solid #ccc;
+                page-break-inside: avoid;
+            }
+            .header-card {
+                background: #1e1b4b !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-card">
+        <button class="print-btn" onclick="window.print()">🖨️ Imprimir / Guardar como PDF</button>
+        <h1>📋 Reporte de Auditoría de Inventario</h1>
+        <p>Sistema de Ventas y Punto de Venta (POS)</p>
+        <div class="header-meta">
+            <span>📅 Fecha: 23 de Agosto de 2026</span>
+            <span>📦 Total de Productos Auditados: 552</span>
+            <span>🔒 Estado: Catálogo Reorganizado</span>
+        </div>
+    </div>
+
+    <!-- SECCION 1: COSTO O PRECIO EN $0 -->
+    <div class="section-card">
+        <div class="section-title">
+            <span>⚠️</span>
+            <h2>1. Productos con Costo o Precio de Venta en $0</h2>
+        </div>
+        <p class="section-desc">Estos artículos requieren asignación de costo real o precio de venta para no distorsionar tus reportes financieros ni los márgenes de ganancia.</p>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 70px;">ID</th>
+                    <th>Producto</th>
+                    <th>Categoría</th>
+                    <th class="num">Costo</th>
+                    <th class="num">Precio Venta</th>
+                    <th class="num">Stock</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="badge badge-id">#387</span></td>
+                    <td><strong>Crayones de cera</strong></td>
+                    <td><span class="badge badge-category">Basar</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">2 u</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#60</span></td>
+                    <td><strong>Curita</strong></td>
+                    <td><span class="badge badge-category">Remedios</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">$100</td>
+                    <td class="num">0 u</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#10545</span></td>
+                    <td><strong>DURAZNO mitades 425g</strong></td>
+                    <td><span class="badge badge-category">Conserva</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">2 u</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#392</span></td>
+                    <td><strong>Lapices colores doble punta</strong></td>
+                    <td><span class="badge badge-category">Basar</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">5 u</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#10581</span></td>
+                    <td><strong>MANTEQUILLA COLUN C/SAL 125 GRS</strong></td>
+                    <td><span class="badge badge-category">Lácteos</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">0 u</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#386</span></td>
+                    <td><strong>Marcadores</strong></td>
+                    <td><span class="badge badge-category">Basar</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">2 u</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#10479</span></td>
+                    <td><strong>Pepsodent xtra white</strong></td>
+                    <td><span class="badge badge-category">Aseo</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">$1.700</td>
+                    <td class="num">0 u</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#10477</span></td>
+                    <td><strong>Ramitas de queso 160g</strong></td>
+                    <td><span class="badge badge-category">Snack</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">0 u</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#10489</span></td>
+                    <td><strong>Acondicionador ballerina 40 ml</strong></td>
+                    <td><span class="badge badge-category">Aseo</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">$350</td>
+                    <td class="num">12 u</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#299</span></td>
+                    <td><strong>Albahaca</strong></td>
+                    <td><span class="badge badge-category">Feria</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">0 u</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#451</span></td>
+                    <td><strong>Choclo trozo casero</strong></td>
+                    <td><span class="badge badge-category">Feria</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">$800</td>
+                    <td class="num">0 u</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#454</span></td>
+                    <td><strong>Dely</strong></td>
+                    <td><span class="badge badge-category">Abarrote</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">$2.000</td>
+                    <td class="num">0 u</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#385</span></td>
+                    <td><strong>Destacador</strong></td>
+                    <td><span class="badge badge-category">Basar</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">1 u</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#10452</span></td>
+                    <td><strong>Pastel choclo</strong></td>
+                    <td><span class="badge badge-category">Comida Preparada</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">$5.000</td>
+                    <td class="num"><span class="badge badge-danger">-2 u</span></td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#10549</span></td>
+                    <td><strong>Porotos con mazamorra</strong></td>
+                    <td><span class="badge badge-category">Comida Preparada</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">$5.000</td>
+                    <td class="num"><span class="badge badge-danger">-12 u</span></td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#389</span></td>
+                    <td><strong>Sacapuntas</strong></td>
+                    <td><span class="badge badge-category">Basar</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">5 u</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#390</span></td>
+                    <td><strong>Tijeras</strong></td>
+                    <td><span class="badge badge-category">Basar</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num"><span class="badge badge-danger">$0</span></td>
+                    <td class="num">4 u</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- SECCION 2: STOCK NEGATIVO -->
+    <div class="section-card">
+        <div class="section-title">
+            <span>📦</span>
+            <h2>2. Productos con Stock Negativo (Ajuste de Inventario Requerido)</h2>
+        </div>
+        <p class="section-desc">Estos artículos fueron vendidos sin registro previo de stock o compra. Se sugiere realizar un conteo físico o resetear a 0.</p>
+        
+        <table>
+            <thead>
+                <tr>
+                    <th style="width: 70px;">ID</th>
+                    <th>Producto</th>
+                    <th>Categoría</th>
+                    <th class="num">Stock Actual</th>
+                    <th class="num">Costo Unit.</th>
+                    <th class="num">Precio Venta</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="badge badge-id">#10549</span></td>
+                    <td><strong>Porotos con mazamorra</strong></td>
+                    <td><span class="badge badge-category">Comida Preparada</span></td>
+                    <td class="num"><span class="badge badge-danger">-12 u</span></td>
+                    <td class="num">$0</td>
+                    <td class="num"><strong>$5.000</strong></td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#7</span></td>
+                    <td><strong>Loop</strong></td>
+                    <td><span class="badge badge-category">Golosina</span></td>
+                    <td class="num"><span class="badge badge-danger">-6 u</span></td>
+                    <td class="num">$159</td>
+                    <td class="num"><strong>$300</strong></td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#9</span></td>
+                    <td><strong>Amberries</strong></td>
+                    <td><span class="badge badge-category">Golosina</span></td>
+                    <td class="num"><span class="badge badge-danger">-6 u</span></td>
+                    <td class="num">$157</td>
+                    <td class="num"><strong>$300</strong></td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#133</span></td>
+                    <td><strong>Crema espesa</strong></td>
+                    <td><span class="badge badge-category">Lácteos</span></td>
+                    <td class="num"><span class="badge badge-danger">-2 u</span></td>
+                    <td class="num">$839</td>
+                    <td class="num"><strong>$1.400</strong></td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#217</span></td>
+                    <td><strong>Cachantun 2.5 s/g</strong></td>
+                    <td><span class="badge badge-category">Agua</span></td>
+                    <td class="num"><span class="badge badge-danger">-2 u</span></td>
+                    <td class="num">$986</td>
+                    <td class="num"><strong>$1.600</strong></td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#327</span></td>
+                    <td><strong>Coca cola sin azúcar 591ml</strong></td>
+                    <td><span class="badge badge-category">Bebidas</span></td>
+                    <td class="num"><span class="badge badge-danger">-2 u</span></td>
+                    <td class="num">$938</td>
+                    <td class="num"><strong>$1.550</strong></td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#10452</span></td>
+                    <td><strong>Pastel choclo</strong></td>
+                    <td><span class="badge badge-category">Comida Preparada</span></td>
+                    <td class="num"><span class="badge badge-danger">-2 u</span></td>
+                    <td class="num">$0</td>
+                    <td class="num"><strong>$5.000</strong></td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#415</span></td>
+                    <td><strong>Comida de cachorro 500g</strong></td>
+                    <td><span class="badge badge-category">Animal</span></td>
+                    <td class="num"><span class="badge badge-danger">-1.81 kg</span></td>
+                    <td class="num">$1.203</td>
+                    <td class="num"><strong>$2.000</strong></td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#58</span></td>
+                    <td><strong>Levadura pura</strong></td>
+                    <td><span class="badge badge-category">Abarrote</span></td>
+                    <td class="num"><span class="badge badge-danger">-1 u</span></td>
+                    <td class="num">$130</td>
+                    <td class="num"><strong>$450</strong></td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#262</span></td>
+                    <td><strong>Mayo Kraft 789g</strong></td>
+                    <td><span class="badge badge-category">Abarrote</span></td>
+                    <td class="num"><span class="badge badge-danger">-1 u</span></td>
+                    <td class="num">$5.044</td>
+                    <td class="num"><strong>$7.800</strong></td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#369</span></td>
+                    <td><strong>Always ultra fina día</strong></td>
+                    <td><span class="badge badge-category">Aseo</span></td>
+                    <td class="num"><span class="badge badge-danger">-1 u</span></td>
+                    <td class="num">$924</td>
+                    <td class="num"><strong>$1.550</strong></td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#408</span></td>
+                    <td><strong>Galleta vivo soda</strong></td>
+                    <td><span class="badge badge-category">Galletas</span></td>
+                    <td class="num"><span class="badge badge-danger">-1 u</span></td>
+                    <td class="num">$690</td>
+                    <td class="num"><strong>$1.150</strong></td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#458</span></td>
+                    <td><strong>Helado orly menta</strong></td>
+                    <td><span class="badge badge-category">Helado</span></td>
+                    <td class="num"><span class="badge badge-danger">-1 u</span></td>
+                    <td class="num">$622</td>
+                    <td class="num"><strong>$1.100</strong></td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-id">#10474</span></td>
+                    <td><strong>Powerade 850ml rojo</strong></td>
+                    <td><span class="badge badge-category">Energetica</span></td>
+                    <td class="num"><span class="badge badge-danger">-1 u</span></td>
+                    <td class="num">$771</td>
+                    <td class="num"><strong>$1.500</strong></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="footer">
+        Documento generado automáticamente para gestión contable y control de stock - Caja Fácil
+    </div>
+</div>
+
+</body>
+</html>

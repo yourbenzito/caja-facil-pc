@@ -171,6 +171,19 @@ function validatePasswordComplexity(password) {
     return { valid: true };
 }
 
+function formatTitleCase(str) {
+    if (!str || typeof str !== 'string') return 'General';
+    const cleaned = str.trim().replace(/\s+/g, ' ');
+    if (!cleaned) return 'General';
+    return cleaned.split(' ').map(word => {
+        if (!word) return '';
+        if (word.length <= 3 && word === word.toUpperCase() && /^[A-ZÁÉÍÓÚÑ]+$/.test(word)) {
+            return word;
+        }
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    }).join(' ');
+}
+
 module.exports = {
     parseNumber,
     roundPrice,
@@ -179,5 +192,6 @@ module.exports = {
     stripSensitiveUserFields,
     computeCashRefundForSale,
     parseRow,
-    validatePasswordComplexity
+    validatePasswordComplexity,
+    formatTitleCase
 };

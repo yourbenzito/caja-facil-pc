@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { dbGet, dbRun, dbAll, getTableColumns, filterToColumns } = require('../database/connection');
-const { parseRow, stripSensitiveUserFields } = require('../helpers/utils');
+const { parseRow, stripSensitiveUserFields, formatTitleCase } = require('../helpers/utils');
 const { requireRole } = require('../middleware/auth');
 
 const ALLOWED_TABLES = [
@@ -245,6 +245,22 @@ router.post('/api/:table', async (req, res) => {
         if (table === 'users' && item.password) {
             const bcrypt = require('bcryptjs');
             item.password = await bcrypt.hash(String(item.password), 10);
+        }
+
+        // ponytail: Candado antiduplicados y TitleCase para categorías
+        if (table === 'categories' && item.name) {
+            item.name = formatTitleCase(item.name);
+            const existingCat = await dbGet(`SELECT * FROM categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND business_id = ?`, [item.name, bid]);
+            if (existingCat) return res.json(parseRow(existingCat));
+        }
+
+        // ponytail: Auto TitleCase y auto-registro único para categorías de productos
+        if (table === 'products' && item.category) {
+            item.category = formatTitleCase(item.category);
+            const existingCat = await dbGet(`SELECT id FROM categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND business_id = ?`, [item.category, bid]);
+            if (!existingCat) {
+                await dbRun(`INSERT INTO categories (name, color, business_id, is_synced) VALUES (?, '#3b82f6', ?, 1)`, [item.category, bid]);
+            }
         }
 
         const ks = Object.keys(item); 

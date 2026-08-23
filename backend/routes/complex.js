@@ -166,6 +166,13 @@ router.post('/api/complex/product', async (req, res) => {
             await dbRun(`INSERT INTO productPriceHistory (productId, oldPrice, newPrice, date, business_id) VALUES (?, ?, ?, ?, ?)`, 
                 [r.lastID, 0, product.price || 0, new Date().toISOString(), bid]);
                 
+            if (product.category) {
+                const existingCat = await dbGet(`SELECT id FROM categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND business_id = ?`, [product.category, bid]);
+                if (!existingCat) {
+                    await dbRun(`INSERT INTO categories (name, color, business_id, is_synced) VALUES (?, '#3b82f6', ?, 1)`, [product.category, bid]);
+                }
+            }
+            
             return r.lastID;
         });
         res.json({ id: result, ...product });
@@ -197,6 +204,13 @@ router.put('/api/complex/product/:id', async (req, res) => {
                 await dbRun(`UPDATE products SET ${ks.map(k => `${k} = ?`).join(',')} WHERE id = ? AND business_id = ?`, [...ks.map(k => typeof cleanProduct[k] === 'object' ? JSON.stringify(cleanProduct[k]) : cleanProduct[k]), id, bid]);
             }
             
+            if (product.category) {
+                const existingCat = await dbGet(`SELECT id FROM categories WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND business_id = ?`, [product.category, bid]);
+                if (!existingCat) {
+                    await dbRun(`INSERT INTO categories (name, color, business_id, is_synced) VALUES (?, '#3b82f6', ?, 1)`, [product.category, bid]);
+                }
+            }
+
             if (product.price !== undefined && parseFloat(product.price) !== parseFloat(old.price)) {
                 await dbRun(`INSERT INTO productPriceHistory (productId, oldPrice, newPrice, date, business_id) VALUES (?, ?, ?, ?, ?)`, 
                     [id, old.price, product.price, new Date().toISOString(), bid]);
