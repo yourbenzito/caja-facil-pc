@@ -1,7 +1,7 @@
 const InventoryView = {
     currentSection: 'inventory',
     stockFilter: null,
-    showCapitalDist: false,
+    showCapitalDist: true,
     products: null,
     recentMovements: [],
     bulkAdjustmentItems: [],
@@ -14,11 +14,13 @@ const InventoryView = {
     selectedConsumptionDate: new Date().toLocaleDateString('sv-SE'), // YYYY-MM-DD local
     selectedLossDate: new Date().toLocaleDateString('sv-SE'), // YYYY-MM-DD local
 
-    // Variables para filtros del inventario principal
+    // Variables para filtros y paginación del inventario principal
     inventorySearchQuery: '',
     inventorySelectedCategory: '',
     inventorySelectedStockStatus: 'all',
     inventorySelectedSupplier: '',
+    inventoryCurrentPage: 1,
+    inventoryPageSize: 15,
 
     // Variables para la sección unificada de pérdidas/consumos
     lossesSearchQuery: '',
@@ -478,18 +480,17 @@ const InventoryView = {
                     <span style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.95rem;">
                         <span>🧩</span> Distribución de Capital por Categoría (${dashboard.categoryDistribution.length} categorías)
                     </span>
-                    <span style="background: #f1f5f9; padding: 0.25rem 0.75rem; border-radius: 0.5rem; font-size: 0.8rem; font-weight: 800; color: #3b82f6;">
-                        ${this.showCapitalDist ? '▲ Ocultar Panel' : '▼ Ver Análisis Completo'}
+                    <span id="capital-toggle-label" style="background: #f1f5f9; padding: 0.25rem 0.75rem; border-radius: 0.5rem; font-size: 0.8rem; font-weight: 800; color: #3b82f6;">
+                        ${this.showCapitalDist !== false ? '▲ Ocultar Panel' : '▼ Ver Análisis Completo'}
                     </span>
                 </button>
                 
-                ${this.showCapitalDist ? `
-                <div class="animate-slide-down" style="margin-top: 1rem; background: #ffffff; border-radius: 1.25rem; padding: 1.5rem; border: 2px solid #e2e8f0; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
+                <div id="capital-distribution-panel" class="animate-slide-down" style="display: ${this.showCapitalDist !== false ? 'block' : 'none'}; margin-top: 1rem; background: #ffffff; border-radius: 1.25rem; padding: 1.5rem; border: 2px solid #e2e8f0; box-shadow: 0 10px 25px rgba(0,0,0,0.05);">
                     <!-- ACCIONES Y REPORTE -->
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
                         <div>
                             <h4 style="margin: 0; font-size: 1.1rem; color: #0f172a; font-weight: 900;">Análisis Financiero de Inventario por Categorías</h4>
-                            <p style="margin: 0.2rem 0 0 0; color: #64748b; font-size: 0.82rem;">Capital invertido y margen de ganancia proyectado por rubro</p>
+                            <p style="margin: 0.2rem 0 0 0; color: #64748b; font-size: 0.82rem;">Haz clic en cualquier categoría para ver y gestionar sus productos en la lista inferior</p>
                         </div>
                         <button class="btn btn-success" onclick="InventoryView.exportCapitalDistributionCSV()" style="font-weight: 800; font-size: 0.85rem;">
                             📊 Exportar Distribución (CSV)
@@ -503,13 +504,13 @@ const InventoryView = {
                         const topCatMargin = sortedByMargin[0] || { name: 'N/A', margin: 0 };
                         return `
                             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
-                                <div style="padding: 1rem; background: rgba(59, 130, 246, 0.06); border: 1.5px solid rgba(59, 130, 246, 0.25); border-radius: 0.85rem;">
+                                <div style="padding: 1rem; background: rgba(59, 130, 246, 0.06); border: 1.5px solid rgba(59, 130, 246, 0.25); border-radius: 0.85rem; cursor: pointer;" onclick="InventoryView.selectCategoryAndScroll('${topCatCapital.name.replace(/'/g, "\\'")}')">
                                     <span style="font-size: 0.75rem; color: #2563eb; font-weight: 800; text-transform: uppercase;">👑 Mayor Inversión de Capital</span>
                                     <div style="font-size: 1.15rem; font-weight: 950; color: #1e293b; margin-top: 0.25rem;">${safeHTML(topCatCapital.name)}</div>
                                     <small style="font-size: 0.8rem; color: #2563eb; font-weight: 800;">${formatCLP(topCatCapital.capital)} (${topCatCapital.percent.toFixed(1)}% del negocio)</small>
                                 </div>
 
-                                <div style="padding: 1rem; background: rgba(16, 185, 129, 0.06); border: 1.5px solid rgba(16, 185, 129, 0.25); border-radius: 0.85rem;">
+                                <div style="padding: 1rem; background: rgba(16, 185, 129, 0.06); border: 1.5px solid rgba(16, 185, 129, 0.25); border-radius: 0.85rem; cursor: pointer;" onclick="InventoryView.selectCategoryAndScroll('${topCatMargin.name.replace(/'/g, "\\'")}')">
                                     <span style="font-size: 0.75rem; color: #059669; font-weight: 800; text-transform: uppercase;">💎 Mayor Margen de Ganancia</span>
                                     <div style="font-size: 1.15rem; font-weight: 950; color: #1e293b; margin-top: 0.25rem;">${safeHTML(topCatMargin.name)}</div>
                                     <small style="font-size: 0.8rem; color: #059669; font-weight: 800;">+${topCatMargin.margin.toFixed(1)}% Margen Neto</small>
@@ -523,10 +524,14 @@ const InventoryView = {
                         ${dashboard.categoryDistribution.map(cat => {
                             const barColor = cat.percent > 15 ? '#3b82f6' : (cat.percent > 5 ? '#10b981' : '#f59e0b');
                             return `
-                            <div class="capital-dist-card" style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 1rem; padding: 1.1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: space-between;">
+                            <div class="capital-dist-card" 
+                                 onclick="InventoryView.showCategoryProductsModal('${cat.name.replace(/'/g, "\\'")}')"
+                                 style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 1rem; padding: 1.15rem; box-shadow: 0 4px 12px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: space-between; cursor: pointer; transition: all 0.2s;"
+                                 onmouseover="this.style.borderColor='#3b82f6'; this.style.transform='translateY(-3px)'; this.style.boxShadow='0 8px 20px rgba(59,130,246,0.1)';"
+                                 onmouseout="this.style.borderColor='#e2e8f0'; this.style.transform='translateY(0)'; this.style.boxShadow='0 4px 12px rgba(0,0,0,0.03)';">
                                 <div>
                                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
-                                        <h4 style="margin: 0; font-size: 1rem; color: #0f172a; text-transform: capitalize; font-weight: 900;">${safeHTML(cat.name)}</h4>
+                                        <h4 style="margin: 0; font-size: 1.05rem; color: #0f172a; text-transform: capitalize; font-weight: 900;">${safeHTML(cat.name)}</h4>
                                         <div style="text-align: right;">
                                             <span style="font-size: 0.8rem; font-weight: 900; color: ${barColor}; background: rgba(59, 130, 246, 0.1); padding: 2px 8px; border-radius: 0.4rem;">${cat.percent.toFixed(1)}% total</span>
                                         </div>
@@ -534,17 +539,18 @@ const InventoryView = {
                                     
                                     <div style="display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.85rem; border-top: 1px solid #f1f5f9; padding-top: 0.6rem;">
                                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                                            <span style="font-size: 0.8rem; color: #64748b; font-weight: 700;">Capital Neto:</span>
+                                            <span style="font-size: 0.8rem; color: #64748b; font-weight: 700;">Capital Invertido:</span>
                                             <strong style="font-size: 1rem; font-weight: 950; color: #0f172a;">${formatCLP(cat.capital)}</strong>
                                         </div>
                                         <div style="display: flex; justify-content: space-between; align-items: center;">
-                                            <span style="font-size: 0.8rem; color: #059669; font-weight: 700;">Ganancia Proyectada:</span>
+                                            <span style="font-size: 0.8rem; color: #059669; font-weight: 700;">Ganancia Estimada:</span>
                                             <strong style="font-size: 1rem; font-weight: 950; color: #059669;">+${formatCLP(cat.profit)} (+${cat.margin.toFixed(1)}%)</strong>
                                         </div>
                                     </div>
 
-                                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.75rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 700;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; color: #475569; margin-bottom: 0.5rem; font-weight: 800;">
                                         <span>📦 ${cat.count} producto(s)</span>
+                                        <span style="color: #2563eb; font-weight: 800;">Abrir lista ➔</span>
                                     </div>
                                     
                                     <div style="width: 100%; height: 7px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin-bottom: 0.85rem;">
@@ -552,82 +558,149 @@ const InventoryView = {
                                     </div>
                                 </div>
 
-                                <button type="button" class="btn btn-secondary btn-sm" 
-                                        onclick="InventoryView.filterByCategoryFromDistribution('${cat.name.replace(/'/g, "\\'")}')"
-                                        style="width: 100%; font-weight: 800; font-size: 0.78rem; padding: 0.4rem 0.5rem; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 0.5rem; color: #1e293b; cursor: pointer; transition: all 0.2s;">
-                                    🔍 Filtrar Productos de esta Categoría
+                                <button type="button" class="btn btn-primary btn-sm" 
+                                        style="width: 100%; font-weight: 800; font-size: 0.82rem; padding: 0.5rem; border-radius: 0.5rem; background: #2563eb; border: none; color: white;">
+                                    🔍 Ver ${cat.count} Producto(s)
                                 </button>
                             </div>
                             `;
                         }).join('')}
                     </div>
-                </div>` : ''}
-            </div>
-
-            <!-- Tabla Principal del Inventario -->
-            <div class="table-container card glass-panel" style="padding: 1rem; border-radius: 1.25rem;">
-                <div id="inventory-table-wrapper">
-                    ${this.renderInventoryTableHTML(this.getFilteredProducts())}
                 </div>
             </div>
         `;
     },
 
-    // Métodos auxiliares para filtrado, visualización y exportación de stock
-    getFilteredProducts() {
-        const searchQuery = (this.inventorySearchQuery || '').toLowerCase().trim();
-        const catFilter = this.inventorySelectedCategory;
-        const statusFilter = this.inventorySelectedStockStatus;
-        const supplierFilter = this.inventorySelectedSupplier;
-
-        return this.products.filter(p => {
-            if (p.deleted) return false;
-            
-            // Búsqueda de texto
-            if (searchQuery) {
-                const nameMatch = (p.name || '').toLowerCase().includes(searchQuery);
-                const codeMatch = (p.barcode || '').toLowerCase().includes(searchQuery);
-                if (!nameMatch && !codeMatch) return false;
-            }
-            
-            // Filtro de categoría
-            if (catFilter && p.category !== catFilter) return false;
-            
-            // Filtro de proveedor
-            if (supplierFilter) {
-                const activeSupplierIds = (this.suppliersList || []).map(s => String(s.id));
-                const pSupplierIdStr = p.supplierId ? String(p.supplierId) : '';
-                const hasValidSupplier = pSupplierIdStr && activeSupplierIds.includes(pSupplierIdStr);
-
-                if (supplierFilter === 'none') {
-                    if (hasValidSupplier) return false;
-                } else {
-                    if (pSupplierIdStr !== supplierFilter) return false;
-                }
-            }
-            
-            // Filtro de estado de stock
-            const stock = parseFloat(p.stock) || 0;
-            const minStock = parseFloat(p.minStock) || 0;
-            
-            if (statusFilter === 'low') {
-                if (stock <= 0 || stock > minStock || minStock === 0) return false;
-            } else if (statusFilter === 'out') {
-                if (stock > 0) return false;
-            } else if (statusFilter === 'optimum') {
-                if (stock <= minStock && minStock > 0) return false;
-            }
-            
-            return true;
-        });
+    toggleCapitalDistribution() {
+        const panel = document.getElementById('capital-distribution-panel');
+        const label = document.getElementById('capital-toggle-label');
+        if (panel) {
+            const isHidden = panel.style.display === 'none';
+            panel.style.display = isHidden ? 'block' : 'none';
+            this.showCapitalDist = isHidden;
+            if (label) label.textContent = isHidden ? '▲ Ocultar Panel' : '▼ Ver Análisis Completo';
+        } else {
+            this.showCapitalDist = !this.showCapitalDist;
+            app.navigate('inventory');
+        }
     },
 
-    renderInventoryTableHTML(filtered) {
+    showCategoryProductsModal(categoryName, searchWithin = '') {
+        const all = this.products || [];
+        const isAll = !categoryName || categoryName === '';
+        
+        let filtered = all.filter(p => {
+            if (p.deleted) return false;
+            if (!isAll && (p.category || 'General') !== categoryName) return false;
+            if (searchWithin) {
+                const q = searchWithin.toLowerCase().trim();
+                const matchName = (p.name || '').toLowerCase().includes(q);
+                const matchCode = (p.barcode || '').toLowerCase().includes(q);
+                if (!matchName && !matchCode) return false;
+            }
+            return true;
+        });
+
+        // Totales de la categoría
+        let totalCapital = 0;
+        let totalProfit = 0;
+        filtered.forEach(p => {
+            const stock = parseFloat(p.stock) || 0;
+            const cost = parseFloat(p.cost) || 0;
+            const price = parseFloat(p.price) || 0;
+            const cap = Math.max(0, stock * cost);
+            const prof = Math.max(0, stock * (price / 1.19 - cost));
+            totalCapital += cap;
+            totalProfit += prof;
+        });
+
+        const marginTotal = totalCapital > 0 ? (totalProfit / totalCapital * 100) : 0;
+
+        const tableHtml = this.renderModalProductsTableHTML(filtered);
+
+        const content = `
+            <div style="margin-bottom: 1.25rem;">
+                <!-- Header resumen dentro de la modal -->
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; padding: 0.85rem 1.25rem; border-radius: 0.85rem; border: 1.5px solid #e2e8f0; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="font-size: 1.3rem;">📂</span>
+                        <div>
+                            <strong style="font-size: 1.1rem; color: #1e293b; display: block;">${safeHTML(categoryName || 'Todos los Productos')}</strong>
+                            <small style="color: #64748b; font-weight: 700;">${filtered.length} producto(s) en esta lista</small>
+                        </div>
+                    </div>
+                    
+                    <div style="display: flex; gap: 1rem; font-size: 0.85rem;">
+                        <div style="background: rgba(59, 130, 246, 0.1); padding: 0.35rem 0.75rem; border-radius: 0.5rem; border: 1px solid rgba(59, 130, 246, 0.2);">
+                            <span style="color: #2563eb; font-weight: 700;">Capital Neto:</span> <strong style="color: #1e293b;">${formatCLP(totalCapital)}</strong>
+                        </div>
+                        <div style="background: rgba(16, 185, 129, 0.1); padding: 0.35rem 0.75rem; border-radius: 0.5rem; border: 1px solid rgba(16, 185, 129, 0.2);">
+                            <span style="color: #059669; font-weight: 700;">Ganancia Est.:</span> <strong style="color: #059669;">+${formatCLP(totalProfit)} (+${marginTotal.toFixed(1)}%)</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Buscador dentro de la modal -->
+                <div style="margin-bottom: 1rem;">
+                    <input type="text" 
+                           id="modalCategorySearchInput"
+                           class="form-control" 
+                           placeholder="🔍 Filtrar por nombre o código de barra dentro de esta lista..."
+                           value="${searchWithin}"
+                           oninput="InventoryView.filterInsideCategoryModal(this.value, '${categoryName.replace(/'/g, "\\'")}')"
+                           style="height: 42px; font-size: 0.95rem; border: 2px solid #cbd5e1; border-radius: 0.6rem; padding: 0 0.85rem; font-weight: 600;">
+                </div>
+
+                <!-- Contenedor scrollable de la tabla -->
+                <div id="modalCategoryTableWrapper" style="max-height: 55vh; overflow-y: auto; border: 1.5px solid #e2e8f0; border-radius: 0.75rem; background: #ffffff;">
+                    ${tableHtml}
+                </div>
+            </div>
+        `;
+
+        const footer = `
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <button type="button" class="btn btn-secondary" onclick="InventoryView.exportCategoryModalCSV('${categoryName.replace(/'/g, "\\'")}')" style="font-weight: 700;">
+                    📊 Exportar Lista (CSV)
+                </button>
+                <button type="button" class="btn btn-primary" onclick="closeModal()" style="font-weight: 800; padding: 0.5rem 1.5rem;">
+                    Cerrar
+                </button>
+            </div>
+        `;
+
+        showModal(content, { title: `Productos: ${categoryName || 'Búsqueda'}`, footer, width: '1000px' });
+    },
+
+    filterInsideCategoryModal(query, categoryName) {
+        const all = this.products || [];
+        const isAll = !categoryName || categoryName === '';
+        
+        const filtered = all.filter(p => {
+            if (p.deleted) return false;
+            if (!isAll && (p.category || 'General') !== categoryName) return false;
+            if (query) {
+                const q = query.toLowerCase().trim();
+                const matchName = (p.name || '').toLowerCase().includes(q);
+                const matchCode = (p.barcode || '').toLowerCase().includes(q);
+                if (!matchName && !matchCode) return false;
+            }
+            return true;
+        });
+
+        const wrapper = document.getElementById('modalCategoryTableWrapper');
+        if (wrapper) {
+            wrapper.innerHTML = this.renderModalProductsTableHTML(filtered);
+        }
+    },
+
+    renderModalProductsTableHTML(filtered) {
         if (filtered.length === 0) {
             return `
-                <div style="text-align: center; padding: 3rem; color: #64748b;">
-                    <span style="font-size: 3rem; display: block; margin-bottom: 1rem;">🔍</span>
-                    No se encontraron productos con los filtros seleccionados.
+                <div style="text-align: center; padding: 3rem 1rem; color: #64748b;">
+                    <span style="font-size: 2.5rem; display: block; margin-bottom: 0.5rem; opacity: 0.5;">📦</span>
+                    <strong style="font-size: 1rem; color: #1e293b; display: block;">No se encontraron productos</strong>
+                    <span style="font-size: 0.8rem;">Prueba con otros términos en el buscador.</span>
                 </div>
             `;
         }
@@ -642,36 +715,35 @@ const InventoryView = {
             const profit = priceNet - cost;
             const margin = cost > 0 ? (profit / cost * 100) : 0;
             
-            // Alertas de Vencimiento
             let expiryHtml = '';
-            if (p.expiryDate) {
+            const rawExp = (p.expiryDate || '').toString().trim();
+            if (rawExp && rawExp !== 'null' && rawExp !== 'undefined') {
                 const thirtyDays = new Date();
                 thirtyDays.setDate(thirtyDays.getDate() + 30);
-                const expiry = new Date(p.expiryDate);
-                const today = new Date();
-                const isExpired = expiry <= today;
-                const isExpiringSoon = expiry <= thirtyDays && !isExpired;
-                
-                const expDateFormatted = p.expiryDate.split('-').reverse().join('-');
-                if (isExpired) {
-                    expiryHtml = `<div style="color: #ef4444; font-size: 0.75rem; font-weight: 800; margin-top: 0.25rem;">🚨 Expirado: ${expDateFormatted}</div>`;
-                } else if (isExpiringSoon) {
-                    expiryHtml = `<div style="color: #ca8a04; font-size: 0.75rem; font-weight: 800; margin-top: 0.25rem;">⚠️ Vence pronto: ${expDateFormatted}</div>`;
-                } else {
-                    expiryHtml = `<div style="color: #64748b; font-size: 0.75rem; margin-top: 0.25rem;">📅 Vence: ${expDateFormatted}</div>`;
+                const expiry = new Date(rawExp);
+                if (!isNaN(expiry.getTime())) {
+                    const today = new Date();
+                    today.setHours(0,0,0,0);
+                    const isExpired = expiry <= today;
+                    const isExpiringSoon = expiry <= thirtyDays && !isExpired;
+                    const parts = rawExp.split('-');
+                    const expDateFormatted = parts.length === 3 ? parts.reverse().join('/') : rawExp;
+                    if (isExpired) {
+                        expiryHtml = `<div style="color: #ef4444; font-size: 0.72rem; font-weight: 800;">🚨 Exp: ${expDateFormatted}</div>`;
+                    } else if (isExpiringSoon) {
+                        expiryHtml = `<div style="color: #ca8a04; font-size: 0.72rem; font-weight: 800;">⚠️ Vence: ${expDateFormatted}</div>`;
+                    }
                 }
             }
 
-            // Colores y badges de stock
             let rowStyle = '';
             let stockBadge = '';
-            
             if (stock <= 0) {
                 rowStyle = 'background-color: #fef2f2;';
-                stockBadge = `<span style="background: #fee2e2; color: #ef4444; padding: 0.15rem 0.4rem; border-radius: 0.375rem; font-size: 0.7rem; font-weight: 800; border: 1px solid rgba(239,68,68,0.2); margin-left: 0.5rem; white-space: nowrap;">🚨 AGOTADO</span>`;
+                stockBadge = `<span style="background: #fee2e2; color: #ef4444; padding: 0.1rem 0.35rem; border-radius: 0.3rem; font-size: 0.65rem; font-weight: 800; border: 1px solid rgba(239,68,68,0.2); white-space: nowrap;">🚨 AGOTADO</span>`;
             } else if (stock <= minStock && minStock > 0) {
                 rowStyle = 'background-color: #fffbeb;';
-                stockBadge = `<span style="background: #fef9c3; color: #d97706; padding: 0.15rem 0.4rem; border-radius: 0.375rem; font-size: 0.7rem; font-weight: 800; border: 1px solid rgba(217,119,6,0.2); margin-left: 0.5rem; white-space: nowrap;">⚠️ STOCK BAJO</span>`;
+                stockBadge = `<span style="background: #fef9c3; color: #d97706; padding: 0.1rem 0.35rem; border-radius: 0.3rem; font-size: 0.65rem; font-weight: 800; border: 1px solid rgba(217,119,6,0.2); white-space: nowrap;">⚠️ BAJO</span>`;
             }
 
             const isWeight = p.type === 'weight';
@@ -679,44 +751,42 @@ const InventoryView = {
             const unit = isWeight ? 'kg' : 'un';
 
             return `
-                <tr style="border-bottom: 1px solid #e2e8f0; font-size: 0.875rem; color: #374151; ${rowStyle} transition: background 0.15s;" onmouseover="this.style.background='rgba(0,0,0,0.02)'" onmouseout="this.style.background='transparent'">
-                    <td style="padding: 0.85rem 0.75rem; font-family: monospace; font-size: 0.8rem; font-weight: bold; color: #64748b;">
+                <tr style="border-bottom: 1px solid #e2e8f0; font-size: 0.85rem; color: #374151; ${rowStyle}">
+                    <td style="padding: 0.65rem 0.75rem; font-size: 0.8rem; font-weight: 800; color: #475569;">
                         ${safeHTML(p.barcode || '—')}
                     </td>
-                    <td style="padding: 0.85rem 0.75rem;">
-                        <strong style="color: #1e293b; font-size: 0.95rem;">${safeHTML(p.name)}</strong>
-                        <div style="font-size: 0.75rem; color: #64748b; margin-top: 0.15rem;">Categoría: ${safeHTML(p.category || 'General')}</div>
+                    <td style="padding: 0.65rem 0.75rem;">
+                        <strong style="color: #1e293b; font-size: 0.9rem;">${safeHTML(p.name)}</strong>
                         ${expiryHtml}
                     </td>
-                    <td style="padding: 0.85rem 0.75rem; color: #475569; font-weight: 500;">
+                    <td style="padding: 0.65rem 0.75rem; color: #475569; font-size: 0.8rem;">
                         ${safeHTML(p.supplierName || '—')}
                     </td>
-                    <td style="padding: 0.85rem 0.75rem; text-align: center;">
-                        <div style="display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
-                            <span style="font-weight: 800; font-size: 1rem; color: #1e293b;">
+                    <td style="padding: 0.65rem 0.75rem; text-align: center;">
+                        <div style="display: flex; align-items: center; justify-content: center; gap: 0.4rem;">
+                            <span style="font-weight: 800; font-size: 0.95rem; color: #1e293b;">
                                 ${formatStock(stock, decimals)} ${unit}
                             </span>
                             ${stockBadge}
-                            <button class="btn btn-sm btn-secondary" onclick="InventoryView.quickAdjustment(${p.id})" style="padding: 0.2rem 0.4rem; font-size: 0.75rem; border-radius: 0.375rem; border: 1px solid #cbd5e1; background: white;" title="Ajustar stock">
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="InventoryView.quickAdjustment(${p.id})" style="padding: 0.15rem 0.35rem; font-size: 0.7rem; border-radius: 0.3rem; border: 1px solid #cbd5e1; background: white;" title="Ajustar stock rápido">
                                 ✏️
                             </button>
                         </div>
-                        <small style="color: #64748b; font-size: 0.7rem;">Mín: ${minStock} ${unit}</small>
                     </td>
-                    <td style="padding: 0.85rem 0.75rem; text-align: right; font-weight: 700; color: #475569;">
+                    <td style="padding: 0.65rem 0.75rem; text-align: right; font-weight: 700; color: #475569;">
                         ${formatCLP(cost)}
                     </td>
-                    <td style="padding: 0.85rem 0.75rem; text-align: right; font-weight: 700; color: #2563eb;">
+                    <td style="padding: 0.65rem 0.75rem; text-align: right; font-weight: 700; color: #2563eb;">
                         ${formatCLP(price)}
                     </td>
-                    <td style="padding: 0.85rem 0.75rem; text-align: center;">
-                        <span style="background: ${margin >= 0 ? '#ecfdf5' : '#fef2f2'}; color: ${margin >= 0 ? '#047857' : '#b91c1c'}; padding: 0.25rem 0.5rem; border-radius: 0.5rem; font-weight: 800; font-size: 0.8rem; border: 1px solid ${margin >= 0 ? '#a7f3d0' : '#fecaca'};">
+                    <td style="padding: 0.65rem 0.75rem; text-align: center;">
+                        <span style="background: ${margin >= 0 ? '#ecfdf5' : '#fef2f2'}; color: ${margin >= 0 ? '#047857' : '#b91c1c'}; padding: 0.15rem 0.4rem; border-radius: 0.4rem; font-weight: 800; font-size: 0.75rem;">
                             ${margin >= 0 ? '+' : ''}${margin.toFixed(1)}%
                         </span>
                     </td>
-                    <td style="padding: 0.85rem 0.75rem; text-align: right; white-space: nowrap;">
-                        <button class="btn btn-sm btn-primary" onclick="InventoryView.showKardex(${p.id})" style="border-radius: 0.5rem; font-weight: 700; padding: 0.35rem 0.75rem;">
-                            📋 Kardex
+                    <td style="padding: 0.65rem 0.75rem; text-align: right; white-space: nowrap;">
+                        <button type="button" class="btn btn-sm btn-primary" onclick="InventoryView.showKardex(${p.id})" style="border-radius: 0.4rem; font-weight: 700; font-size: 0.75rem; padding: 0.25rem 0.6rem;" title="Ver historial de transacciones">
+                            📋 Historial
                         </button>
                     </td>
                 </tr>
@@ -725,16 +795,16 @@ const InventoryView = {
 
         return `
             <table style="width: 100%; border-collapse: collapse;">
-                <thead>
-                    <tr style="border-bottom: 2px solid #cbd5e1; text-align: left; font-size: 0.8rem; color: #475569; text-transform: uppercase; font-weight: 800; background: #f8fafc;">
-                        <th style="padding: 0.75rem; width: 140px;">Cód. Barra</th>
-                        <th style="padding: 0.75rem;">Producto</th>
-                        <th style="padding: 0.75rem;">Proveedor</th>
-                        <th style="padding: 0.75rem; text-align: center; width: 180px;">Stock Actual</th>
-                        <th style="padding: 0.75rem; text-align: right; width: 110px;">Costo Neto</th>
-                        <th style="padding: 0.75rem; text-align: right; width: 110px;">P. Venta (Bruto)</th>
-                        <th style="padding: 0.75rem; text-align: center; width: 90px;">Margen %</th>
-                        <th style="padding: 0.75rem; text-align: right; width: 110px;">Acciones</th>
+                <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 2;">
+                    <tr style="border-bottom: 2px solid #cbd5e1; text-align: left; font-size: 0.75rem; color: #475569; text-transform: uppercase; font-weight: 800;">
+                        <th style="padding: 0.6rem 0.75rem; width: 130px;">Cód. Barra</th>
+                        <th style="padding: 0.6rem 0.75rem;">Producto</th>
+                        <th style="padding: 0.6rem 0.75rem; width: 140px;">Proveedor</th>
+                        <th style="padding: 0.6rem 0.75rem; text-align: center; width: 150px;">Stock Actual</th>
+                        <th style="padding: 0.6rem 0.75rem; text-align: right; width: 100px;">Costo Neto</th>
+                        <th style="padding: 0.6rem 0.75rem; text-align: right; width: 100px;">P. Venta</th>
+                        <th style="padding: 0.6rem 0.75rem; text-align: center; width: 80px;">Margen %</th>
+                        <th style="padding: 0.6rem 0.75rem; text-align: right; width: 100px;">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -744,31 +814,122 @@ const InventoryView = {
         `;
     },
 
+    exportCategoryModalCSV(categoryName) {
+        const all = this.products || [];
+        const isAll = !categoryName || categoryName === '';
+        const filtered = all.filter(p => !p.deleted && (isAll || (p.category || 'General') === categoryName));
+        
+        if (filtered.length === 0) {
+            showNotification('No hay datos para exportar', 'warning');
+            return;
+        }
+        let csvContent = 'Código Barra;Producto;Categoría;Proveedor;Stock;Costo Neto;Precio Venta;Margen %\n';
+        filtered.forEach(p => {
+            const stock = parseFloat(p.stock) || 0;
+            const cost = parseFloat(p.cost) || 0;
+            const price = parseFloat(p.price) || 0;
+            const profit = (price / 1.19) - cost;
+            const margin = cost > 0 ? (profit / cost * 100) : 0;
+            csvContent += `"${p.barcode || ''}";"${p.name.replace(/"/g, '""')}";"${(p.category || 'General').replace(/"/g, '""')}";"${(p.supplierName || 'Sin proveedor').replace(/"/g, '""')}";${stock};${cost};${price};${margin.toFixed(1)}%\n`;
+        });
+        
+        const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.setAttribute('download', `productos_${(categoryName || 'todos').toLowerCase().replace(/\s+/g, '_')}_${new Date().toLocaleDateString('sv-SE')}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showNotification('Lista exportada en CSV con éxito', 'success');
+    },
+
     handleInventorySearch(value) {
-        this.inventorySearchQuery = value;
-        this.updateInventoryTableFiltered();
+        if (value && value.trim().length >= 2) {
+            this.showCategoryProductsModal('', value.trim());
+        }
     },
 
     handleInventoryCategoryChange(value) {
-        this.inventorySelectedCategory = value;
-        this.updateInventoryTableFiltered();
+        if (value) {
+            this.showCategoryProductsModal(value);
+        }
     },
 
     handleInventoryStockChange(value) {
         this.inventorySelectedStockStatus = value;
-        this.updateInventoryTableFiltered();
+        const all = this.products || [];
+        const filtered = all.filter(p => {
+            if (p.deleted) return false;
+            const stock = parseFloat(p.stock) || 0;
+            const minStock = parseFloat(p.minStock) || 0;
+            if (value === 'low') return stock > 0 && stock <= minStock && minStock > 0;
+            if (value === 'out') return stock <= 0;
+            if (value === 'optimum') return stock > minStock && minStock > 0;
+            return true;
+        });
+        this.showCategoryProductsModal(`Filtro: ${value === 'low' ? 'Stock Bajo' : (value === 'out' ? 'Agotados' : 'Stock Óptimo')}`);
     },
 
     handleInventorySupplierChange(value) {
         this.inventorySelectedSupplier = value;
-        this.updateInventoryTableFiltered();
+        if (value) {
+            const supplier = (this.suppliersList || []).find(s => String(s.id) === String(value));
+            const name = supplier ? supplier.name : (value === 'none' ? 'Sin Proveedor' : 'Proveedor');
+            const all = this.products || [];
+            const filtered = all.filter(p => {
+                if (p.deleted) return false;
+                if (value === 'none') return !p.supplierId;
+                return String(p.supplierId) === String(value);
+            });
+            this.showCategoryProductsModal(`Proveedor: ${name}`);
+        }
     },
 
-    updateInventoryTableFiltered() {
-        const wrapper = document.getElementById('inventory-table-wrapper');
-        if (wrapper) {
-            wrapper.innerHTML = this.renderInventoryTableHTML(this.getFilteredProducts());
+    exportCapitalDistributionCSV() {
+        if (!this.products || this.products.length === 0) {
+            showNotification('No hay productos para exportar', 'warning');
+            return;
         }
+        const catMap = {};
+        this.products.forEach(p => {
+            if (p.deleted) return;
+            const cat = p.category || 'General';
+            if (!catMap[cat]) catMap[cat] = { name: cat, count: 0, capital: 0, projectedSales: 0 };
+            const stock = parseFloat(p.stock) || 0;
+            const cost = parseFloat(p.cost) || 0;
+            const price = parseFloat(p.price) || 0;
+            catMap[cat].count++;
+            catMap[cat].capital += Math.max(0, stock * cost);
+            catMap[cat].projectedSales += Math.max(0, stock * price);
+        });
+
+        const rows = [
+            ['Categoria', 'Cantidad Productos', 'Capital Invertido Neto', 'Venta Proyectada Bruta', 'Ganancia Estimada', 'Margen %']
+        ];
+
+        Object.values(catMap).forEach(c => {
+            const profit = (c.projectedSales / 1.19) - c.capital;
+            const margin = c.capital > 0 ? ((profit / c.capital) * 100).toFixed(1) : '0';
+            rows.push([
+                `"${c.name}"`,
+                c.count,
+                Math.round(c.capital),
+                Math.round(c.projectedSales),
+                Math.round(profit),
+                `${margin}%`
+            ]);
+        });
+
+        const csvContent = "\uFEFF" + rows.map(e => e.join(';')).join('\n');
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        link.setAttribute("download", `distribucion_capital_${new Date().toISOString().slice(0, 10)}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        showNotification('📊 Distribución de capital descargada en CSV', 'success');
     },
 
     exportInventoryCSV() {
@@ -870,73 +1031,78 @@ const InventoryView = {
 
     renderBulkAdjustmentForm() {
         return `
-            <div class="card" style="background: #fefce8; border: 3px solid #ca8a04; box-shadow: 0 10px 25px rgba(202, 138, 4, 0.1); padding: 2rem;">
-                <h3 style="margin-bottom: 2rem; display: flex; align-items: center; gap: 0.75rem; font-size: 1.6rem; color: #854d0e;">
-                    <span style="font-size: 2.5rem;">📋</span> Registro Masivo de Stock
-                </h3>
+            <div class="card" style="background: #ffffff; border: 2px solid #e2e8f0; box-shadow: 0 4px 15px rgba(0,0,0,0.03); padding: 1.5rem; border-radius: 1.25rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; border-bottom: 1.5px solid #f1f5f9; padding-bottom: 0.75rem;">
+                    <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; font-size: 1.25rem; color: #1e293b; font-weight: 900;">
+                        <span>📋</span> Registro Masivo de Ajustes de Stock
+                    </h3>
+                    <span style="font-size: 0.8rem; color: #64748b; font-weight: 700;">Descuento rápido por mermas o consumo</span>
+                </div>
 
-                <div style="margin-bottom: 2.5rem; background: #ffffff; padding: 1.5rem; border-radius: 1.25rem; border: 2.5px solid #fde047;">
-                    <label style="color: #713f12; font-size: 1.1rem; margin-bottom: 1.25rem; display: block; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">1. ¿Qué tipo de registro quieres hacer?</label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
-                        <button onclick="InventoryView.setBulkMovementType('consumption')" 
+                <!-- 1. Tipo de registro -->
+                <div style="margin-bottom: 1.25rem;">
+                    <label style="color: #475569; font-size: 0.85rem; margin-bottom: 0.5rem; display: block; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">1. Selecciona el Tipo de Ajuste:</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <button type="button" onclick="InventoryView.setBulkMovementType('consumption')" 
                                 class="btn" 
-                                style="height: 120px; font-size: 1.3rem; display: flex; flex-direction: column; gap: 0.5rem; transition: all 0.3s;
-                                background: ${this.selectedBulkType === 'consumption' ? '#fef9c3' : '#ffffff'};
-                                border: 4px solid ${this.selectedBulkType === 'consumption' ? '#eab308' : '#f1f5f9'};
-                                color: #854d0e;">
-                            <span style="font-size: 2.5rem;">🍴</span>
-                            <strong>Consumo de la Casa</strong>
+                                style="height: 54px; font-size: 1.05rem; display: flex; align-items: center; justify-content: center; gap: 0.6rem; transition: all 0.2s; font-weight: 800; border-radius: 0.75rem;
+                                background: ${this.selectedBulkType === 'consumption' ? '#fef9c3' : '#f8fafc'};
+                                border: 2.5px solid ${this.selectedBulkType === 'consumption' ? '#eab308' : '#cbd5e1'};
+                                color: ${this.selectedBulkType === 'consumption' ? '#854d0e' : '#475569'};">
+                            <span style="font-size: 1.4rem;">🍴</span>
+                            <span>Consumo de la Casa</span>
                         </button>
                         
-                        <button onclick="InventoryView.setBulkMovementType('loss')" 
+                        <button type="button" onclick="InventoryView.setBulkMovementType('loss')" 
                                 class="btn" 
-                                style="height: 120px; font-size: 1.3rem; display: flex; flex-direction: column; gap: 0.5rem; transition: all 0.3s;
-                                background: ${this.selectedBulkType === 'loss' ? '#fee2e2' : '#ffffff'};
-                                border: 4px solid ${this.selectedBulkType === 'loss' ? '#ef4444' : '#f1f5f9'};
-                                color: ${this.selectedBulkType === 'loss' ? '#991b1b' : '#6b7280'};">
-                            <span style="font-size: 2.5rem;">🗑️</span>
-                            <strong>Pérdida o Merma</strong>
+                                style="height: 54px; font-size: 1.05rem; display: flex; align-items: center; justify-content: center; gap: 0.6rem; transition: all 0.2s; font-weight: 800; border-radius: 0.75rem;
+                                background: ${this.selectedBulkType === 'loss' ? '#fee2e2' : '#f8fafc'};
+                                border: 2.5px solid ${this.selectedBulkType === 'loss' ? '#ef4444' : '#cbd5e1'};
+                                color: ${this.selectedBulkType === 'loss' ? '#991b1b' : '#475569'};">
+                            <span style="font-size: 1.4rem;">🗑️</span>
+                            <span>Pérdida o Merma</span>
                         </button>
                     </div>
                 </div>
 
-                <div style="margin-bottom: 2rem; background: #ffffff; padding: 1.5rem; border-radius: 1.25rem; border: 2.5px solid #fde047;">
-                    <label style="color: #713f12; font-size: 1.1rem; margin-bottom: 1rem; display: block; font-weight: 800;">2. Busca y agrega los productos:</label>
-                    <div class="search-box">
+                <!-- 2. Buscador de productos -->
+                <div style="margin-bottom: 1.25rem;">
+                    <label style="color: #475569; font-size: 0.85rem; margin-bottom: 0.4rem; display: block; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">2. Busca y agrega los productos:</label>
+                    <div class="search-box" style="position: relative;">
                         <input type="text" 
                                id="bulkSearchInput" 
                                class="form-control" 
-                               placeholder="🔍 Escribe el nombre o usa el código de barras..."
-                               style="font-size: 1.3rem; height: 65px; border: 3.5px solid #ca8a04; border-radius: 1rem; background: #fdfdfd; padding-left: 3rem;"
+                               placeholder="🔍 Escribe el nombre o usa la pistola lectora de código de barras..."
+                               style="font-size: 1.05rem; height: 48px; border: 2px solid #3b82f6; border-radius: 0.75rem; background: #ffffff; padding-left: 1rem; font-weight: 700;"
                                oninput="InventoryView.handleBulkSearch(event)">
-                        <div id="bulkSearchResults" class="search-results" style="display: none;"></div>
+                        <div id="bulkSearchResults" class="search-results" style="display: none; position: absolute; width: 100%; z-index: 100; background: white; border: 2px solid #cbd5e1; border-radius: 0.75rem; max-height: 280px; overflow-y: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.1);"></div>
                     </div>
                 </div>
                 
                 <!-- Lista de productos seleccionados -->
-                <div id="bulkSelectedProducts">
-                    <div class="empty-state" style="padding: 3rem; background: rgba(17, 24, 39, 0.4); border: 1px dashed rgba(255,255,255,0.1); border-radius: 1rem; text-align: center;">
-                        <div style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;">🛒</div>
-                        <p style="color: #94a3b8; font-size: 1.1rem; margin-bottom: 0;">Aún no has agregado productos</p>
+                <div id="bulkSelectedProducts" style="margin-bottom: 1.25rem;">
+                    <div class="empty-state" style="padding: 2rem; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 1rem; text-align: center;">
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem; opacity: 0.5;">🛒</div>
+                        <p style="color: #64748b; font-size: 0.95rem; margin-bottom: 0; font-weight: 700;">Aún no has agregado productos a la lista</p>
                     </div>
                 </div>
 
-                <!-- Footer con Motivo y Botones de Acción - SIEMPRE VISIBLE -->
-                <div style="margin-top: 2rem; padding: 1.5rem; background: #ffffff; border-radius: 1.25rem; border: 2.5px solid #fde047; box-shadow: 0 4px 12px rgba(202, 138, 4, 0.05);">
-                    <div class="form-group" style="margin-bottom: 1.5rem;">
-                        <label style="color: #713f12; font-size: 1rem; margin-bottom: 0.75rem; display: block; font-weight: 800;">3. Motivo del ajuste:</label>
-                        <textarea id="bulkReason" class="form-control" rows="2" 
-                                  placeholder="Ej: Consumo del personal, rotura de envase, vencimiento..." 
-                                  style="font-size: 1.1rem; border: 2.5px solid #fde047; border-radius: 0.75rem; background: #fffcf0; padding: 0.75rem;"></textarea>
+                <!-- 3. Motivo y botones de acción -->
+                <div style="padding: 1.25rem; background: #f8fafc; border-radius: 1rem; border: 1.5px solid #e2e8f0;">
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label style="color: #1e293b; font-size: 0.85rem; margin-bottom: 0.35rem; display: block; font-weight: 800; text-transform: uppercase;">3. Motivo del ajuste:</label>
+                        <input type="text" id="bulkReason" class="form-control" 
+                               placeholder="Ej: Consumo del personal, rotura de envase, fecha de vencimiento..." 
+                               style="font-size: 0.95rem; height: 42px; border: 1.5px solid #cbd5e1; border-radius: 0.6rem; background: #ffffff; padding: 0.5rem 0.85rem; font-weight: 600;">
                     </div>
 
-                    <div style="display: flex; gap: 1rem;">
-                        <button class="btn btn-secondary" onclick="InventoryView.resetBulkForm()" 
-                                style="flex: 1; height: 55px; font-weight: 700; border: 2px solid #cbd5e1; color: #475569; background: #f8fafc;">
-                            ❌ Limpiar Formulario
+                    <div style="display: flex; gap: 0.75rem;">
+                        <button type="button" class="btn btn-secondary" onclick="InventoryView.resetBulkForm()" 
+                                style="flex: 1; height: 46px; font-weight: 700; border: 1.5px solid #cbd5e1; color: #475569; background: #ffffff; border-radius: 0.75rem;">
+                            ❌ Limpiar
                         </button>
-                        <button class="btn btn-primary" onclick="InventoryView.saveBulkAdjustment()" 
-                                style="flex: 2; height: 55px; font-weight: 800; font-size: 1.1rem; background: #ca8a04; border: none; box-shadow: 0 4px 14px rgba(202, 138, 4, 0.3);">
+                        <button type="button" class="btn btn-primary" onclick="InventoryView.saveBulkAdjustment()" 
+                                style="flex: 2; height: 46px; font-weight: 800; font-size: 1rem; background: #2563eb; border: none; border-radius: 0.75rem; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);">
                             💾 Guardar Ajuste Masivo
                         </button>
                     </div>
@@ -1860,29 +2026,29 @@ const InventoryView = {
     },
 
     showBulkQuantityModal(product) {
-        if (this.selectedProducts.some(p => p.id === product.id)) {
-            showNotification('Este producto ya está en la lista', 'warning');
-            return;
-        }
         const isWeight = product.type === 'weight';
+        const existing = this.selectedProducts.find(p => p.id === product.id);
         const content = `
-            <div style="text-align: center; margin-bottom: 1.5rem;">
-                <div style="font-size: 1.25rem; font-weight: bold; color: var(--primary); margin-bottom: 0.5rem;">${safeHTML(product.name)}</div>
-                <div style="font-size: 0.95rem; color: var(--secondary);">
-                    Código: ${safeHTML(product.barcode || 'Sin código')} • Stock: ${product.stock} ${isWeight ? 'kg' : 'un'}
+            <div style="text-align: center; margin-bottom: 1.25rem;">
+                <div style="font-size: 1.15rem; font-weight: 800; color: var(--primary); margin-bottom: 0.35rem;">${safeHTML(product.name)}</div>
+                <div style="font-size: 0.85rem; color: var(--secondary);">
+                    Código: ${safeHTML(product.barcode || 'Sin código')} • Stock Actual: ${product.stock} ${isWeight ? 'kg' : 'un'}
                 </div>
+                ${existing ? `<div style="margin-top: 0.5rem; background: #e0f2fe; color: #0369a1; padding: 0.25rem 0.5rem; border-radius: 0.4rem; font-size: 0.78rem; font-weight: 800;">ℹ️ Ya está en la lista con ${existing.quantity} ${existing.unit}. El monto que ingreses se sumará.</div>` : ''}
             </div>
-            <div class="form-group">
-                <label>Cantidad a ajustar *</label>
+            <div class="form-group" style="margin-bottom: 1rem;">
+                <label style="font-weight: 700; font-size: 0.85rem;">Cantidad a agregar / ajustar *</label>
                 <input type="number" id="bulkModalQty" step="any" class="form-control" 
-                       step="${isWeight ? '0.001' : '1'}" placeholder="${isWeight ? '0.001' : '1'}" 
-                       style="font-size: 1.25rem; text-align: center; padding: 0.75rem;" autofocus>
-                <small>${isWeight ? 'Kg (ej: 0.250, 1.5)' : 'Unidades'}. + sumar, − restar (solo en Ajuste de inventario).</small>
+                       step="${isWeight ? '0.001' : '1'}" placeholder="1" value="1"
+                       style="font-size: 1.3rem; font-weight: 900; text-align: center; height: 48px; border: 2px solid #3b82f6; border-radius: 0.6rem;" autofocus>
+                <small style="color: #64748b; font-size: 0.75rem; display: block; margin-top: 0.35rem;">${isWeight ? 'Kg (ej: 0.250, 1.5)' : 'Unidades enteras'}</small>
             </div>
         `;
         const footer = `
-            <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-            <button class="btn btn-primary" data-action="bulk-add" onclick="InventoryView.addProductFromBulkModal(${product.id})">Agregar al ajuste</button>
+            <button class="btn btn-secondary" onclick="closeModal()" style="font-weight: 700;">Cancelar</button>
+            <button class="btn btn-primary" data-action="bulk-add" onclick="InventoryView.addProductFromBulkModal(${product.id})" style="font-weight: 800;">
+                ${existing ? '➕ Sumar a la fila' : 'Agregar al ajuste'}
+            </button>
         `;
         showModal(content, { title: 'Cantidad para ajuste', footer, width: '420px' });
         const qtyInput = document.getElementById('bulkModalQty');
@@ -1900,20 +2066,23 @@ const InventoryView = {
         if (!product || !qtyInput) return;
 
         let qty = parseFloat(qtyInput.value);
-
-        // Si el campo está vacío, el valor por defecto es 1
-        if (qtyInput.value === '') {
+        if (qtyInput.value === '' || isNaN(qty)) {
             qty = 1;
         }
 
-        if (isNaN(qty) || qty === 0) {
+        if (qty === 0) {
             showNotification('Ingresa una cantidad distinta de 0', 'warning');
             return;
         }
 
-        if (this.selectedProducts.some(p => p.id === productId)) {
-            showNotification('Este producto ya está en la lista', 'warning');
+        const existing = this.selectedProducts.find(p => p.id === productId);
+        if (existing) {
+            existing.quantity = Math.round((existing.quantity + qty) * 1000) / 1000;
+            this.updateBulkSelectedProducts();
             closeModal();
+            const searchInput = document.getElementById('bulkSearchInput');
+            if (searchInput) { searchInput.value = ''; searchInput.focus(); }
+            showNotification(`${product.name}: Sumado (+${qty}). Total: ${existing.quantity}`, 'success');
             return;
         }
 
@@ -1936,11 +2105,23 @@ const InventoryView = {
     async addProductToBulk(productId) {
         const product = await Product.getById(productId);
         if (!product) return;
-        if (this.selectedProducts.find(p => p.id === productId)) {
-            showNotification('Este producto ya está en la lista', 'warning');
+        const existing = this.selectedProducts.find(p => p.id === productId);
+        if (existing) {
+            const step = existing.unit === 'kg' ? 0.5 : 1;
+            existing.quantity = Math.round((existing.quantity + step) * 1000) / 1000;
+            this.updateBulkSelectedProducts();
+            showNotification(`${product.name}: +${step} sumado (Total: ${existing.quantity})`, 'success');
             return;
         }
         this.showBulkQuantityModal(product);
+    },
+
+    stepBulkQuantity(index, delta) {
+        if (!this.selectedProducts[index]) return;
+        const p = this.selectedProducts[index];
+        const step = p.unit === 'kg' ? 0.5 : 1;
+        p.quantity = Math.max(1, Math.round((p.quantity + delta * step) * 1000) / 1000);
+        this.updateBulkSelectedProducts();
     },
 
     updateBulkSelectedProducts() {
@@ -1955,72 +2136,64 @@ const InventoryView = {
 
         if (this.selectedProducts.length === 0) {
             container.innerHTML = `
-                <div class="empty-state" style="padding: 3rem; background: rgba(17, 24, 39, 0.4); border: 1px dashed rgba(255,255,255,0.1); border-radius: 1rem; text-align: center;">
-                    <div style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;">🛒</div>
-                    <p style="color: #94a3b8; font-size: 1.1rem; margin-bottom: 0;">Aún no has agregado productos</p>
+                <div class="empty-state" style="padding: 2rem; background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 1rem; text-align: center;">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem; opacity: 0.5;">🛒</div>
+                    <p style="color: #64748b; font-size: 0.95rem; margin-bottom: 0; font-weight: 700;">Aún no has agregado productos a la lista</p>
                 </div>
             `;
             return;
         }
 
         container.innerHTML = `
-            <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+            <div style="display: flex; flex-direction: column; gap: 0.6rem;">
                 ${this.selectedProducts.map((p, index) => {
-            const diffValue = parseFloat(p.quantity) || 0;
-            const isPositive = diffValue > 0;
-            const isNegative = diffValue < 0;
-            const colorIndicator = isPositive ? '#10b981' : (isNegative ? '#ef4444' : '#64748b');
-            const bgIndicator = isPositive ? '#f0fdf4' : (isNegative ? '#fff1f2' : '#f8fafc');
-
             return `
-                    <div style="display: flex; align-items: center; background: #ffffff; border: 2px solid #e2e8f0; border-radius: 1rem; padding: 1.25rem; transition: all 0.2s; box-shadow: var(--shadow-sm);" onmouseover="this.style.borderColor='#cbd5e1'; this.style.transform='translateX(4px)';" onmouseout="this.style.borderColor='#e2e8f0'; this.style.transform='translateX(0)';">
+                    <div style="display: flex; align-items: center; justify-content: space-between; background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 0.85rem; padding: 0.85rem 1.15rem; transition: all 0.2s; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
                         
                         <!-- Columna Info -->
                         <div style="flex: 1;">
-                            <strong style="font-size: 1.15rem; color: #1e293b; display: block; margin-bottom: 0.5rem; font-weight: 800;">${safeHTML(p.name)}</strong>
-                            <div style="display: flex; gap: 0.75rem; font-size: 0.82rem; color: #475569; flex-wrap: wrap; font-weight: 600;">
-                                <span style="background: #f1f5f9; padding: 0.25rem 0.6rem; border-radius: 0.5rem; border: 1px solid #e2e8f0;">
-                                    📦 Stock: <strong style="color: #1e293b;">${p.stock} ${p.unit}</strong>
+                            <strong style="font-size: 1.05rem; color: #1e293b; display: block; margin-bottom: 0.25rem; font-weight: 800;">${safeHTML(p.name)}</strong>
+                            <div style="display: flex; gap: 0.5rem; font-size: 0.8rem; color: #475569; flex-wrap: wrap; font-weight: 600;">
+                                <span style="background: #f1f5f9; padding: 0.15rem 0.5rem; border-radius: 0.4rem; border: 1px solid #e2e8f0;">
+                                    📦 Stock Actual: <strong style="color: #1e293b;">${p.stock} ${p.unit}</strong>
                                 </span>
-                                <span style="background: #eff6ff; color: #1e40af; padding: 0.25rem 0.6rem; border-radius: 0.5rem; border: 1px solid #bfdbfe;">
-                                    💰 Neto: <strong>${formatCLP(p.cost)}</strong>
+                                <span style="background: #eff6ff; color: #1e40af; padding: 0.15rem 0.5rem; border-radius: 0.4rem; border: 1px solid #bfdbfe;">
+                                    💰 Costo Neto: <strong>${formatCLP(p.cost)}</strong>
                                 </span>
-                                <span style="background: #f0fdf4; color: #166534; padding: 0.25rem 0.6rem; border-radius: 0.5rem; border: 1px solid #bbf7d0;">
-                                    🏷️ Venta: <strong>${formatCLP(p.price)}</strong>
+                                <span style="background: #f0fdf4; color: #166534; padding: 0.15rem 0.5rem; border-radius: 0.4rem; border: 1px solid #bbf7d0;">
+                                    🏷️ P. Venta: <strong>${formatCLP(p.price)}</strong>
                                 </span>
                             </div>
                         </div>
 
-                        <!-- Columna Input Ajuste -->
-                        <div style="display: flex; align-items: center; gap: 1rem; margin-left: 1rem; padding-left: 1rem; border-left: 2px dashed #e2e8f0;">
-                            <div style="display: flex; align-items: center; background: ${bgIndicator}; border-radius: 0.75rem; border: 2px solid ${colorIndicator}; overflow: hidden; transition: all 0.2s;">
-                                <div style="background: ${colorIndicator}; color: white; padding: 0.5rem 0.75rem; font-weight: 900; font-size: 1.3rem; display: flex; align-items: center; justify-content: center; min-width: 45px;">
-                                    ${isPositive ? '+' : (isNegative ? '−' : '±')}
-                                </div>
-                                <input type="number" step="any" 
+                        <!-- Columna Input Cantidad con Botones + y - -->
+                        <div style="display: flex; align-items: center; gap: 0.75rem; margin-left: 1rem;">
+                            <div style="display: flex; align-items: center; gap: 0.3rem; background: #f8fafc; border: 2px solid #cbd5e1; border-radius: 0.75rem; padding: 0.25rem 0.5rem;">
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="InventoryView.stepBulkQuantity(${index}, -1)" style="width: 32px; height: 32px; border-radius: 0.4rem; font-size: 1.1rem; font-weight: 900; display: flex; align-items: center; justify-content: center; padding: 0; background: #e2e8f0; border: 1px solid #cbd5e1; color: #1e293b; cursor: pointer;">−</button>
+                                
+                                <input type="number" step="${p.unit === 'kg' ? '0.001' : '1'}"
                                        class="bulk-qty-input" 
                                        data-index="${index}"
                                        value="${p.quantity}" 
-                                       step="${p.unit === 'kg' ? '0.001' : '1'}"
-                                       placeholder="${p.unit === 'kg' ? '0.001' : '1'}"
-                                       style="background: transparent; border: none; color: #1e293b; text-align: center; width: 110px; font-size: 1.3rem; font-weight: 800; padding: 0.5rem; outline: none;"
-                                       oninput="InventoryView.updateProductQuantity(${index}, this.value); const v = parseFloat(this.value); const isP = v > 0; const isN = v < 0; const cId = isP ? '#10b981' : (isN ? '#ef4444' : '#64748b'); const bId = isP ? '#f0fdf4' : (isN ? '#fff1f2' : '#f8fafc'); this.parentElement.style.borderColor = cId; this.parentElement.style.background = bId; this.previousElementSibling.textContent = isP ? '+' : (isN ? '−' : '±'); this.previousElementSibling.style.background = cId;"
+                                       style="width: 75px; height: 34px; font-size: 1.15rem; font-weight: 900; text-align: center; border: 1.5px solid #94a3b8; border-radius: 0.4rem; background: #ffffff; color: #0f172a; outline: none;"
+                                       oninput="InventoryView.updateProductQuantity(${index}, this.value)"
                                        onkeypress="if(event.key === 'Enter') { event.preventDefault(); InventoryView.focusNextBulkInput(${index}); }">
-                                <div style="color: #475569; padding-right: 0.75rem; font-size: 0.9rem; font-weight: 700;">
-                                    ${p.unit}
-                                </div>
+                                
+                                <button type="button" class="btn btn-sm btn-success" onclick="InventoryView.stepBulkQuantity(${index}, 1)" style="width: 32px; height: 32px; border-radius: 0.4rem; font-size: 1.1rem; font-weight: 900; display: flex; align-items: center; justify-content: center; padding: 0; background: #10b981; border: none; color: #ffffff; cursor: pointer;">+</button>
+                                
+                                <span style="font-weight: 800; font-size: 0.8rem; color: #64748b; margin-left: 0.2rem; min-width: 20px;">${p.unit}</span>
                             </div>
                             
                             <!-- Boton Quitar -->
-                            <button class="btn" onclick="InventoryView.removeProductFromBulk(${index})" 
-                                    style="background: #fee2e2; color: #dc2626; border: 2px solid #fecaca; width: 2.8rem; height: 2.8rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s; font-weight: bold;" onmouseover="this.style.background='#fecaca';" onmouseout="this.style.background='#fee2e2';">
+                            <button type="button" class="btn btn-sm" onclick="InventoryView.removeProductFromBulk(${index})" 
+                                    title="Quitar producto"
+                                    style="background: #fee2e2; color: #dc2626; border: 1.5px solid #fecaca; width: 2.2rem; height: 2.2rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 0; font-weight: bold; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#fecaca';" onmouseout="this.style.background='#fee2e2';">
                                 ✕
                             </button>
                         </div>
                     </div>
                 `}).join('')}
             </div>
-
         `;
     },
 

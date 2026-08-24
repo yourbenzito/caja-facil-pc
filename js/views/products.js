@@ -544,144 +544,143 @@ const ProductsView = {
 
         const content = `
     <form id="productForm">
-                <div class="form-group">
-                    <label>🔍 Código de Barras (Escanee ahora)</label>
-                    <input type="text" name="barcode" class="form-control" value="${product?.barcode || ''}" placeholder="Escanee o escriba el código" autofocus>
+        <div style="display: grid; grid-template-columns: 1.1fr 1fr; gap: 1.25rem; align-items: start;">
+            
+            <!-- Columna Izquierda: Información Básica e Inventario -->
+            <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+                <div class="form-group" style="margin: 0;">
+                    <label style="font-weight: 700; font-size: 0.85rem; color: #1e293b;">🔍 Código de Barras (Escanee ahora)</label>
+                    <input type="text" name="barcode" class="form-control" value="${product?.barcode || ''}" placeholder="Escanee o escriba el código" autofocus style="height: 40px; font-weight: 700;">
                 </div>
 
-                <div class="form-group">
-                    <label>📝 Nombre del Producto *</label>
-                    <input type="text" name="name" class="form-control" value="${product?.name || ''}" required placeholder="Ej: Coca Cola 1.5L">
+                <div class="form-group" style="margin: 0;">
+                    <label style="font-weight: 700; font-size: 0.85rem; color: #1e293b;">📝 Nombre del Producto *</label>
+                    <input type="text" name="name" class="form-control" value="${product?.name || ''}" required placeholder="Ej: Coca Cola 1.5L" style="height: 40px; font-weight: 700;">
                 </div>
                 
-                <div class="form-row" style="display: flex; gap: 1rem;">
-                    <div class="form-group" style="flex: 1;">
-                        <label style="font-weight: 700; color: #1e293b;">📁 Categoría del Producto *</label>
-                        <select name="category" class="form-control" style="font-weight: 700; height: 42px; border: 2px solid #cbd5e1; border-radius: 0.5rem;" required>
+                <div style="display: grid; grid-template-columns: 1.3fr 1fr; gap: 0.75rem;">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-weight: 700; font-size: 0.85rem; color: #1e293b;">📁 Categoría *</label>
+                        <select name="category" class="form-control" style="font-weight: 700; font-size: 0.95rem; height: 42px; padding: 0.35rem 0.65rem; line-height: 1.4; border: 2px solid #cbd5e1; border-radius: 0.5rem; background: #ffffff;" required>
                             ${categories.map(cat => `<option value="${safeHTML(cat)}" ${CategoryHelper.areEqual(product?.category || 'General', cat) ? 'selected' : ''}>${safeHTML(cat)}</option>`).join('')}
                         </select>
                     </div>
-                    <div class="form-group" style="flex: 0.6;">
-                        <label>📦 Unidad de Medida</label>
-                        <select name="type" class="form-control">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-weight: 700; font-size: 0.85rem; color: #1e293b;">📦 Unidad</label>
+                        <select name="type" class="form-control" style="font-weight: 700; font-size: 0.95rem; height: 42px; padding: 0.35rem 0.65rem; line-height: 1.4; border: 2px solid #cbd5e1; border-radius: 0.5rem; background: #ffffff;">
                             <option value="unit" ${product?.type === 'unit' ? 'selected' : ''}>Unidad (u)</option>
                             <option value="weight" ${product?.type === 'weight' ? 'selected' : ''}>Peso (kg)</option>
                         </select>
                     </div>
                 </div>
 
-                <!-- ===== BLOQUE DE PRECIOS REESTRUCTURADO ===== -->
-                <div style="margin-top: 1rem; background: linear-gradient(135deg, rgba(79,70,229,0.06) 0%, rgba(16,185,129,0.04) 100%); padding: 1.25rem; border-radius: 1rem; border: 1.5px solid rgba(79,70,229,0.15);">
-                    <div style="font-size: 0.78rem; font-weight: 800; color: #6366f1; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 1rem;">💲 Estructura de Precios</div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; background: #f8fafc; padding: 0.75rem; border-radius: 0.75rem; border: 1.5px solid #e2e8f0;">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 0.8rem; font-weight: 700; color: #475569;">📦 Stock Actual</label>
+                        <input type="number" name="stock" step="any" class="form-control" value="${product?.stock || 0}" style="height: 38px; font-weight: 800;">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 0.8rem; font-weight: 700; color: #475569;">⚠️ Stock Mínimo</label>
+                        <input type="number" name="minStock" step="any" class="form-control" value="${product?.minStock || 0}" style="height: 38px; font-weight: 800;">
+                    </div>
+                </div>
 
-                    <!-- Fila 1: Tipo IVA + selector -->
-                    <div class="form-group" style="margin-bottom: 1rem;">
-                        <label style="font-size: 0.82rem; color: #6b7280;">🏛️ Tipo IVA</label>
-                        <select id="form_ivaType" name="ivaType" class="form-control" onchange="ProductsView.calcFromNeto()">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 0.8rem; font-weight: 700; color: #64748b;">📅 Vencimiento (Opcional)</label>
+                        <input type="date" name="expiryDate" class="form-control" value="${product?.expiryDate || ''}" style="height: 38px;">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 0.8rem; font-weight: 700; color: #64748b;">📝 Notas / Descripción</label>
+                        <input type="text" name="description" class="form-control" placeholder="Opcional..." value="${product?.description || ''}" style="height: 38px;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Columna Derecha: Estructura de Precios -->
+            <div style="background: linear-gradient(135deg, rgba(79,70,229,0.06) 0%, rgba(16,185,129,0.04) 100%); padding: 1rem 1.15rem; border-radius: 1rem; border: 1.5px solid rgba(79,70,229,0.15); display: flex; flex-direction: column; gap: 0.75rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-size: 0.75rem; font-weight: 900; color: #6366f1; text-transform: uppercase; letter-spacing: 0.08em;">💲 Estructura de Precios</span>
+                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                        <label style="font-size: 0.75rem; color: #64748b; font-weight: 700; margin: 0;">IVA:</label>
+                        <select id="form_ivaType" name="ivaType" class="form-control" onchange="ProductsView.calcFromNeto()" style="height: 32px; font-size: 0.8rem; font-weight: 700; padding: 0 0.5rem; width: auto;">
                             <option value="19%" ${product?.ivaType === '19%' ? 'selected' : ''}>IVA 19%</option>
                             <option value="Exento" ${product?.ivaType === 'Exento' ? 'selected' : ''}>Exento</option>
                         </select>
                     </div>
-
-                    <!-- Fila 2: Neto | IVA monto (readonly) | Bruto -->
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem;">
-                        <!-- Precio Neto -->
-                        <div class="form-group" style="margin: 0;">
-                            <label style="font-size: 0.82rem; color: #6b7280;">📝 Precio Neto (S/IVA)</label>
-                            <input type="number" id="form_costNeto" name="costNeto" step="any" class="form-control"
-                                   value="${product?.costNeto || 0}"
-                                   style="border-color: #818cf8; background: rgba(99,102,241,0.04);"
-                                   oninput="ProductsView.calcFromNeto()">
-                        </div>
-                        <!-- IVA Monto (solo lectura) -->
-                        <div class="form-group" style="margin: 0;">
-                            <label style="font-size: 0.82rem; color: #6b7280;">🏛️ Monto IVA</label>
-                            <div style="position: relative;">
-                                <input type="text" id="form_ivaMonto" readonly
-                                       class="form-control"
-                                       value="${(()=>{ const n=parseFloat(product?.costNeto||0); const t=product?.ivaType==='Exento'?0:0.19; return Math.round(n*t); })()}"
-                                       style="background: rgba(0,0,0,0.08); color: #94a3b8; cursor: not-allowed; font-weight: 600;">
-                                <span style="position:absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 0.7rem; color: #94a3b8; pointer-events:none;">🔒</span>
-                            </div>
-                        </div>
-                        <!-- Precio Bruto -->
-                        <div class="form-group" style="margin: 0;">
-                            <label style="font-size: 0.82rem; color: #6b7280;">💰 Precio Bruto (C/IVA)</label>
-                            <input type="number" id="form_cost" name="cost" step="any" class="form-control"
-                                   value="${product?.cost || 0}"
-                                   style="font-weight: 700; border-color: #f59e0b; background: rgba(245,158,11,0.04);"
-                                   oninput="ProductsView.calcFromBrutoPrecio()">
-                        </div>
-                    </div>
-
-                    <!-- Separador -->
-                    <div style="border-top: 1.5px dashed rgba(99,102,241,0.2); margin-bottom: 1rem;"></div>
-
-                    <!-- Fila 3: % Ganancia Deseado | Precio de Venta + Indicador de margen -->
-                    <div style="display: grid; grid-template-columns: 0.8fr 1.2fr; gap: 0.75rem; align-items: start;">
-                        <div class="form-group" style="margin: 0;">
-                            <label style="font-size: 0.82rem; color: #6366f1; font-weight: 800;">📈 % Margen Deseado</label>
-                            <input type="number" id="form_targetMargin" step="any" class="form-control" placeholder="30"
-                                   value="${product?.cost > 0 && product?.price > 0 ? (Math.round(((product.price / product.cost) - 1) * 10) / 10) : ''}"
-                                   style="font-size: 1.1rem; font-weight: 800; border-color: #6366f1; background: rgba(99,102,241,0.05);"
-                                   oninput="ProductsView.calcFromTargetMargin()">
-                        </div>
-                        <div class="form-group" style="margin: 0;">
-                            <label style="font-size: 0.82rem; color: #10b981; font-weight: 800;">🏷️ Precio de Venta *</label>
-                            <input type="number" id="form_price" name="price" step="any" class="form-control"
-                                   value="${product?.price || 0}" required
-                                   style="font-size: 1.2rem; font-weight: 800; border-color: #10b981; background: rgba(16,185,129,0.05);"
-                                   oninput="ProductsView.updateMarginInfo()">
-                        </div>
-                    </div>
-                    
-                    <!-- Panel de información de margen -->
-                    <div id="form_marginPanel" style="margin-top: 0.75rem; background: rgba(0,0,0,0.06); border-radius: 0.75rem; padding: 0.85rem; display: flex; flex-direction: column; gap: 0.4rem; justify-content: center;">
-                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem;">
-                            <span style="color: #94a3b8;">Mínimo sugerido (35%):</span>
-                            <span id="form_minSalePrice" style="font-weight: 700; color: #f59e0b;">$0</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; font-size: 0.8rem;">
-                            <span style="color: #94a3b8;">Margen actual calculando costo vs venta:</span>
-                            <span id="form_currentMargin" style="font-weight: 700; color: #10b981;">0%</span>
-                        </div>
-                        <div id="form_marginAlert" style="display: none; margin-top: 0.3rem; padding: 0.4rem 0.6rem; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 0.5rem; font-size: 0.75rem; color: #ef4444; font-weight: 600;">
-                            ⚠️ El precio de venta no alcanza el margen mínimo del 35%
-                        </div>
-                    </div>
-                    <!-- Campo oculto de markupPercent -->
-                    <input type="hidden" id="form_markup" name="markupPercent" value="${product?.markupPercent || 0}">
                 </div>
 
-                <div class="form-row" style="display: flex; gap: 1rem; background: rgba(0,0,0,0.2); padding: 1rem; border-radius: 1rem; border: 1px solid rgba(255,255,255,0.05);">
-                    <div class="form-group" style="flex: 1;">
-                        <label>📦 Cantidad Actual</label>
-                        <input type="number" name="stock" step="any" class="form-control" value="${product?.stock || 0}">
+                <!-- Neto | IVA monto | Bruto -->
+                <div style="display: grid; grid-template-columns: 1fr 0.9fr 1fr; gap: 0.5rem;">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 0.72rem; color: #6b7280; font-weight: 700;">Neto (S/IVA)</label>
+                        <input type="number" id="form_costNeto" name="costNeto" step="any" class="form-control"
+                               value="${product?.costNeto || 0}"
+                               style="height: 38px; border-color: #818cf8; background: rgba(99,102,241,0.04); font-weight: 700;"
+                               oninput="ProductsView.calcFromNeto()">
                     </div>
-                    <div class="form-group" style="flex: 1;">
-                        <label>⚠️ Stock Mínimo</label>
-                        <input type="number" name="minStock" step="any" class="form-control" value="${product?.minStock || 0}">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 0.72rem; color: #6b7280; font-weight: 700;">IVA</label>
+                        <div style="position: relative;">
+                            <input type="text" id="form_ivaMonto" readonly
+                                   class="form-control"
+                                   value="${(()=>{ const n=parseFloat(product?.costNeto||0); const t=product?.ivaType==='Exento'?0:0.19; return Math.round(n*t); })()}"
+                                   style="height: 38px; background: rgba(0,0,0,0.06); color: #94a3b8; cursor: not-allowed; font-weight: 600; font-size: 0.85rem;">
+                            <span style="position:absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 0.65rem; color: #94a3b8; pointer-events:none;">🔒</span>
+                        </div>
                     </div>
-                    <div class="form-group" style="flex: 1;">
-                        <label>📈 Stock Máximo</label>
-                        <input type="number" name="maxStock" step="any" class="form-control" value="${product?.maxStock || 0}">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 0.72rem; color: #6b7280; font-weight: 700;">Bruto (C/IVA)</label>
+                        <input type="number" id="form_cost" name="cost" step="any" class="form-control"
+                               value="${product?.cost || 0}"
+                               style="height: 38px; font-weight: 800; border-color: #f59e0b; background: rgba(245,158,11,0.04);"
+                               oninput="ProductsView.calcFromBrutoPrecio()">
                     </div>
                 </div>
 
-                <div class="form-group" style="margin-top: 1rem;">
-                    <label>📝 Descripción</label>
-                    <textarea name="description" class="form-control" rows="2" placeholder="Notas adicionales del producto...">${product?.description || ''}</textarea>
-                </div>
+                <div style="border-top: 1.5px dashed rgba(99,102,241,0.2); margin: 0.1rem 0;"></div>
 
-                <div class="form-group" style="margin-top: 1rem;">
-                    <label>📅 Fecha de Vencimiento (Opcional)</label>
-                    <input type="date" name="expiryDate" class="form-control" value="${product?.expiryDate || ''}">
+                <!-- % Ganancia Deseado | Precio de Venta -->
+                <div style="display: grid; grid-template-columns: 0.8fr 1.2fr; gap: 0.6rem; align-items: start;">
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 0.75rem; color: #6366f1; font-weight: 800;">📈 % Margen</label>
+                        <input type="number" id="form_targetMargin" step="any" class="form-control" placeholder="30"
+                               value="${product?.cost > 0 && product?.price > 0 ? (Math.round(((product.price / product.cost) - 1) * 10) / 10) : ''}"
+                               style="height: 42px; font-size: 1.05rem; font-weight: 800; border-color: #6366f1; background: rgba(99,102,241,0.05);"
+                               oninput="ProductsView.calcFromTargetMargin()">
+                    </div>
+                    <div class="form-group" style="margin: 0;">
+                        <label style="font-size: 0.75rem; color: #10b981; font-weight: 800;">🏷️ Precio Venta *</label>
+                        <input type="number" id="form_price" name="price" step="any" class="form-control"
+                               value="${product?.price || 0}" required
+                               style="height: 42px; font-size: 1.15rem; font-weight: 900; border-color: #10b981; background: rgba(16,185,129,0.05);"
+                               oninput="ProductsView.updateMarginInfo()">
+                    </div>
                 </div>
-            </form>
+                
+                <!-- Panel de información de margen -->
+                <div id="form_marginPanel" style="background: rgba(0,0,0,0.04); border-radius: 0.65rem; padding: 0.6rem 0.75rem; display: flex; flex-direction: column; gap: 0.25rem;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
+                        <span style="color: #64748b;">Mínimo sugerido (35%):</span>
+                        <span id="form_minSalePrice" style="font-weight: 700; color: #f59e0b;">$0</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem;">
+                        <span style="color: #64748b;">Margen actual:</span>
+                        <span id="form_currentMargin" style="font-weight: 800; color: #10b981;">0%</span>
+                    </div>
+                    <div id="form_marginAlert" style="display: none; padding: 0.3rem 0.5rem; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 0.4rem; font-size: 0.7rem; color: #ef4444; font-weight: 700;">
+                        ⚠️ No alcanza el margen mínimo sugerido (35%)
+                    </div>
+                </div>
+                <input type="hidden" id="form_markup" name="markupPercent" value="${product?.markupPercent || 0}">
+            </div>
+
+        </div>
+    </form>
     `;
-        const footer = `<button class="btn btn-secondary" onclick="closeModal()">Cancelar</button> <button class="btn btn-primary" onclick="ProductsView.saveProduct(${id})">[F2] Guardar</button>`;
+        const footer = `<button class="btn btn-secondary" onclick="closeModal()" style="font-weight: 700;">Cancelar</button> <button class="btn btn-primary" onclick="ProductsView.saveProduct(${id})" style="font-weight: 800;">[F2] Guardar Producto</button>`;
         window._focusSearchAfterClose = () => ProductsView.focusSearch();
-        showModal(content, { title: id ? 'Editar Producto' : 'Nuevo Producto', footer, width: '600px' });
+        showModal(content, { title: id ? 'Editar Producto' : 'Nuevo Producto', footer, width: '920px' });
 
         // Setup form interactions
         setTimeout(() => {

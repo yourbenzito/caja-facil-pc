@@ -14,6 +14,7 @@ window.BACKUP_ENTITY_CONFIG = ENTITY_EXPORTS;
 class BackupManager {
     static async exportAllData() {
         try {
+            showNotification('Generando respaldo del negocio...', 'info');
             const data = await this.getBackupData();
 
             const json = JSON.stringify(data); // Sin espacios para máxima velocidad
@@ -21,11 +22,14 @@ class BackupManager {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `respaldo-negocio-${formatDate(new Date())}.json`;
+            const dateStr = new Date().toISOString().slice(0, 10);
+            a.download = `respaldo-negocio-${dateStr}.json`;
+            document.body.appendChild(a);
             a.click();
+            document.body.removeChild(a);
             URL.revokeObjectURL(url);
 
-            showNotification('Respaldo del negocio creado exitosamente', 'success');
+            showNotification('✅ Respaldo del negocio creado exitosamente', 'success');
         } catch (error) {
             console.error('Error creating backup:', error);
             showNotification('Error al crear respaldo: ' + error.message, 'error');
@@ -118,7 +122,6 @@ class BackupManager {
             cashMovements,
             stockMovements,
             settings,
-            users,
             payments,
             businesses,
             customerCreditDeposits,
@@ -128,7 +131,6 @@ class BackupManager {
             productCostHistory,
             supplierPayments,
             saleReturns,
-            passwordResets,
             debtPaymentSessions
         };
     }
@@ -224,7 +226,9 @@ class BackupManager {
         const a = document.createElement('a');
         a.href = url;
         a.download = filename;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         URL.revokeObjectURL(url);
     }
 
@@ -237,7 +241,8 @@ class BackupManager {
             }
 
             const workbook = this.buildWorkbook(sheetName, data);
-            this.downloadWorkbook(workbook, `${filename}-${formatDate(new Date())}.xlsx`);
+            const dateStr = new Date().toISOString().slice(0, 10);
+            this.downloadWorkbook(workbook, `${filename}-${dateStr}.xlsx`);
             showNotification(`${filename} exportados`, 'success');
         } catch (error) {
             console.error(`Error exportando ${filename}:`, error);
@@ -325,7 +330,8 @@ class BackupManager {
             }));
 
             const workbook = this.buildWorkbook(sheetName, rows);
-            this.downloadWorkbook(workbook, `${label}-${formatDate(new Date())}.xlsx`);
+            const dateStr = new Date().toISOString().slice(0, 10);
+            this.downloadWorkbook(workbook, `${label}-${dateStr}.xlsx`);
             showNotification(`${label} exportados`, 'success');
         } catch (error) {
             console.error(`Error exportando ${label}:`, error);
@@ -410,7 +416,8 @@ class BackupManager {
                 }
             };
 
-            this.downloadWorkbook(workbook, `${label}-${formatDate(new Date())}.xlsx`);
+            const dateStr = new Date().toISOString().slice(0, 10);
+            this.downloadWorkbook(workbook, `${label}-${dateStr}.xlsx`);
             showNotification(`${label} exportados`, 'success');
         } catch (error) {
             console.error(`Error exportando ${label}:`, error);

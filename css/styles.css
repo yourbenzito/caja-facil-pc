@@ -1622,8 +1622,9 @@ tbody tr:hover {
     display: none;
     position: fixed;
     inset: 0;
-    background: rgba(15, 23, 42, 0.4);
-    backdrop-filter: blur(8px);
+    background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
     z-index: 2199;
 }
 

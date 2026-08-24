@@ -1149,29 +1149,7 @@ const SettingsView = {
 
     async exportBusinessData() {
         try {
-            showNotification('Exportando datos del negocio...', 'info');
-            
-            const response = await fetch('/api/export/business');
-            const result = await response.json();
-            
-            if (!result.success) {
-                throw new Error(result.error || 'Error al exportar datos');
-            }
-            
-            // Crear archivo JSON y descargar
-            const dataStr = JSON.stringify(result.data, null, 2);
-            const dataBlob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(dataBlob);
-            
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `negocio-completo-${new Date().toISOString().slice(0, 10)}.json`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            
-            showNotification('✅ Negocio exportado exitosamente', 'success');
+            await BackupManager.exportAllData();
         } catch (error) {
             console.error('[Export] Error:', error);
             showNotification('Error al exportar negocio: ' + error.message, 'error');

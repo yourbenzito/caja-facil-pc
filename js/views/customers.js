@@ -1036,74 +1036,74 @@ const CustomersView = {
 
             <!-- TAB: RESUMEN -->
             <div id="tab-resumen" class="tab-content ${initialTab === 'tab-resumen' ? 'active' : ''}">
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem;">
-                    <div class="summary-card" style="border-top: 5px solid #ef4444;">
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1rem;">
+                    <div class="summary-card" style="border-top: 5px solid #ef4444; padding: 1rem;">
                         <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Deuda Actual</div>
-                        <div style="font-size: 1.75rem; font-weight: 900; color: #dc2626; margin: 0.5rem 0;">${formatCLP(netDebt)}</div>
+                        <div style="font-size: 1.6rem; font-weight: 900; color: #dc2626; margin: 0.35rem 0;">${formatCLP(netDebt)}</div>
                         <div style="font-size: 0.7rem; color: #94a3b8;">Total acumulado pendiente</div>
                     </div>
-                    <div class="summary-card" style="border-top: 5px solid #10b981;">
+                    <div class="summary-card" style="border-top: 5px solid #10b981; padding: 1rem;">
                         <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Total Pagado</div>
-                        <div style="font-size: 1.75rem; font-weight: 900; color: #16a34a; margin: 0.5rem 0;">${formatCLP(totalPaid)}</div>
+                        <div style="font-size: 1.6rem; font-weight: 900; color: #16a34a; margin: 0.35rem 0;">${formatCLP(totalPaid)}</div>
                         <div style="font-size: 0.7rem; color: #94a3b8;">Abonos históricos realizados</div>
                     </div>
-                    <div class="summary-card" style="border-top: 5px solid #3b82f6;">
+                    <div class="summary-card" style="border-top: 5px solid #3b82f6; padding: 1rem;">
                         <div style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Saldo a Favor</div>
-                        <div style="font-size: 1.75rem; font-weight: 900; color: #2563eb; margin: 0.5rem 0;">${formatCLP(netCredit)}</div>
+                        <div style="font-size: 1.6rem; font-weight: 900; color: #2563eb; margin: 0.35rem 0;">${formatCLP(netCredit)}</div>
                         <div style="font-size: 0.7rem; color: #94a3b8;">Dinero disponible del cliente</div>
                     </div>
                 </div>
 
 
                 <!-- SECCIÓN DE FIDELIDAD Y COMPORTAMIENTO (PONYTAIL) -->
-                <div class="card" style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 1rem; padding: 1.5rem; margin-bottom: 2rem;">
-                    <h3 style="margin-top: 0; margin-bottom: 1.25rem; font-size: 1.05rem; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 0.5rem;">
+                <div class="card" style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 1rem; padding: 1rem 1.25rem; margin-bottom: 1rem;">
+                    <h3 style="margin-top: 0; margin-bottom: 0.75rem; font-size: 0.95rem; font-weight: 800; color: #1e293b; display: flex; align-items: center; gap: 0.5rem;">
                         🏅 Análisis de Fidelidad y Comportamiento
                     </h3>
                     
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
-                        <div style="background: white; border: 1px solid #e2e8f0; padding: 1rem; border-radius: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem;">
-                            <span style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Frecuencia de Compra</span>
-                            <strong style="font-size: 1.1rem; color: ${frequencyColor}; font-weight: 800;">${frequencyLabel}</strong>
-                            <span style="font-size: 0.75rem; color: #94a3b8;">${countLast30Days} compra${countLast30Days !== 1 ? 's' : ''} en los últimos 30 días.</span>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div style="background: white; border: 1px solid #e2e8f0; padding: 0.75rem 1rem; border-radius: 0.75rem; display: flex; flex-direction: column; gap: 0.2rem;">
+                            <span style="font-size: 0.72rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Frecuencia de Compra</span>
+                            <strong style="font-size: 1.05rem; color: ${frequencyColor}; font-weight: 800;">${frequencyLabel}</strong>
+                            <span style="font-size: 0.72rem; color: #94a3b8;">${countLast30Days} compra${countLast30Days !== 1 ? 's' : ''} en los últimos 30 días.</span>
                         </div>
-                        <div style="background: white; border: 1px solid #e2e8f0; padding: 1rem; border-radius: 0.75rem; display: flex; flex-direction: column; gap: 0.25rem;">
-                            <span style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Velocidad de Pago</span>
-                            <strong style="font-size: 1.1rem; color: #1e293b; font-weight: 800;">
+                        <div style="background: white; border: 1px solid #e2e8f0; padding: 0.75rem 1rem; border-radius: 0.75rem; display: flex; flex-direction: column; gap: 0.2rem;">
+                            <span style="font-size: 0.72rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Velocidad de Pago</span>
+                            <strong style="font-size: 1.05rem; color: #1e293b; font-weight: 800;">
                                 ${avgPayDays !== null ? `Paga en promedio a los ${avgPayDays} día${avgPayDays !== 1 ? 's' : ''}` : 'Sin pagos previos'}
                             </strong>
-                            <span style="font-size: 0.75rem; color: #94a3b8;">Días que tarda en saldar desde que se le fía.</span>
+                            <span style="font-size: 0.72rem; color: #94a3b8;">Días que tarda en saldar desde que se le fía.</span>
                         </div>
                     </div>
                     
                     ${isStarPagador ? `
-                        <div style="margin-top: 1.25rem; background: #fffbeb; border: 1.5px solid #fde68a; border-radius: 0.75rem; padding: 0.875rem 1rem; display: flex; align-items: center; gap: 0.75rem; box-shadow: 0 4px 6px -1px rgba(251, 191, 36, 0.05);">
-                            <span style="font-size: 1.5rem;">🌟</span>
+                        <div style="margin-top: 0.75rem; background: #fffbeb; border: 1.5px solid #fde68a; border-radius: 0.75rem; padding: 0.6rem 0.85rem; display: flex; align-items: center; gap: 0.5rem; box-shadow: 0 4px 6px -1px rgba(251, 191, 36, 0.05);">
+                            <span style="font-size: 1.3rem;">🌟</span>
                             <div>
-                                <strong style="font-weight: 800; color: #b45309; font-size: 0.9rem; display: block;">¡Pagador Estrella de Confianza!</strong>
-                                <span style="font-size: 0.75rem; color: #d97706;">Este cliente paga rápido (promedio menor a 10 días) y no tiene deudas muy antiguas.</span>
+                                <strong style="font-weight: 800; color: #b45309; font-size: 0.85rem; display: block;">¡Pagador Estrella de Confianza!</strong>
+                                <span style="font-size: 0.72rem; color: #d97706;">Este cliente paga rápido (promedio menor a 10 días) y no tiene deudas muy antiguas.</span>
                             </div>
                         </div>
                     ` : ''}
                 </div>
 
                 ${cashOpen && netDebt > 0 ? `
-                    <div style="background: white; padding: 1.5rem; border-radius: 1rem; border: 1.5px solid #3b82f622; display: flex; align-items: center; justify-content: space-between; gap: 1.5rem; box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.05);">
+                    <div style="background: white; padding: 1rem 1.25rem; border-radius: 1rem; border: 1.5px solid #3b82f622; display: flex; align-items: center; justify-content: space-between; gap: 1rem; box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.05);">
                         <div style="flex: 1;">
-                            <h4 style="margin: 0; font-weight: 800; color: #1e293b;">Acciones de Cobro</h4>
-                            <p style="margin: 0; font-size: 0.85rem; color: #64748b;">Registra un nuevo abono a la deuda general.</p>
+                            <h4 style="margin: 0; font-weight: 800; color: #1e293b; font-size: 0.95rem;">Acciones de Cobro</h4>
+                            <p style="margin: 0; font-size: 0.8rem; color: #64748b;">Registra un nuevo abono a la deuda general.</p>
                         </div>
-                        <div style="display: flex; gap: 0.75rem;">
-                            <button class="btn" style="background: #10b981; color: white; padding: 0.75rem 1.5rem; border-radius: 0.75rem; font-weight: 800; border: none;" onclick="CustomersView.showUnifiedAbonoModal('${customerId}')">
+                        <div style="display: flex; gap: 0.6rem;">
+                            <button class="btn btn-sm" style="background: #10b981; color: white; padding: 0.6rem 1.25rem; border-radius: 0.75rem; font-weight: 800; border: none;" onclick="CustomersView.showUnifiedAbonoModal('${customerId}')">
                                 ➕ Registrar Abono / Pago
                             </button>
-                            <button class="btn" style="background: #3b82f6; color: white; padding: 0.75rem 1.5rem; border-radius: 0.75rem; font-weight: 800; border: none;" onclick="CustomersView.showPayTotalDebtForm(${customerId}, ${netDebt})">
+                            <button class="btn btn-sm" style="background: #3b82f6; color: white; padding: 0.6rem 1.25rem; border-radius: 0.75rem; font-weight: 800; border: none;" onclick="CustomersView.showPayTotalDebtForm(${customerId}, ${netDebt})">
                                 💰 Saldar Todo (${formatCLP(netDebt)})
                             </button>
                         </div>
                     </div>
                 ` : !cashOpen && netDebt > 0 ? `
-                    <div style="padding: 1.5rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: 1rem; text-align: center; color: #92400e; font-weight: 700;">
+                    <div style="padding: 1rem; background: #fffbeb; border: 1px solid #fde68a; border-radius: 1rem; text-align: center; color: #92400e; font-weight: 700; font-size: 0.85rem;">
                         ⚠️ Abre la caja para registrar pagos de la deuda.
                     </div>
                 ` : ''}
@@ -1292,7 +1292,7 @@ const CustomersView = {
             showModal(content, {
                 title: `Estado de Cuenta: ${safeHTML(customer.name)}`,
                 footer,
-                width: '850px'
+                width: '1000px'
             });
         }
         

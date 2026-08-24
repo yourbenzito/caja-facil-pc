@@ -429,18 +429,16 @@ class Purchase {
     }
 
     /**
-     * Get purchases for the current week
+     * Get purchases for the current week (Monday to Sunday)
      * @returns {Promise<Array>}
      */
     static async getThisWeek() {
         const now = new Date();
-        const first = now.getDate() - now.getDay(); // Sunday
-        const last = first + 6; // Saturday
-
-        const start = new Date(now.setDate(first));
-        start.setHours(0, 0, 0, 0);
-        const end = new Date(now.setDate(last));
-        end.setHours(23, 59, 59, 999);
+        const day = now.getDay(); // 0 is Sunday, 1 is Monday...
+        const diffToMonday = day === 0 ? -6 : 1 - day;
+        
+        const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday, 0, 0, 0, 0);
+        const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday + 6, 23, 59, 59, 999);
 
         return await this.getByDateRange(start, end);
     }
@@ -451,9 +449,8 @@ class Purchase {
      */
     static async getThisMonth() {
         const now = new Date();
-        const start = new Date(now.getFullYear(), now.getMonth(), 1);
-        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-        end.setHours(23, 59, 59, 999);
+        const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
         return await this.getByDateRange(start, end);
     }

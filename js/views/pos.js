@@ -649,36 +649,43 @@ const POSView = {
         const modalOpenedAt = Date.now();
 
         const content = `
-            <div class="modal-form-header">
-                <h2>${safeHTML(product.name)}</h2>
-                <p>Precio Unitario: ${formatCLP(unitPriceRounded)}${isWeight ? '/kg' : ''}</p>
-                <p style="opacity: 0.7;">Disponibilidad: ${formatStock(product.stock)} ${isWeight ? 'kg' : 'un'}</p>
+            <div class="modal-form-header" style="margin-bottom: 0.75rem; text-align: center;">
+                <h2 style="font-size: 1.35rem; margin: 0 0 0.25rem 0; color: #4338ca; font-weight: 900;">${safeHTML(product.name)}</h2>
+                <div style="display: flex; justify-content: center; gap: 0.75rem; font-size: 0.85rem; color: #64748b; font-weight: 700;">
+                    <span>Precio: <strong>${formatCLP(unitPriceRounded)}${isWeight ? '/kg' : ''}</strong></span>
+                    <span>•</span>
+                    <span>Disponible: <strong>${formatStock(product.stock)} ${isWeight ? 'kg' : 'un'}</strong></span>
+                </div>
             </div>
-            <div class="form-group">
-                <label style="font-weight: 800; color: var(--text-muted); margin-bottom: 0.5rem; display: block;">${isWeight ? '⚖️ PESO (KG):' : '📦 CANTIDAD:'}</label>
-                <input type="number" id="productQuantity" class="form-control huge-input" step="any" min="0.001" value="${initialQty}" placeholder="${isWeight ? '0.000' : '1'}" autofocus>
+            
+            <div class="form-group" style="margin-bottom: 0.65rem;">
+                <label style="font-weight: 800; color: #475569; font-size: 0.8rem; margin-bottom: 0.25rem; display: block;">${isWeight ? '⚖️ PESO (KG):' : '📦 CANTIDAD:'}</label>
+                <input type="number" id="productQuantity" class="form-control" step="any" min="0.001" value="${initialQty}" placeholder="${isWeight ? '0.000' : '1'}" style="font-size: 1.8rem; height: 50px; font-weight: 900; text-align: center; border: 2.5px solid #4f46e5; border-radius: 0.75rem; color: #1e1b4b;" autofocus>
             </div>
-            <div class="form-group" style="margin-top: 1.5rem;">
-                <label style="font-weight: 800; color: var(--text-muted); margin-bottom: 0.5rem; display: block;">💰 AJUSTAR PRECIO:</label>
-                <input type="number" id="productPrice" class="form-control" step="any" value="${unitPriceRounded}" style="font-size: 1.5rem; text-align: center; height: 60px; font-weight: 800; border: 3px solid var(--primary); border-radius: 1rem;">
+
+            <div class="form-group" style="margin-bottom: 0.75rem;">
+                <label style="font-weight: 800; color: #475569; font-size: 0.8rem; margin-bottom: 0.25rem; display: block;">💰 AJUSTAR PRECIO:</label>
+                <input type="number" id="productPrice" class="form-control" step="any" value="${unitPriceRounded}" style="font-size: 1.25rem; text-align: center; height: 42px; font-weight: 800; border: 2px solid #6366f1; border-radius: 0.6rem; color: #1e293b;">
             </div>
-            <div id="pricePreview" class="modal-preview-box">
-                <div class="modal-preview-label">Subtotal a Sumar</div>
-                <div id="calculatedTotal" class="modal-preview-value">${formatCLP(unitPriceRounded)}</div>
+
+            <div id="pricePreview" style="background: #0f172a; color: white; padding: 0.6rem 1rem; border-radius: 0.75rem; text-align: center; box-shadow: 0 4px 12px rgba(15,23,42,0.15);">
+                <div style="font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #94a3b8; font-weight: 800;">Subtotal a Sumar</div>
+                <div id="calculatedTotal" style="font-size: 1.6rem; font-weight: 950; color: #fbbf24; margin-top: 0.1rem;">${formatCLP(unitPriceRounded)}</div>
             </div>
-            <p style="text-align: center; margin-top: 1.25rem; font-size: 0.85rem; font-weight: 700; color: var(--text-muted);">
-                💡 PRESIONA <span style="color: var(--primary);">ENTER</span> PARA AGREGAR
+
+            <p style="text-align: center; margin: 0.5rem 0 0 0; font-size: 0.78rem; font-weight: 700; color: #64748b;">
+                💡 Presiona <span style="color: #4f46e5; font-weight: 900;">ENTER</span> para agregar al carro
             </p>
         `;
 
         const footer = `
-            <div style="display: flex; gap: 1rem; width: 100%;">
-                <button class="btn btn-xl btn-secondary" style="flex: 1;" onclick="closeModal()">CANCELAR</button>
-                <button class="btn btn-xl btn-primary" style="flex: 2; font-size: 1.2rem;" onclick="POSView.addProductFromModal(${product.id})">✓ AGREGAR</button>
+            <div style="display: flex; gap: 0.75rem; width: 100%;">
+                <button class="btn btn-secondary" style="flex: 1; height: 44px; font-weight: 700; border-radius: 0.6rem;" onclick="closeModal()">CANCELAR</button>
+                <button class="btn btn-primary" style="flex: 2; height: 44px; font-size: 1.05rem; font-weight: 800; border-radius: 0.6rem;" onclick="POSView.addProductFromModal(${product.id})">✓ AGREGAR</button>
             </div>
         `;
 
-        showModal(content, { title: 'Agregar Producto', footer, width: '450px' });
+        showModal(content, { title: 'Agregar Producto', footer, width: '460px' });
 
         const qInput = document.getElementById('productQuantity');
         const pInput = document.getElementById('productPrice');
@@ -1032,7 +1039,7 @@ const POSView = {
                             </div>
                         </div>
                         <!-- Barra de monto con botón TODO grande integrado -->
-                        <div style="display: flex; gap: 0.4rem; align-items: stretch; margin-bottom: 0.4rem;">
+                        <div style="display: flex; gap: 0.4rem; align-items: stretch;">
                             <div style="position: relative; flex: 1;">
                                 <span style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); font-weight: 800; color: var(--secondary); font-size: 1.05rem;">$</span>
                                 <input type="number" id="pay_cash" class="pay-input-pro pay-input" placeholder="0" data-rounding="true" 
@@ -1043,15 +1050,6 @@ const POSView = {
                                     style="padding: 0 1.25rem; font-weight: 900; font-size: 0.95rem; border-radius: 0.6rem; letter-spacing: 0.5px; box-shadow: 0 2px 8px rgba(79, 70, 229, 0.25);">
                                 TODO
                             </button>
-                        </div>
-                        <!-- Botones rápidos de billetes -->
-                        <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
-                            <button type="button" class="btn btn-sm btn-ghost" onclick="POSView.fillAmount('pay_cash')" style="border: 1.5px solid var(--border); font-weight: 800; font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem;">Exacto</button>
-                            <button type="button" class="btn btn-sm btn-ghost" onclick="POSView.setCashAmount(1000)" style="border: 1.5px solid var(--border); font-weight: 800; font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem;">$1.000</button>
-                            <button type="button" class="btn btn-sm btn-ghost" onclick="POSView.setCashAmount(2000)" style="border: 1.5px solid var(--border); font-weight: 800; font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem;">$2.000</button>
-                            <button type="button" class="btn btn-sm btn-ghost" onclick="POSView.setCashAmount(5000)" style="border: 1.5px solid var(--border); font-weight: 800; font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem;">$5.000</button>
-                            <button type="button" class="btn btn-sm btn-ghost" onclick="POSView.setCashAmount(10000)" style="border: 1.5px solid var(--border); font-weight: 800; font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem;">$10.000</button>
-                            <button type="button" class="btn btn-sm btn-ghost" onclick="POSView.setCashAmount(20000)" style="border: 1.5px solid var(--border); font-weight: 800; font-size: 0.72rem; padding: 0.2rem 0.5rem; border-radius: 0.4rem;">$20.000</button>
                         </div>
                     </div>
 

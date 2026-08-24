@@ -1,4 +1,96 @@
 const CashView = {
+    openCalculatorModal(targetInputId) {
+        const targetInput = document.getElementById(targetInputId);
+        if (!targetInput) return;
+
+        let initialVal = targetInput.value ? targetInput.value.trim() : '';
+
+        const content = `
+            <div style="padding: 0.5rem; display: flex; flex-direction: column; gap: 1rem; align-items: center; background: #f8fafc; border-radius: 1rem;">
+                <input type="text" id="cashCalcDisplay" value="${initialVal}" 
+                       placeholder="0"
+                       style="width: 100%; height: 60px; font-size: 2.2rem; font-weight: 950; text-align: right; padding: 0 1rem; border-radius: 0.75rem; border: 3px solid #cbd5e1; background: #ffffff; color: #0f172a; box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);"
+                       onkeydown="if(event.key === 'Enter') { event.preventDefault(); CashView.evaluateCalculator(); }">
+                
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; width: 100%;">
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('7')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">7</button>
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('8')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">8</button>
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('9')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">9</button>
+                    <button type="button" class="btn btn-warning" onclick="CashView.pressCalcKey('/')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #f59e0b; color: #fff; border: none;">÷</button>
+                    
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('4')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">4</button>
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('5')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">5</button>
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('6')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">6</button>
+                    <button type="button" class="btn btn-warning" onclick="CashView.pressCalcKey('*')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #f59e0b; color: #fff; border: none;">×</button>
+                    
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('1')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">1</button>
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('2')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">2</button>
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('3')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">3</button>
+                    <button type="button" class="btn btn-warning" onclick="CashView.pressCalcKey('-')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #f59e0b; color: #fff; border: none;">-</button>
+                    
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('0')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">0</button>
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('.')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">.</button>
+                    <button type="button" class="btn btn-danger" onclick="CashView.clearCalculator()" style="height: 55px; font-size: 1.2rem; font-weight: 900; border-radius: 0.5rem; background: #ef4444; color: #fff; border: none;">C</button>
+                    <button type="button" class="btn btn-warning" onclick="CashView.pressCalcKey('+')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #f59e0b; color: #fff; border: none;">+</button>
+                </div>
+            </div>
+        `;
+
+        const footer = `
+            <div style="display: flex; gap: 1rem; width: 100%;">
+                <button type="button" class="btn btn-success" onclick="CashView.useCalculatorResult('${targetInputId}')" style="flex: 2; height: 50px; font-weight: 900; font-size: 1.1rem; border-radius: 0.75rem; background: #10b981; border: none; color: #fff;">
+                    📥 APLICAR RESULTADO
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal()" style="flex: 1; height: 50px; font-weight: 800; border-radius: 0.75rem; background: #cbd5e1; color: #1e293b; border: none;">
+                    Cancelar
+                </button>
+            </div>
+        `;
+
+        showModal(content, { title: '🧮 Calculadora de Caja', footer, width: '400px' });
+        
+        setTimeout(() => {
+            const disp = document.getElementById('cashCalcDisplay');
+            if (disp) { disp.focus(); disp.select(); }
+        }, 100);
+    },
+
+    pressCalcKey(key) {
+        const disp = document.getElementById('cashCalcDisplay');
+        if (!disp) return;
+        disp.value = (disp.value || '') + key;
+    },
+
+    clearCalculator() {
+        const disp = document.getElementById('cashCalcDisplay');
+        if (!disp) return;
+        disp.value = '';
+    },
+
+    evaluateCalculator() {
+        const disp = document.getElementById('cashCalcDisplay');
+        if (!disp) return;
+        try {
+            const cleanExpr = disp.value.replace(/[^0-9+\-*/.]/g, '');
+            if (cleanExpr) {
+                const res = Function('"use strict";return (' + cleanExpr + ')')();
+                disp.value = Math.round(res);
+            }
+        } catch (e) {
+            showNotification('Operación matemática inválida', 'warning');
+        }
+    },
+
+    useCalculatorResult(targetInputId) {
+        this.evaluateCalculator();
+        const disp = document.getElementById('cashCalcDisplay');
+        const targetInput = document.getElementById(targetInputId);
+        if (disp && targetInput) {
+            targetInput.value = disp.value;
+            targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        closeModal();
+    },
     /**
      * Enrich open registers with getSummary so "Ventas" / total received are correct.
      * @param {Array} registers - From CashRegister.getAll()
@@ -1841,19 +1933,26 @@ const CashView = {
                         </div>
                     </div>
                     <div class="method-input-area">
-                        <input type="number"
-                               id="closeMethod-${method}"
-                               class="form-control close-cash-method-input"
-                               min="0"
-                               step="1"
-                               placeholder="0"
-                               required
-                               onkeydown="if(event.key === 'Enter') { 
-                                   event.preventDefault(); 
-                                   const target = document.getElementById('${focusTarget}'); 
-                                   if(target) target.focus(); 
-                               }"
-                               style="font-size: 1.5rem; height: 3.5rem; text-align: center; border: 2px solid #cbd5e1; border-radius: 0.75rem; font-weight: 800;">
+                        <div style="display: flex; gap: 0.4rem; align-items: stretch;">
+                            <input type="number"
+                                   id="closeMethod-${method}"
+                                   class="form-control close-cash-method-input"
+                                   min="0"
+                                   step="1"
+                                   placeholder="0"
+                                   required
+                                   onkeydown="if(event.key === 'Enter') { 
+                                       event.preventDefault(); 
+                                       const target = document.getElementById('${focusTarget}'); 
+                                       if(target) target.focus(); 
+                                   }"
+                                   style="flex: 1; font-size: 1.5rem; height: 3.5rem; text-align: center; border: 2px solid #cbd5e1; border-radius: 0.75rem; font-weight: 800;">
+                            ${method === 'cash' ? `
+                            <button type="button" class="btn" onclick="CashView.openCalculatorModal('closeMethod-${method}')" title="Abrir Calculadora" style="font-size: 1.35rem; padding: 0 0.9rem; border-radius: 0.75rem; border: 2px solid #cbd5e1; background: #f1f5f9; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#e2e8f0';" onmouseout="this.style.background='#f1f5f9';">
+                                🧮
+                            </button>
+                            ` : ''}
+                        </div>
                         <div class="method-diff-status" id="closeDifference-${method}">Ingresa monto</div>
                     </div>
                 </div>
@@ -1871,32 +1970,32 @@ const CashView = {
 
         const content = `
             <style>
-                .close-cash-modal-container { display: flex; gap: 2rem; background: #f8fafc; border-radius: 1.5rem; overflow: hidden; }
-                .close-cash-sidebar { flex: 1.2; background: #1e293b; color: white; padding: 2rem; border-radius: 1.5rem; display: flex; flex-direction: column; }
-                .close-cash-body { flex: 2; padding: 1.5rem; display: flex; flex-direction: column; gap: 1.25rem; }
+                .close-cash-modal-container { display: flex; gap: 1.5rem; background: #f8fafc; border-radius: 1.5rem; overflow: hidden; }
+                .close-cash-sidebar { flex: 1.1; background: #1e293b; color: white; padding: 1.5rem; border-radius: 1.5rem; display: flex; flex-direction: column; }
+                .close-cash-body { flex: 2; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
                 
-                .close-cash-day-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.75rem; margin: 1.5rem 0; padding-right: 0.5rem; }
-                .close-cash-day-row { display: flex; justify-content: space-between; padding: 0.75rem 1rem; background: rgba(255,255,255,0.05); border-radius: 0.75rem; font-size: 0.95rem; }
-                .close-cash-day-total { padding: 1.25rem; background: #334155; border-radius: 1rem; display: flex; justify-content: space-between; align-items: center; border-left: 5px solid #6366f1; }
+                .close-cash-day-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; margin: 1rem 0; padding-right: 0.5rem; max-height: 200px; }
+                .close-cash-day-row { display: flex; justify-content: space-between; padding: 0.6rem 0.85rem; background: rgba(255,255,255,0.05); border-radius: 0.75rem; font-size: 0.9rem; }
+                .close-cash-day-total { padding: 1rem; background: #334155; border-radius: 1rem; display: flex; justify-content: space-between; align-items: center; border-left: 5px solid #6366f1; }
                 
-                .close-cash-method-card { background: white; border: 1.5px solid #e2e8f0; border-radius: 1rem; padding: 1.25rem; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: center; transition: all 0.2s; }
+                .close-cash-method-card { background: white; border: 1.5px solid #e2e8f0; border-radius: 1rem; padding: 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; align-items: center; transition: all 0.2s; }
                 .close-cash-method-card:focus-within { border-color: #6366f1; box-shadow: 0 4px 20px rgba(99, 102, 241, 0.1); transform: scale(1.01); }
-                .method-label { display: block; font-weight: 800; color: #1e293b; margin-bottom: 0.5rem; }
-                .method-expected-box { background: #f1f5f9; padding: 0.5rem 1rem; border-radius: 0.5rem; }
+                .method-label { display: block; font-weight: 800; color: #1e293b; margin-bottom: 0.35rem; }
+                .method-expected-box { background: #f1f5f9; padding: 0.4rem 0.75rem; border-radius: 0.5rem; }
                 .label-mini { display: block; font-size: 0.65rem; color: #64748b; font-weight: 900; letter-spacing: 0.5px; }
-                .value-expected { font-size: 1.15rem; font-weight: 800; color: #334155; }
+                .value-expected { font-size: 1.1rem; font-weight: 800; color: #334155; }
                 
-                .method-diff-status { font-size: 0.85rem; font-weight: 700; text-align: center; margin-top: 0.5rem; padding: 4px; border-radius: 6px; }
+                .method-diff-status { font-size: 0.82rem; font-weight: 700; text-align: center; margin-top: 0.35rem; padding: 3px; border-radius: 6px; }
                 .diff-cuadra { color: #059669; background: #ecfdf5; }
                 .diff-falta { color: #dc2626; background: #fef2f2; }
                 .diff-sobra { color: #2563eb; background: #eff6ff; }
                 
-                .close-cash-final-summary { background: #ffffff; border: 3px solid #1e293b; border-radius: 1.25rem; padding: 1.5rem; margin-top: 1rem; }
-                .total-main-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 2px dashed #e2e8f0; }
-                .total-main-label { font-size: 1rem; font-weight: 900; color: #1e293b; }
-                .total-main-val { font-size: 2rem; font-weight: 950; color: #1e293b; }
+                .close-cash-final-summary { background: #ffffff; border: 2.5px solid #1e293b; border-radius: 1rem; padding: 1rem 1.25rem; margin-top: 0.5rem; }
+                .total-main-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 2px dashed #e2e8f0; }
+                .total-main-label { font-size: 0.95rem; font-weight: 900; color: #1e293b; }
+                .total-main-val { font-size: 1.8rem; font-weight: 950; color: #1e293b; }
                 
-                .final-status-banner { padding: 1rem; border-radius: 0.75rem; text-align: center; font-weight: 900; font-size: 1.1rem; }
+                .final-status-banner { padding: 0.75rem; border-radius: 0.75rem; text-align: center; font-weight: 900; font-size: 1rem; }
                 .status-ok { background: #dcfce7; color: #166534; border: 2px solid #22c55e; }
                 .status-warning { background: #fee2e2; color: #991b1b; border: 2px solid #ef4444; }
                 .status-info { background: #dbeafe; color: #1e40af; border: 2px solid #3b82f6; }
@@ -1904,46 +2003,46 @@ const CashView = {
 
             <div class="close-cash-modal-container">
                 <div class="close-cash-sidebar">
-                    <h3 style="color: #94a3b8; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1.5rem;">Cierre de Turno</h3>
-                    <h2 style="font-size: 1.75rem; font-weight: 900; margin-bottom: 2rem;">Resumen de Ventas Netas</h2>
+                    <h3 style="color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem;">Cierre de Turno</h3>
+                    <h2 style="font-size: 1.5rem; font-weight: 900; margin-bottom: 1rem;">Resumen de Ventas Netas</h2>
                     <div class="close-cash-day-list">
                         ${dailyList}
                     </div>
                     <div class="close-cash-day-total">
                         <div>
-                            <span style="display:block; font-size: 0.8rem; opacity: 0.8; font-weight: 700;">TOTAL ACUMULADO</span>
+                            <span style="display:block; font-size: 0.75rem; opacity: 0.8; font-weight: 700;">TOTAL ACUMULADO</span>
                             <strong>Ticket Total</strong>
                         </div>
-                        <span style="font-size: 1.8rem; font-weight: 950;">${formatCLP(totalSalesAmount)}</span>
+                        <span style="font-size: 1.5rem; font-weight: 950;">${formatCLP(totalSalesAmount)}</span>
                     </div>
                 </div>
 
                 <div class="close-cash-body">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                        <h2 style="margin:0; font-weight: 900; color: #1e293b;">Cuadratura de Caja</h2>
-                        <span style="font-size: 0.85rem; color: #64748b; font-weight: 700;">PASO FINAL</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h2 style="margin:0; font-weight: 900; color: #1e293b; font-size: 1.3rem;">Cuadratura de Caja</h2>
+                        <span style="font-size: 0.8rem; color: #64748b; font-weight: 700;">PASO FINAL</span>
                     </div>
-                    <p style="color: #64748b; margin-bottom: 1rem; font-weight: 600;">Compara los montos reales recibidos con lo reportado por el sistema.</p>
+                    <p style="color: #64748b; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 600;">Compara los montos reales recibidos con lo reportado por el sistema.</p>
 
-                    <div style="background: #1e293b; color: white; padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
-                        <h4 style="margin: 0; font-size: 0.9rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">📈 Rendimiento de este Turno</h4>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; text-align: center;">
-                            <div style="background: rgba(255,255,255,0.03); padding: 0.75rem; border-radius: 0.75rem;">
-                                <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase; margin-bottom: 0.25rem;">Ventas Netas (Sin IVA)</span>
-                                <strong style="font-size: 1.15rem; color: #3b82f6; font-weight: 900;">${formatCLP(summary.totalSalesAmount - (summary.ivaDebito || 0))}</strong>
+                    <div style="background: #1e293b; color: white; padding: 1rem; border-radius: 0.85rem; margin-bottom: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                        <h4 style="margin: 0; font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">📈 Rendimiento de este Turno</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; text-align: center;">
+                            <div style="background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 0.5rem;">
+                                <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase; margin-bottom: 0.2rem;">Ventas Netas (Sin IVA)</span>
+                                <strong style="font-size: 1.05rem; color: #3b82f6; font-weight: 900;">${formatCLP(summary.totalSalesAmount - (summary.ivaDebito || 0))}</strong>
                             </div>
-                            <div style="background: rgba(255,255,255,0.03); padding: 0.75rem; border-radius: 0.75rem;">
-                                <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase; margin-bottom: 0.25rem;">Gastos del Turno</span>
-                                <strong style="font-size: 1.15rem; color: #ef4444; font-weight: 900;">-${formatCLP(summary.totalExpenses || 0)}</strong>
+                            <div style="background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 0.5rem;">
+                                <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase; margin-bottom: 0.2rem;">Gastos del Turno</span>
+                                <strong style="font-size: 1.05rem; color: #ef4444; font-weight: 900;">-${formatCLP(summary.totalExpenses || 0)}</strong>
                             </div>
-                            <div style="background: rgba(255,255,255,0.03); padding: 0.75rem; border-radius: 0.75rem; border: 1px solid rgba(16, 185, 129, 0.2);">
-                                <span style="font-size: 0.65rem; color: #10b981; display: block; font-weight: 800; text-transform: uppercase; margin-bottom: 0.25rem;">Ganancia Neta Turno</span>
-                                <strong style="font-size: 1.15rem; color: #10b981; font-weight: 900;">${formatCLP(summary.netProfit || 0)}</strong>
+                            <div style="background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 0.5rem; border: 1px solid rgba(16, 185, 129, 0.2);">
+                                <span style="font-size: 0.65rem; color: #10b981; display: block; font-weight: 800; text-transform: uppercase; margin-bottom: 0.2rem;">Ganancia Neta Turno</span>
+                                <strong style="font-size: 1.05rem; color: #10b981; font-weight: 900;">${formatCLP(summary.netProfit || 0)}</strong>
                             </div>
                         </div>
                     </div>
                     
-                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
                         ${methodRows}
                     </div>
 
@@ -1951,7 +2050,7 @@ const CashView = {
                         <div class="total-main-info">
                             <div>
                                 <span class="total-main-label">EFECTIVO CONTADO REAL</span>
-                                <p style="margin:0; font-size: 0.8rem; color: #64748b; font-weight: 700;">Suma de todos los montos ingresados arriba</p>
+                                <p style="margin:0; font-size: 0.75rem; color: #64748b; font-weight: 700;">Suma de todos los montos ingresados arriba</p>
                             </div>
                             <span class="total-main-val" id="closeCountedTotal">$0</span>
                         </div>
@@ -1966,13 +2065,13 @@ const CashView = {
         `;
 
         const footer = `
-            <button type="button" class="btn btn-secondary btn-lg" onclick="closeModal()" style="border-radius: 1rem;">Omitir por ahora</button>
-            <button type="button" id="btn-close-cash-final" class="btn btn-danger btn-lg" onclick="CashView.confirmCloseCash(${openCash.id})" style="border-radius: 1rem; padding-left: 3rem; padding-right: 3rem; font-weight: 900; box-shadow: 0 10px 25px rgba(239, 68, 68, 0.3);">
+            <button type="button" class="btn btn-secondary" onclick="closeModal()" style="border-radius: 0.75rem; padding: 0.6rem 1.5rem; font-weight: 700;">Omitir por ahora</button>
+            <button type="button" id="btn-close-cash-final" class="btn btn-danger" onclick="CashView.confirmCloseCash(${openCash.id})" style="border-radius: 0.75rem; padding: 0.6rem 2.5rem; font-weight: 900; box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);">
                 FINALIZAR Y CERRAR CAJA 🔒
             </button>
         `;
 
-        showModal(content, { title: 'Cierre Definitivo de Caja', footer, width: '1000px' });
+        showModal(content, { title: 'Cierre Definitivo de Caja', footer, width: '1080px' });
 
         // Lógica de actualización de diferencias
         setTimeout(() => {
