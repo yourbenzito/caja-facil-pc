@@ -1,15 +1,41 @@
-# Archivos temporales y respaldos
+# Archivos temporales, respaldos y logs
 *.zip
 *.log
+*.pdf
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Node y Build
 node_modules/
 dist/
 
-# Gemini / IDE scratch
-.gemini/
+# Secretos y Variables de Entorno (NUNCA SUBIR)
+.env
+.env.*
+.env.local
+backend/.env
+backend/.env.*
 
-# Base de Datos Local
+# Bases de Datos Locales y Respaldos Privados
+*.sqlite*
+backend/database.sqlite
 backend/data/*.sqlite*
+pagina CAJA FACIL/pos-backup*.json
+*pos-backup*.json
+reporte_auditoria_inventario.*
+
+# Cache & Herramientas de Análisis
+graphify-out/
+.gemini/
+.agents/
+
+# Scripts temporales de mantenimiento y scratch
+check-*.js
+query_db*.js
+extract_business.js
+import_backup.js
+audit-db.js
+verify_all.js
+fix_suppliers.js
+get_exact_answers.js
