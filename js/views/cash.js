@@ -252,7 +252,7 @@ const CashView = {
                 <div class="card cash-history-panel" style="margin-top: 3rem; border-radius: 2rem;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
                         <h3 style="margin: 0; font-weight: 900; font-size: 1.5rem; color: #1e293b;">Historial de Movimientos</h3>
-                        <button class="btn btn-outline" onclick="CashView.showAllCashRegistersHistory()" style="background: #f1f5f9; color: #475569; font-weight: 800; border: none; padding: 0.75rem 1.25rem; border-radius: 1rem;">
+        <button class="btn btn-outline" onclick="CashView.showAllCashRegistersHistory()" style="background: #f1f5f9; color: #475569; font-weight: 800; border: none; padding: 0.75rem 1.25rem; border-radius: 1rem;">
                             📋 Ver Reporte Completo
                         </button>
                     </div>
@@ -262,429 +262,658 @@ const CashView = {
         `;
     },
 
+    _viewMode: 'today', // 'today' | 'session'
+
+    setViewMode(mode) {
+        this._viewMode = mode;
+        if (this._activeRegister && this._cashHistoryDataset) {
+            app.navigate('cash');
+        }
+    },
+
     async renderCashSummary(cashRegister, history) {
         const summary = await CashRegister.getSummary(cashRegister.id);
-
-
         const dailyDetail = await CashController.getDailyDetail(cashRegister.id);
         this._dailyDetail = dailyDetail;
         this._activeSummary = summary;
         this._activeRegister = cashRegister;
 
-        const todayKey = new Date().toLocaleDateString('es-CL');
-        const todayDetail = dailyDetail.find(d => d.date === todayKey) || {
-            sales: [], debtPayments: [], creditSales: [], cashMovementsOut: [], cashMovementsIn: []
-        };
-
-        let totalNetSales = 0;
-        let totalCostNet = 0;
-        let totalTodaySales = 0;
-        let totalTodayDeudas = 0;
-
-        if (todayDetail && todayDetail.sales) {
-            todayDetail.sales.forEach(s => {
-                if (s.status === 'cancelled') return;
-                const total = parseFloat(s.total) || 0;
-                totalTodaySales += total;
-                // ponytail: Venta Neta descontando el 19% de IVA (salvo exentos explícitos)
-                const isExento = (s.ivaType === 'Exento' || s.documentType === 'factura_exenta');
-                const net = isExento ? total : Math.round(total / 1.19);
-                totalNetSales += net;
-                if (s.items && Array.isArray(s.items)) {
-                    s.items.forEach(i => {
-                        const qty = parseFloat(i.quantity) || 1;
-                        const costNet = (i.costNeto !== undefined && i.costNeto !== null)
-                            ? parseFloat(i.costNeto)
-                            : ((parseFloat(i.cost) || 0) / 1.19);
-                        totalCostNet += Math.round(costNet * qty);
-                    });
-                }
-            });
-        }
-
-        if (todayDetail && todayDetail.creditSales) {
-            todayDetail.creditSales.forEach(s => {
-                if (s.status === 'cancelled') return;
-                totalTodayDeudas += (parseFloat(s.total) || 0);
-            });
-        }
-
-        let totalSessionAnotados = 0;
-        if (summary && summary.totalCreditSalesAmount !== undefined) {
-            totalSessionAnotados = parseFloat(summary.totalCreditSalesAmount) || 0;
-        } else if (Array.isArray(dailyDetail)) {
-            dailyDetail.forEach(d => {
-                if (d.creditSales && Array.isArray(d.creditSales)) {
-                    d.creditSales.forEach(s => {
-                        if (s.status !== 'cancelled') {
-                            totalSessionAnotados += (parseFloat(s.total) || 0);
-                        }
-                    });
-                }
-            });
-        }
-
-        // ponytail: Ganancia real del turno considerando Ventas sin IVA menos Costos Netos de compra
-        const estimatedNetProfit = summary.netProfit !== undefined ? summary.netProfit : Math.round(totalNetSales - totalCostNet);
+        const isTodayMode = (this._viewMode === 'today');
 
         // Límite de Efectivo Sugerido en Caja (Por defecto $150.000 CLP)
         const maxCashLimit = parseFloat(localStorage.getItem('cashRegisterMaxCashLimit') || '150000');
         const showCashLimitAlert = (summary.expectedCash >= maxCashLimit);
+        const suggestedWithdrawal = Math.max(0, summary.expectedCash - (parseFloat(cashRegister.initialAmount) || 50000));
 
+        // Duración y alerta de caja abierta > 24h
         const rawOpenDate = cashRegister.openDate || cashRegister.openedAt || cashRegister.created_at;
         const openDateObj = rawOpenDate ? new Date(rawOpenDate) : new Date();
         const diffMinutes = Math.max(0, Math.floor((new Date() - openDateObj) / 60000));
-        const durationDisplay = isNaN(diffMinutes)
-            ? 'Turno Activo'
-            : (diffMinutes < 60 ? `${diffMinutes} min transcurridos` : `${Math.floor(diffMinutes / 60)}h ${diffMinutes % 60}m transcurridos`);
+        const diffHours = Math.floor(diffMinutes / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        const isLongSession = diffHours >= 24;
+
+        let durationDisplay = 'Turno Activo';
+        if (!isNaN(diffMinutes)) {
+            if (diffMinutes < 60) {
+                durationDisplay = `${diffMinutes} min transcurridos`;
+            } else if (diffHours < 24) {
+                durationDisplay = `${diffHours}h ${diffMinutes % 60}m transcurridos`;
+            } else {
+                durationDisplay = `${diffDays} día(s) y ${diffHours % 24}h transcurridos`;
+            }
+        }
+
+        // Datos dinámicos según el modo de vista (Hoy vs Sesión)
+        const displaySalesAmount = isTodayMode ? summary.todaySalesAmount : summary.totalSalesAmount;
+        const displaySalesCount = isTodayMode ? summary.todaySalesCount : summary.totalSales;
+        const displayBank = isTodayMode ? summary.todayBank : summary.sessionBank;
+        const displayNetProfit = isTodayMode ? summary.todayNetProfit : summary.netProfit;
+        const displayTicketAvg = isTodayMode ? summary.todayTicketAverage : summary.sessionTicketAverage;
+        const displayCreditSalesAmount = isTodayMode ? summary.todayCreditSalesAmount : summary.sessionCreditSalesAmount;
+        const displayDebtPayments = isTodayMode ? summary.todayDebtPayments : summary.totalDebtPayments;
+        const displayDebtCount = isTodayMode ? summary.todayDebtPaymentsCount : summary.debtPayments.length;
+        const displayReturnsAmount = isTodayMode ? summary.todayReturnedAmount : summary.totalReturnedAmount;
+        const displayReturnsCount = isTodayMode ? summary.todayReturnedCount : summary.totalReturnedCount;
 
         return `
             <style>
-                /* ── Caja: animaciones ── */
                 @keyframes cxFadeUp {
-                    from { opacity: 0; transform: translateY(18px); }
+                    from { opacity: 0; transform: translateY(14px); }
                     to   { opacity: 1; transform: translateY(0); }
                 }
-                @keyframes cxBarIn {
-                    from { width: 0; }
-                }
                 @keyframes cxPulse {
-                    0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.35); }
-                    50%       { box-shadow: 0 0 0 8px rgba(16,185,129,0); }
+                    0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+                    50%       { box-shadow: 0 0 0 7px rgba(16,185,129,0); }
                 }
 
-                /* ── Header de estado ── */
                 .cx-header {
-                    background: #fff;
+                    background: #ffffff;
                     border-radius: 1.25rem;
-                    padding: 1.5rem 2rem;
-                    box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+                    padding: 1.25rem 1.75rem;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
                     display: flex;
                     align-items: center;
                     justify-content: space-between;
                     flex-wrap: wrap;
                     gap: 1rem;
-                    margin-bottom: 1.5rem;
+                    margin-bottom: 1.25rem;
                     border-left: 5px solid #10b981;
-                    animation: cxFadeUp 0.35s ease both;
-                }
-                .cx-status-dot {
-                    width: 11px; height: 11px; border-radius: 50%;
-                    background: #10b981; flex-shrink: 0;
-                    animation: cxPulse 2s infinite;
+                    animation: cxFadeUp 0.3s ease both;
                 }
 
-                /* ── Botones de acción ── */
+                .cx-toggle-group {
+                    display: flex;
+                    background: #f1f5f9;
+                    border-radius: 0.75rem;
+                    padding: 0.25rem;
+                    gap: 0.25rem;
+                    border: 1px solid #e2e8f0;
+                }
+                .cx-toggle-btn {
+                    padding: 0.5rem 1rem;
+                    border-radius: 0.6rem;
+                    font-size: 0.85rem;
+                    font-weight: 800;
+                    border: none;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                    color: #64748b;
+                    background: transparent;
+                }
+                .cx-toggle-btn.active {
+                    background: #ffffff;
+                    color: #0f172a;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+                }
+
+                .cx-kpi-main {
+                    background: #ffffff;
+                    border-radius: 1.15rem;
+                    padding: 1.35rem 1.5rem;
+                    box-shadow: 0 3px 18px rgba(0,0,0,0.06);
+                    border: 1px solid #f1f5f9;
+                    border-left: 4.5px solid transparent;
+                    position: relative;
+                    overflow: hidden;
+                    transition: transform 0.2s, box-shadow 0.2s;
+                    animation: cxFadeUp 0.35s ease both;
+                }
+                .cx-kpi-main:hover {
+                    transform: translateY(-3px);
+                    box-shadow: 0 8px 24px rgba(0,0,0,0.09);
+                }
+                .cx-kpi-bg {
+                    position: absolute;
+                    right: -10px;
+                    bottom: -10px;
+                    font-size: 4rem;
+                    opacity: 0.07;
+                    pointer-events: none;
+                    user-select: none;
+                }
+                .cx-kpi-lbl {
+                    font-size: 0.75rem;
+                    font-weight: 800;
+                    text-transform: uppercase;
+                    letter-spacing: 0.8px;
+                    margin-bottom: 0.4rem;
+                }
+                .cx-kpi-val {
+                    font-size: 1.85rem;
+                    font-weight: 950;
+                    letter-spacing: -1px;
+                    line-height: 1.1;
+                }
+                .cx-kpi-sub {
+                    font-size: 0.78rem;
+                    margin-top: 0.45rem;
+                    color: #64748b;
+                    font-weight: 600;
+                }
+
                 .cx-action-grid {
                     display: grid;
-                    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+                    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
                     gap: 1rem;
                     margin-bottom: 1.5rem;
                     animation: cxFadeUp 0.38s ease both;
                 }
                 .cx-action-btn {
-                    display: flex; flex-direction: column; align-items: center; justify-content: center;
-                    gap: 0.5rem; padding: 1.25rem 1rem; border-radius: 1rem;
-                    border: none; cursor: pointer; font-weight: 700; font-size: 0.9rem;
-                    transition: all 0.22s ease; text-align: center;
-                    min-height: 90px;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 0.4rem;
+                    padding: 1.15rem 1rem;
+                    border-radius: 1rem;
+                    border: none;
+                    cursor: pointer;
+                    font-weight: 800;
+                    font-size: 0.92rem;
+                    transition: all 0.2s ease;
+                    text-align: center;
+                    min-height: 85px;
                 }
-                .cx-action-btn:hover { transform: translateY(-4px); }
-                .cx-action-btn .cx-btn-icon { font-size: 1.7rem; }
+                .cx-action-btn:hover { transform: translateY(-3px); }
+                .cx-action-btn .cx-btn-icon { font-size: 1.6rem; }
 
-                /* ── KPI cards ── */
-                .cx-kpi {
-                    background: #fff;
-                    border-radius: 1.15rem;
-                    padding: 1.35rem 1.5rem;
-                    box-shadow: 0 3px 20px rgba(0,0,0,0.07);
-                    border-left: 4px solid transparent;
-                    position: relative; overflow: hidden;
-                    transition: transform 0.2s, box-shadow 0.2s;
-                    animation: cxFadeUp 0.4s ease both;
+                .cx-sec-card {
+                    background: #ffffff;
+                    border-radius: 1rem;
+                    border: 1px solid #e2e8f0;
+                    padding: 1.1rem 1.25rem;
+                    display: flex;
+                    gap: 1rem;
+                    align-items: center;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+                    transition: all 0.2s ease;
                 }
-                .cx-kpi:hover { transform: translateY(-3px); box-shadow: 0 10px 32px rgba(0,0,0,0.12); }
-                .cx-kpi-bg { position:absolute; right:-10px; bottom:-10px; font-size:4.5rem; opacity:0.06; pointer-events:none; user-select:none; }
-                .cx-kpi-lbl { font-size:0.72rem; font-weight:800; text-transform:uppercase; letter-spacing:1px; margin-bottom:0.5rem; }
-                .cx-kpi-val { font-size:1.7rem; font-weight:900; letter-spacing:-1px; line-height:1; }
-                .cx-kpi-sub { font-size:0.75rem; margin-top:0.4rem; color:#64748b; }
-
-                /* ── Sección ── */
-                .cx-section {
-                    background: #fff;
-                    border-radius: 1.15rem;
-                    padding: 1.5rem;
-                    box-shadow: 0 3px 20px rgba(0,0,0,0.06);
-                    animation: cxFadeUp 0.42s ease both;
-                }
-                .cx-section-title {
-                    font-size: 0.88rem; font-weight: 800; color: #0f172a;
-                    display: flex; align-items: center; gap: 0.5rem;
-                    margin-bottom: 1.1rem; text-transform: uppercase; letter-spacing: 0.5px;
-                }
-
-                /* ── Fila de dato ── */
-                .cx-row {
-                    display: flex; justify-content: space-between; align-items: center;
-                    padding: 0.625rem 0; border-bottom: 1px solid #f1f5f9;
-                }
-                .cx-row:last-child { border-bottom: none; }
-                .cx-row-lbl { font-size:0.85rem; font-weight:600; color:#475569; }
-                .cx-row-val { font-size:0.95rem; font-weight:800; color:#0f172a; }
-
-                /* ── Tarjeta de totales sesión ── */
-                .cx-total-card {
-                    background: #fff; border-radius: 1rem;
-                    border: 1.5px solid #e2e8f0; padding: 1.1rem 1.25rem;
-                    cursor: pointer; transition: all 0.22s ease;
-                    display: flex; gap: 0.875rem; align-items: flex-start;
-                    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-                }
-                .cx-total-card:hover {
-                    transform: translateY(-3px); box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+                .cx-sec-card:hover {
                     border-color: #cbd5e1;
+                    box-shadow: 0 6px 16px rgba(0,0,0,0.08);
                 }
-                .cx-total-icon {
-                    width: 42px; height: 42px; border-radius: 0.75rem;
-                    display: flex; align-items: center; justify-content: center;
-                    font-size: 1.25rem; flex-shrink: 0;
+                .cx-sec-icon {
+                    width: 46px;
+                    height: 46px;
+                    border-radius: 0.85rem;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 1.35rem;
+                    flex-shrink: 0;
                 }
-                .cx-total-lbl { font-size:0.72rem; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:#64748b; }
-                .cx-total-val { font-size:1.3rem; font-weight:900; color:#0f172a; margin-top:0.15rem; }
-                .cx-total-foot { font-size:0.72rem; color:#94a3b8; margin-top:0.25rem; }
 
-                /* ── Barra de pago ── */
-                .cx-pay-bar-wrap { height:6px; background:#e2e8f0; border-radius:99px; overflow:hidden; margin-top:0.5rem; }
-                .cx-pay-bar { height:100%; border-radius:99px; animation: cxBarIn 0.8s ease; }
+                .cx-live-table-wrap {
+                    background: #ffffff;
+                    border-radius: 1.25rem;
+                    padding: 1.5rem;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+                    border: 1px solid #f1f5f9;
+                    margin-top: 1.5rem;
+                    animation: cxFadeUp 0.45s ease both;
+                }
             </style>
 
-            <!-- ===== HEADER ESTADO CAJA ===== -->
+            <!-- ===== CABECERA PRINCIPAL ===== -->
             <div class="cx-header">
                 <div style="display:flex; align-items:center; gap:1rem;">
-                    <div class="cx-status-dot"></div>
+                    <div style="width:12px; height:12px; border-radius:50%; background:#10b981; animation:cxPulse 2s infinite;"></div>
                     <div>
-                        <div style="display:flex; align-items:center; gap:0.75rem;">
-                            <h1 style="margin:0; color:#0f172a; font-size:1.5rem; font-weight:900;">Control de Caja</h1>
-                            <span style="background:#dcfce7; color:#166534; border:1.5px solid #86efac; font-size:0.78rem; font-weight:800; padding:0.25rem 0.875rem; border-radius:99px;">
+                        <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                            <h1 style="margin:0; color:#0f172a; font-size:1.45rem; font-weight:900;">Control de Caja</h1>
+                            <span style="background:#dcfce7; color:#166534; border:1px solid #86efac; font-size:0.75rem; font-weight:800; padding:0.25rem 0.75rem; border-radius:99px;">
                                 Caja #${cashRegister.id} • Abierta
                             </span>
+                            ${isLongSession ? `
+                                <span style="background:#fef3c7; color:#92400e; border:1px solid #fcd34d; font-size:0.75rem; font-weight:800; padding:0.25rem 0.75rem; border-radius:99px;">
+                                    ⏱️ Caja de Varios Días
+                                </span>
+                            ` : ''}
                         </div>
-                        <p style="margin:0.3rem 0 0; color:#64748b; font-size:0.83rem;">
-                            Desde ${formatDateTime(cashRegister.openDate)} &nbsp;·&nbsp;
-                            <span style="color:#10b981; font-weight:700;">${durationDisplay}</span>
+                        <p style="margin:0.25rem 0 0; color:#64748b; font-size:0.82rem;">
+                            Abierta el ${formatDateTime(cashRegister.openDate)} &nbsp;·&nbsp;
+                            <strong style="color:${isLongSession ? '#b45309' : '#10b981'};">${durationDisplay}</strong>
                         </p>
                     </div>
                 </div>
-                <div style="display:flex; gap:0.625rem; flex-wrap:wrap;">
+
+                <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                    <!-- SELECTOR HOY / TODA LA SESIÓN -->
+                    <div class="cx-toggle-group">
+                        <button type="button" class="cx-toggle-btn ${isTodayMode ? 'active' : ''}" onclick="CashView.setViewMode('today')" title="Muestra solo las ventas y dinero del día actual">
+                            📅 Ver Solo Hoy
+                        </button>
+                        <button type="button" class="cx-toggle-btn ${!isTodayMode ? 'active' : ''}" onclick="CashView.setViewMode('session')" title="Muestra todo lo acumulado desde que se abrió la caja">
+                            📦 Toda la Sesión
+                        </button>
+                    </div>
+
                     <button onclick="CashView.showAllCashRegistersHistory()"
-                            style="background:#f1f5f9; color:#475569; border:1.5px solid #e2e8f0; padding:0.5rem 1rem; border-radius:0.625rem; font-size:0.8rem; font-weight:700; cursor:pointer; transition:all 0.18s;"
-                            onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">
-                        📚 Historial Cajas
-                    </button>
-                    <button onclick="CashView.showCashHistory(${cashRegister.id})"
-                            style="background:#f1f5f9; color:#475569; border:1.5px solid #e2e8f0; padding:0.5rem 1rem; border-radius:0.625rem; font-size:0.8rem; font-weight:700; cursor:pointer; transition:all 0.18s;"
-                            onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">
-                        📋 Esta Sesión
+                            style="background:#f8fafc; color:#475569; border:1.5px solid #e2e8f0; padding:0.55rem 1rem; border-radius:0.75rem; font-size:0.82rem; font-weight:800; cursor:pointer; transition:all 0.18s;"
+                            onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f8fafc'">
+                        📚 Historial de Cierres
                     </button>
                 </div>
             </div>
 
             <!-- ===== ALERTA DE TOPE DE EFECTIVO EN CAJA ===== -->
             ${showCashLimitAlert ? `
-                <div style="background:#fffbe6; border:2px solid #f59e0b; border-radius:1.25rem; padding:1.25rem 1.5rem; margin-bottom:1.5rem; display:flex; justify-content:space-between; align-items:center; box-shadow:0 4px 15px rgba(245,158,11,0.15); animation: cxFadeUp 0.3s ease both;">
+                <div style="background:#fffbeb; border:2px solid #f59e0b; border-radius:1.25rem; padding:1.25rem 1.5rem; margin-bottom:1.25rem; display:flex; justify-content:space-between; align-items:center; gap:1rem; box-shadow:0 4px 15px rgba(245,158,11,0.15); animation: cxFadeUp 0.3s ease both;">
                     <div style="display:flex; align-items:center; gap:1rem;">
-                        <span style="font-size:2.2rem;">⚠️</span>
+                        <span style="font-size:2.2rem;">🛡️</span>
                         <div>
-                            <strong style="color:#92400e; font-size:1.05rem; display:block;">Alerta de Límite de Efectivo en Caja</strong>
+                            <strong style="color:#92400e; font-size:1rem; display:block;">Alerta de Seguridad: Exceso de Efectivo en Cajón</strong>
                             <span style="color:#b45309; font-size:0.85rem; font-weight:600;">
-                                El efectivo acumulado en caja (<strong>${formatCLP(summary.expectedCash)}</strong>) supera el límite sugerido de <strong>${formatCLP(maxCashLimit)}</strong>. Se recomienda realizar un retiro de seguridad a caja fuerte.
+                                Tienes <strong>${formatCLP(summary.expectedCash)}</strong> en el cajón (límite sugerido: ${formatCLP(maxCashLimit)}). Se sugiere retirar <strong>${formatCLP(suggestedWithdrawal)}</strong> a caja fuerte para mantener solo la base.
                             </span>
                         </div>
                     </div>
-                    <button class="btn btn-warning" onclick="CashView.showWithdrawCashForm()" style="font-weight:900; border-radius:0.75rem; white-space:nowrap; padding:0.6rem 1.25rem;">
-                        ➖ Retirar Dinero
+                    <button class="btn btn-warning" onclick="CashView.showWithdrawCashForm()" style="font-weight:900; border-radius:0.75rem; white-space:nowrap; padding:0.65rem 1.25rem; cursor:pointer;">
+                        ➖ Retirar Excedente
                     </button>
                 </div>
             ` : ''}
 
-            <!-- ===== BOTONES DE ACCIÓN (3 botones, sin Gastos) ===== -->
+            <!-- ===== 4 KPIs PRINCIPALES ===== -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:1.25rem; margin-bottom:1.25rem;">
+
+                <!-- 1. EFECTIVO FÍSICO REAL EN CAJÓN -->
+                <div class="cx-kpi-main" style="border-left-color:#10b981; cursor:pointer;" onclick="CashView.showPaymentMethods()" title="Total de dinero físico que debe haber en el cajón. Haz clic para ver desglose.">
+                    <div class="cx-kpi-bg">💵</div>
+                    <div class="cx-kpi-lbl" style="color:#059669;">Efectivo en Cajón (Físico)</div>
+                    <div class="cx-kpi-val" style="color:#059669;">${formatCLP(summary.expectedCash)}</div>
+                    <div class="cx-kpi-sub">
+                        ${isTodayMode ? `Neto hoy: <strong>+${formatCLP(summary.todayCashNet)}</strong>` : `Base inicial: <strong>${formatCLP(summary.initialAmount)}</strong>`}
+                    </div>
+                </div>
+
+                <!-- 2. DINERO A VERIFICAR EN BANCO (DIGITAL) -->
+                <div class="cx-kpi-main" style="border-left-color:#3b82f6; cursor:pointer;" onclick="CashView.showPaymentMethods()" title="Dinero que debes verificar en tu cuenta de banco antes de transferir a personal.">
+                    <div class="cx-kpi-bg">🏦</div>
+                    <div class="cx-kpi-lbl" style="color:#2563eb;">A Verificar en Banco (${isTodayMode ? 'Hoy' : 'Sesión'})</div>
+                    <div class="cx-kpi-val" style="color:#2563eb;">${formatCLP(displayBank.total)}</div>
+                    <div class="cx-kpi-sub">
+                        💳 Tarjetas: ${formatCLP(displayBank.card)} · 📱 QR/Transf: ${formatCLP(displayBank.qr + displayBank.other)}
+                    </div>
+                </div>
+
+                <!-- 3. VENTAS (HOY O SESIÓN) -->
+                <div class="cx-kpi-main" style="border-left-color:#6366f1; cursor:pointer;" onclick="CashView.showHistorialVentasSesion()" title="Monto total vendido. Haz clic para ver todos los tickets.">
+                    <div class="cx-kpi-bg">🛍️</div>
+                    <div class="cx-kpi-lbl" style="color:#4f46e5;">Ventas (${isTodayMode ? 'Hoy' : 'Sesión'})</div>
+                    <div class="cx-kpi-val" style="color:#4338ca;">${formatCLP(displaySalesAmount)}</div>
+                    <div class="cx-kpi-sub">
+                        ${displaySalesCount} tickets emitidos · click para ver
+                    </div>
+                </div>
+
+                <!-- 4. GANANCIA REAL ESTIMADA -->
+                <div class="cx-kpi-main" style="border-left-color:#8b5cf6;" title="Ganancia Neta = (Ventas sin IVA) - (Costo de compra de los productos vendidos).">
+                    <div class="cx-kpi-bg">💎</div>
+                    <div class="cx-kpi-lbl" style="color:#7c3aed;">Ganancia Real (${isTodayMode ? 'Hoy' : 'Sesión'})</div>
+                    <div class="cx-kpi-val" style="color:#6d28d9;">${formatCLP(displayNetProfit)}</div>
+                    <div class="cx-kpi-sub">
+                        Margen real para tu bolsillo
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ===== 3 MÉTRICAS SECUNDARIAS COMPLEMENTARIAS ===== -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
+
+                <!-- TICKET PROMEDIO Y CLIENTES -->
+                <div class="cx-sec-card">
+                    <div class="cx-sec-icon" style="background:#eff6ff; color:#3b82f6;">👥</div>
+                    <div>
+                        <div style="font-size:0.75rem; font-weight:800; color:#64748b; text-transform:uppercase;">Ticket Promedio (${isTodayMode ? 'Hoy' : 'Sesión'})</div>
+                        <div style="font-size:1.25rem; font-weight:900; color:#0f172a; margin-top:2px;">${formatCLP(displayTicketAvg)}</div>
+                        <div style="font-size:0.72rem; color:#94a3b8; font-weight:600;">${displaySalesCount} compras atendidas</div>
+                    </div>
+                </div>
+
+                <!-- FLUJO NETO DE FIADOS -->
+                <div class="cx-sec-card" style="cursor:pointer;" onclick="CashView.showClientesPagaron()" title="Click para ver clientes que abonaron o ver anotados">
+                    <div class="cx-sec-icon" style="background:#fffbeb; color:#d97706;">📝</div>
+                    <div>
+                        <div style="font-size:0.75rem; font-weight:800; color:#64748b; text-transform:uppercase;">Flujo de Fiados (${isTodayMode ? 'Hoy' : 'Sesión'})</div>
+                        <div style="font-size:1.1rem; font-weight:900; color:#0f172a; margin-top:2px;">
+                            <span style="color:#dc2626;" title="Fiado en este período">-${formatCLP(displayCreditSalesAmount)}</span>
+                            <span style="color:#64748b; margin:0 4px;">/</span>
+                            <span style="color:#059669;" title="Cobrado de deudas en este período">+${formatCLP(displayDebtPayments)}</span>
+                        </div>
+                        <div style="font-size:0.72rem; color:#94a3b8; font-weight:600;">${displayDebtCount} abonos cobrados</div>
+                    </div>
+                </div>
+
+                <!-- DEVOLUCIONES Y ANULACIONES -->
+                <div class="cx-sec-card">
+                    <div class="cx-sec-icon" style="background:#fef2f2; color:#ef4444;">🔄</div>
+                    <div>
+                        <div style="font-size:0.75rem; font-weight:800; color:#64748b; text-transform:uppercase;">Devoluciones (${isTodayMode ? 'Hoy' : 'Sesión'})</div>
+                        <div style="font-size:1.25rem; font-weight:900; color:${displayReturnsAmount > 0 ? '#dc2626' : '#0f172a'}; margin-top:2px;">
+                            ${formatCLP(displayReturnsAmount)}
+                        </div>
+                        <div style="font-size:0.72rem; color:#94a3b8; font-weight:600;">${displayReturnsCount} devoluciones registradas</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ===== BOTONES DE ACCIÓN RÁPIDA ===== -->
             <div class="cx-action-grid">
 
                 <button class="cx-action-btn" onclick="CashView.showAddCashForm()"
-                        style="background:linear-gradient(135deg,#10b981,#059669); color:#fff; box-shadow:0 4px 16px rgba(16,185,129,0.3);"
-                        onmouseover="this.style.boxShadow='0 8px 24px rgba(16,185,129,0.45)'"
-                        onmouseout="this.style.boxShadow='0 4px 16px rgba(16,185,129,0.3)'">
+                        style="background:linear-gradient(135deg,#10b981,#059669); color:#fff; box-shadow:0 4px 16px rgba(16,185,129,0.25);">
                     <span class="cx-btn-icon">➕</span>
                     <span>Agregar Dinero</span>
-                    <small style="opacity:0.8; font-weight:500; font-size:0.72rem;">Entrada de efectivo</small>
+                    <small style="opacity:0.85; font-weight:600; font-size:0.75rem;">Entrada de efectivo / sencillo</small>
                 </button>
 
                 <button class="cx-action-btn" onclick="CashView.showWithdrawCashForm()"
-                        style="background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; box-shadow:0 4px 16px rgba(245,158,11,0.3);"
-                        onmouseover="this.style.boxShadow='0 8px 24px rgba(245,158,11,0.45)'"
-                        onmouseout="this.style.boxShadow='0 4px 16px rgba(245,158,11,0.3)'">
+                        style="background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; box-shadow:0 4px 16px rgba(245,158,11,0.25);">
                     <span class="cx-btn-icon">➖</span>
                     <span>Retirar Dinero</span>
-                    <small style="opacity:0.8; font-weight:500; font-size:0.72rem;">Salida de efectivo</small>
+                    <small style="opacity:0.85; font-weight:600; font-size:0.75rem;">Salida para bolsillo o compras</small>
                 </button>
 
                 <button class="cx-action-btn" onclick="CashView.showCloseCashForm()"
-                        style="background:linear-gradient(135deg,#ef4444,#dc2626); color:#fff; box-shadow:0 4px 16px rgba(239,68,68,0.3);"
-                        onmouseover="this.style.boxShadow='0 8px 24px rgba(239,68,68,0.45)'"
-                        onmouseout="this.style.boxShadow='0 4px 16px rgba(239,68,68,0.3)'">
+                        style="background:linear-gradient(135deg,#ef4444,#dc2626); color:#fff; box-shadow:0 4px 16px rgba(239,68,68,0.25);">
                     <span class="cx-btn-icon">🔒</span>
-                    <span>Cerrar Caja</span>
-                    <small style="opacity:0.8; font-weight:500; font-size:0.72rem;">Finalizar turno</small>
+                    <span>Cerrar Turno / Caja</span>
+                    <small style="opacity:0.85; font-weight:600; font-size:0.75rem;">Cuadratura final y arqueo</small>
                 </button>
 
             </div>
 
-            <!-- ===== KPIs: VENTAS Y EFECTIVO (4 KPIs ÚNICOS) ===== -->
-            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:1rem; margin-bottom:1.5rem;">
-
-                <!-- Ventas del turno -->
-                <div class="cx-kpi" style="border-left-color:#4f46e5; cursor:pointer; animation-delay:0s;" onclick="CashView.showHistorialVentasSesion()" title="Total vendido en el turno actual. Haz clic para ver todos los tickets.">
-                    <div class="cx-kpi-bg">🛍️</div>
-                    <div class="cx-kpi-lbl" style="color:#4f46e5;">Ventas Turno</div>
-                    <div class="cx-kpi-val">${formatCLP(totalTodaySales)}</div>
-                    <div class="cx-kpi-sub">${summary.totalSales || todayDetail.sales.length} tickets · click para ver</div>
-                </div>
-
-                <!-- Deudas / Fiados del turno -->
-                <div class="cx-kpi" style="border-left-color:#ef4444; cursor:pointer; animation-delay:0.06s;" onclick="CashView.showDeudasHoy()" title="Ventas anotadas a crédito durante el turno.">
-                    <div class="cx-kpi-bg">📝</div>
-                    <div class="cx-kpi-lbl" style="color:#ef4444;">Fiados Turno</div>
-                    <div class="cx-kpi-val" style="color:#dc2626;">${formatCLP(totalTodayDeudas)}</div>
-                    <div class="cx-kpi-sub">${todayDetail.creditSales.length} anotados · click para ver</div>
-                </div>
-
-                <!-- Efectivo esperado -->
-                <div class="cx-kpi" style="border-left-color:#10b981; animation-delay:0.10s;" title="Total de dinero físico que debe haber en la caja.">
-                    <div class="cx-kpi-bg">💵</div>
-                    <div class="cx-kpi-lbl" style="color:#10b981;">Efectivo Esperado</div>
-                    <div class="cx-kpi-val" style="color:#059669;">${formatCLP(summary.expectedCash)}</div>
-                    <div class="cx-kpi-sub">Inicial + ventas en efectivo</div>
-                </div>
-
-                <!-- Ganancia Neta Estimada -->
-                <div class="cx-kpi" style="border-left-color:#8b5cf6; animation-delay:0.14s;" title="Ganancia neta estimada del turno = (Ventas Neto sin IVA 19%) - (Costo Neto de los Productos Vendidos).">
-                    <div class="cx-kpi-bg">💎</div>
-                    <div class="cx-kpi-lbl" style="color:#8b5cf6;">Ganancia Neta Turno</div>
-                    <div class="cx-kpi-val" style="color:#7c3aed;">${formatCLP(estimatedNetProfit)}</div>
-                    <div class="cx-kpi-sub">(Ventas Neto) - (Costo Vendido)</div>
-                </div>
-
-            </div>
-
-            <!-- ===== FILA: EFECTIVO DETALLADO + MÉTODOS PAGO ===== -->
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:1.25rem; margin-bottom:1.25rem;">
-
-                <!-- Desglose de efectivo -->
-                <div class="cx-section" style="animation-delay:0.18s; border-left:4px solid #10b981;">
-                    <div class="cx-section-title">💰 Resumen de Efectivo</div>
-                    <div class="cx-row">
-                        <span class="cx-row-lbl">Monto Inicial</span>
-                        <span class="cx-row-val">${formatCLP(summary.initialAmount)}</span>
+            <!-- ===== TABLA EN VIVO DE MOVIMIENTOS DEL TURNO CON BUSCADOR ===== -->
+            <div class="cx-live-table-wrap">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem;">
+                    <div>
+                        <h3 style="margin:0; color:#0f172a; font-size:1.15rem; font-weight:900;">
+                            📋 Movimientos y Operaciones (${isTodayMode ? 'Solo Hoy' : 'Toda la Sesión'})
+                        </h3>
+                        <p style="margin:0.2rem 0 0; color:#64748b; font-size:0.8rem;">
+                            Historial en tiempo real de ventas, abonos, retiros e ingresos
+                        </p>
                     </div>
-                    <div class="cx-row" style="cursor:pointer;" onclick="CashView.showPaymentMethods()" title="Ver desglose">
-                        <span class="cx-row-lbl">Ingresos Netos (Efectivo)</span>
-                        <span class="cx-row-val" style="color:#059669;">+${formatCLP(summary.cashForDisplay)}</span>
-                    </div>
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:0.875rem; padding-top:0.875rem; border-top:2px solid #e2e8f0;">
-                        <span style="font-size:0.9rem; font-weight:800; color:#0f172a;">Efectivo Esperado Real</span>
-                        <span style="font-size:1.8rem; font-weight:900; color:#059669; letter-spacing:-1px;">${formatCLP(summary.expectedCash)}</span>
-                    </div>
-                    <button onclick="CashView.showPaymentMethods()"
-                            style="margin-top:0.875rem; width:100%; padding:0.6rem; background:#ecfdf5; color:#059669; border:1.5px solid #6ee7b7; border-radius:0.625rem; font-weight:700; font-size:0.82rem; cursor:pointer; transition:background 0.18s;"
-                            onmouseover="this.style.background='#d1fae5'" onmouseout="this.style.background='#ecfdf5'">
-                        📊 Ver Todos los Métodos de Pago
-                    </button>
-                </div>
 
-                <!-- Métodos de pago no-efectivo -->
-                <div class="cx-section" style="animation-delay:0.21s; border-left:4px solid #3b82f6;">
-                    <div class="cx-section-title">💳 Métodos de Pago (No Efectivo)</div>
-
-                    ${(() => {
-                        const cardAmt  = summary.paymentSummary?.card  || 0;
-                        const qrAmt   = summary.paymentSummary?.qr    || 0;
-                        const othAmt  = summary.paymentSummary?.other  || 0;
-                        const nonCashTotal = cardAmt + qrAmt + othAmt;
-                        const pctCard = nonCashTotal > 0 ? (cardAmt / nonCashTotal * 100) : 0;
-                        const pctQr   = nonCashTotal > 0 ? (qrAmt   / nonCashTotal * 100) : 0;
-                        const pctOth  = nonCashTotal > 0 ? (othAmt  / nonCashTotal * 100) : 0;
-                        return [
-                            { icon:'💳', lbl:'Tarjeta',      amt:cardAmt, pct:pctCard, color:'#3b82f6' },
-                            { icon:'📱', lbl:'QR / Digital', amt:qrAmt,   pct:pctQr,   color:'#8b5cf6' },
-                            { icon:'🏦', lbl:'Otro/Transf.', amt:othAmt,  pct:pctOth,  color:'#64748b' }
-                        ].map(m => `
-                            <div style="margin-bottom:0.875rem;">
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.3rem;">
-                                    <span style="font-size:0.83rem; font-weight:700; color:#374151;">${m.icon} ${m.lbl}</span>
-                                    <span style="font-size:0.9rem; font-weight:800; color:${m.color};">${formatCLP(m.amt)}</span>
-                                </div>
-                                <div class="cx-pay-bar-wrap">
-                                    <div class="cx-pay-bar" style="width:${m.pct.toFixed(1)}%; background:${m.color};"></div>
-                                </div>
-                            </div>
-                        `).join('');
-                    })()}
-
-                </div>
-            </div>
-
-            <!-- ===== OPERACIONES DE LA SESIÓN ===== -->
-            <div style="font-size:0.88rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:1px; margin-bottom:0.875rem; display:flex; align-items:center; gap:0.5rem; animation: cxFadeUp 0.3s ease both; animation-delay:0.25s;">
-                📋 Operaciones Complementarias del Turno
-            </div>
-            <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:1rem;">
-
-                <div class="cx-total-card" onclick="CashView.showClientesPagaron()">
-                    <div class="cx-total-icon" style="background:#ecfdf5;">💰</div>
-                    <div style="flex:1;">
-                        <div class="cx-total-lbl">Deudas Cobradas</div>
-                        <div class="cx-total-val" style="color:#059669;">${formatCLP(summary.totalDebtPayments)}</div>
-                        <div class="cx-total-foot">${summary.debtPayments.length} abonos recibidos</div>
-                    </div>
-                </div>
-
-                <div class="cx-total-card" onclick="CashView.showMovimientosManuales()">
-                    <div class="cx-total-icon" style="background:#fffbeb;">🔁</div>
-                    <div style="flex:1;">
-                        <div class="cx-total-lbl">Ingresos y Retiros</div>
-                        <div style="display:flex; gap:0.75rem; margin-top:0.2rem;">
-                            <span style="font-size:1rem; font-weight:800; color:#059669;">+${formatCLP(summary.totalCashIn)}</span>
-                            <span style="font-size:1rem; font-weight:800; color:#dc2626;">-${formatCLP(summary.totalRetiros)}</span>
+                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <div style="position:relative;">
+                            <input type="text" 
+                                   id="cx-live-search" 
+                                   placeholder="🔍 Buscar ticket, cliente, monto..." 
+                                   oninput="CashView.filterLiveMovements(this.value)"
+                                   style="padding:0.55rem 1rem 0.55rem 2.2rem; border-radius:0.75rem; border:1.5px solid #cbd5e1; font-size:0.85rem; width:280px; outline:none; font-weight:600;">
+                            <span style="position:absolute; left:0.75rem; top:50%; transform:translateY(-50%); font-size:0.9rem; opacity:0.5;">🔍</span>
                         </div>
-                        <div class="cx-total-foot">Gestión manual de efectivo</div>
                     </div>
                 </div>
 
-                <div class="cx-total-card" onclick="CashView.showHistorialVentasSesion()">
-                    <div class="cx-total-icon" style="background:#eff6ff;">📜</div>
-                    <div style="flex:1;">
-                        <div class="cx-total-lbl">Historial de Tickets</div>
-                        <div class="cx-total-val" style="color:#3b82f6;">${summary.totalSales} tickets</div>
-                        <div class="cx-total-foot">Ver detalle completo</div>
-                    </div>
+                <div id="cx-live-table-container">
+                    ${this.renderLiveMovementsTable(isTodayMode)}
                 </div>
-
-            </div>
-
-                <div class="cx-total-card" onclick="CashView.showMovimientosManuales()">
-                    <div class="cx-total-icon" style="background:#fffbeb;">🔁</div>
-                    <div style="flex:1;">
-                        <div class="cx-total-lbl">Ingresos y Retiros</div>
-                        <div style="display:flex; gap:0.75rem; margin-top:0.2rem;">
-                            <span style="font-size:1rem; font-weight:800; color:#059669;">+${formatCLP(summary.totalCashIn)}</span>
-                            <span style="font-size:1rem; font-weight:800; color:#dc2626;">-${formatCLP(summary.totalRetiros)}</span>
-                        </div>
-                        <div class="cx-total-foot">Gestión manual de efectivo</div>
-                    </div>
-                </div>
-
             </div>
         `;
+    },
+
+    renderLiveMovementsTable(isTodayOnly = false, searchTerm = '') {
+        const todayDate = new Date().toLocaleDateString('es-CL');
+        const rows = [];
+
+        (this._dailyDetail || []).forEach(day => {
+            if (isTodayOnly && day.date !== todayDate) return;
+
+            (day.sales || []).forEach(s => {
+                const ticketNum = (s.saleNumber !== undefined && s.saleNumber !== null && s.saleNumber !== '') ? `#${s.saleNumber}` : `#${s.id}`;
+                const methodLabel = s.paymentMethod === 'mixed' ? '🔀 Mixto' : this.getPaymentMethodName(s.paymentMethod || 'cash');
+                rows.push({
+                    type: 'sale',
+                    date: s.date || s.createdAt || day.date,
+                    ticketId: s.id,
+                    title: `Venta ${ticketNum}`,
+                    sub: methodLabel,
+                    amount: parseFloat(s.total) || 0,
+                    isPositive: true,
+                    icon: '🛒',
+                    badgeBg: '#eff6ff',
+                    badgeColor: '#2563eb'
+                });
+            });
+
+            (day.debtPayments || []).forEach(p => {
+                rows.push({
+                    type: 'debt_payment',
+                    date: p.date || p.createdAt || day.date,
+                    title: `Abono: ${p.customerName || 'Cliente'}`,
+                    sub: this.getPaymentMethodName(p.paymentMethod || 'cash'),
+                    amount: parseFloat(p.amount) || 0,
+                    isPositive: true,
+                    icon: '🤝',
+                    badgeBg: '#ecfdf5',
+                    badgeColor: '#059669'
+                });
+            });
+
+            (day.cashMovementsIn || []).forEach(m => {
+                rows.push({
+                    type: 'movement_in',
+                    id: m.id,
+                    date: m.date || day.date,
+                    title: 'Ingreso Manual',
+                    sub: m.reason || m.description || 'Sin motivo',
+                    amount: parseFloat(m.amount) || 0,
+                    isPositive: true,
+                    icon: '➕',
+                    badgeBg: '#ecfdf5',
+                    badgeColor: '#10b981',
+                    editable: true
+                });
+            });
+
+            (day.cashMovementsOut || []).forEach(m => {
+                rows.push({
+                    type: 'movement_out',
+                    id: m.id,
+                    date: m.date || day.date,
+                    title: 'Retiro de Efectivo',
+                    sub: m.reason || m.description || 'Sin motivo',
+                    amount: parseFloat(m.amount) || 0,
+                    isPositive: false,
+                    icon: '➖',
+                    badgeBg: '#fef2f2',
+                    badgeColor: '#ef4444',
+                    editable: true
+                });
+            });
+        });
+
+        // Ordenar cronológico más reciente primero
+        rows.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+        // Filtrado por buscador
+        const filtered = searchTerm ? rows.filter(r => {
+            const t = searchTerm.toLowerCase();
+            return (r.title && r.title.toLowerCase().includes(t)) ||
+                   (r.sub && r.sub.toLowerCase().includes(t)) ||
+                   (r.amount && r.amount.toString().includes(t));
+        }) : rows;
+
+        if (filtered.length === 0) {
+            return `
+                <div style="text-align:center; padding:3rem 1rem; color:#94a3b8;">
+                    <div style="font-size:2.5rem; margin-bottom:0.5rem;">📭</div>
+                    <div style="font-weight:700; font-size:0.95rem;">No se encontraron movimientos</div>
+                    <div style="font-size:0.8rem; margin-top:0.25rem;">${searchTerm ? 'Prueba con otro término de búsqueda' : 'Las ventas y movimientos del turno aparecerán aquí en vivo'}</div>
+                </div>
+            `;
+        }
+
+        return `
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse; text-align:left;">
+                    <thead>
+                        <tr style="border-bottom:2px solid #f1f5f9; color:#64748b; font-size:0.75rem; font-weight:800; text-transform:uppercase;">
+                            <th style="padding:0.75rem 1rem;">Hora / Fecha</th>
+                            <th style="padding:0.75rem 1rem;">Tipo de Movimiento</th>
+                            <th style="padding:0.75rem 1rem;">Detalle / Concepto</th>
+                            <th style="padding:0.75rem 1rem; text-align:right;">Monto</th>
+                            <th style="padding:0.75rem 1rem; text-align:center;">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filtered.map(r => {
+                            const rawDate = r.date;
+                            const formatted = rawDate ? formatDateTime(rawDate) : '--';
+                            const parts = formatted.includes(' ') ? formatted.split(' ') : [formatted, ''];
+                            const timeStr = parts.length > 1 ? parts.slice(1).join(' ') : (parts[0] || '--');
+                            const dateStr = parts[0] || '';
+                            const subSafe = (r.sub || '').replace(/'/g, "\\'");
+
+                            return `
+                                <tr style="border-bottom:1px solid #f8fafc; transition:background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                                    <td style="padding:0.75rem 1rem; vertical-align:middle;">
+                                        <div style="font-weight:800; font-size:0.85rem; color:#0f172a;">${timeStr}</div>
+                                        <div style="font-size:0.72rem; color:#94a3b8; font-weight:600;">${dateStr}</div>
+                                    </td>
+                                    <td style="padding:0.75rem 1rem; vertical-align:middle;">
+                                        <span style="display:inline-flex; align-items:center; gap:0.4rem; background:${r.badgeBg}; color:${r.badgeColor}; padding:0.3rem 0.65rem; border-radius:0.5rem; font-size:0.78rem; font-weight:800;">
+                                            <span>${r.icon}</span> ${r.title}
+                                        </span>
+                                    </td>
+                                    <td style="padding:0.75rem 1rem; vertical-align:middle; color:#475569; font-size:0.85rem; font-weight:600;">
+                                        ${r.sub || '-'}
+                                    </td>
+                                    <td style="padding:0.75rem 1rem; vertical-align:middle; text-align:right;">
+                                        <span style="font-size:1.05rem; font-weight:900; color:${r.isPositive ? '#059669' : '#dc2626'};">
+                                            ${r.isPositive ? '+' : '-'}${formatCLP(r.amount)}
+                                        </span>
+                                    </td>
+                                    <td style="padding:0.75rem 1rem; vertical-align:middle; text-align:center;">
+                                        ${r.type === 'sale' ? `
+                                            <button class="btn btn-sm" onclick="CashView.showSaleDetail(${r.ticketId})" 
+                                                    style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; font-weight:700; padding:0.3rem 0.65rem; border-radius:0.5rem; font-size:0.75rem; cursor:pointer;"
+                                                    onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">
+                                                🔍 Ticket
+                                            </button>
+                                        ` : r.editable ? `
+                                            <div style="display:inline-flex; gap:0.35rem;">
+                                                <button class="btn btn-sm" onclick="CashView.showEditMovementModal(${r.id}, ${r.amount}, '${subSafe}')" 
+                                                        title="Editar monto o motivo"
+                                                        style="background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; font-weight:700; padding:0.3rem 0.55rem; border-radius:0.5rem; font-size:0.75rem; cursor:pointer;">
+                                                    ✏️
+                                                </button>
+                                                <button class="btn btn-sm" onclick="CashView.deleteMovement(${r.id})" 
+                                                        title="Eliminar movimiento"
+                                                        style="background:#fef2f2; color:#dc2626; border:1px solid #fecaca; font-weight:700; padding:0.3rem 0.55rem; border-radius:0.5rem; font-size:0.75rem; cursor:pointer;">
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        ` : '-'}
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    },
+
+    filterLiveMovements(term) {
+        const container = document.getElementById('cx-live-table-container');
+        if (container) {
+            container.innerHTML = this.renderLiveMovementsTable(this._viewMode === 'today', term.trim());
+        }
+    },
+
+    showEditMovementModal(movementId, currentAmount, currentReason) {
+        const content = `
+            <form id="editMovementForm" onsubmit="event.preventDefault(); CashView.saveEditMovement(${movementId}); return false;">
+                <div class="form-group" style="margin-bottom:1.25rem;">
+                    <label style="font-weight:800; font-size:0.85rem; color:#334155;">Monto Corregido (CLP) *</label>
+                    <input type="number" 
+                           id="editMovementAmount" 
+                           class="form-control" 
+                           value="${currentAmount}" 
+                           min="1" 
+                           step="1"
+                           required 
+                           autofocus
+                           style="font-size:1.5rem; height:3.5rem; font-weight:900; text-align:center; border:2px solid #cbd5e1; border-radius:0.75rem;">
+                </div>
+                <div class="form-group">
+                    <label style="font-weight:800; font-size:0.85rem; color:#334155;">Motivo o Descripción</label>
+                    <input type="text" 
+                           id="editMovementReason" 
+                           class="form-control" 
+                           value="${(currentReason || '').replace(/"/g, '&quot;')}" 
+                           placeholder="Motivo del movimiento..."
+                           style="border-radius:0.75rem; padding:0.75rem 1rem;">
+                </div>
+            </form>
+        `;
+
+        const footer = `
+            <button type="button" class="btn btn-secondary" onclick="closeModal()" style="border-radius:0.75rem; font-weight:700;">Cancelar</button>
+            <button type="button" class="btn btn-primary" onclick="CashView.saveEditMovement(${movementId})" style="border-radius:0.75rem; font-weight:900; padding:0.6rem 1.5rem;">
+                💾 Guardar Cambios
+            </button>
+        `;
+
+        showModal(content, { title: '✏️ Editar Movimiento de Caja', footer, width: '480px' });
+    },
+
+    async saveEditMovement(movementId) {
+        const newAmount = parseFloat(document.getElementById('editMovementAmount')?.value);
+        const newReason = document.getElementById('editMovementReason')?.value.trim();
+
+        if (!newAmount || newAmount <= 0) {
+            showNotification('El monto debe ser mayor a 0', 'error');
+            return;
+        }
+
+        try {
+            await CashController.editCashMovement(movementId, newAmount, newReason);
+            closeModal();
+            await app.navigate('cash');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    },
+
+    async deleteMovement(movementId) {
+        if (!confirm('¿Estás seguro de que deseas eliminar este movimiento? El saldo esperado de la caja se recalculará automáticamente.')) {
+            return;
+        }
+
+        try {
+            await CashController.deleteCashMovement(movementId);
+            await app.navigate('cash');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
     },
 
     // --- DETALLE EN MODAL ---
@@ -2473,11 +2702,20 @@ const CashView = {
         }
     },
 
+    setPresetAmount(inputId, val) {
+        const el = document.getElementById(inputId);
+        if (el) {
+            el.value = val;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.focus();
+        }
+    },
+
     async showAddCashForm() {
         const content = `
             <form id="addCashForm" onsubmit="event.preventDefault(); CashView.addCash(); return false;">
-                <div class="form-group">
-                    <label>Monto a Agregar (CLP) *</label>
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label style="font-weight: 800; font-size: 0.85rem; color: #334155;">Monto a Agregar (CLP) *</label>
                     <input type="number" 
                            id="addAmount" 
                            class="form-control" 
@@ -2485,25 +2723,39 @@ const CashView = {
                            min="1" 
                            step="1"
                            required 
-                           autofocus>
+                           autofocus
+                           style="font-size: 1.6rem; height: 3.8rem; font-weight: 950; text-align: center; border: 2px solid #cbd5e1; border-radius: 0.75rem;">
+                </div>
+
+                <div style="margin-bottom: 1.25rem;">
+                    <span style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Botones Rápidos de Efectivo:</span>
+                    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.4rem;">
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('addAmount', 2000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">+$2.000</button>
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('addAmount', 5000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">+$5.000</button>
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('addAmount', 10000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">+$10.000</button>
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('addAmount', 20000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">+$20.000</button>
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('addAmount', 50000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">+$50.000</button>
+                    </div>
                 </div>
                 
                 <div class="form-group">
-                    <label>Motivo (opcional)</label>
+                    <label style="font-weight: 800; font-size: 0.85rem; color: #334155;">Motivo o Concepto</label>
                     <textarea id="addReason" 
                               class="form-control" 
-                              rows="3" 
-                              placeholder="Ej: Reposición de efectivo, cambio para ventas, etc."></textarea>
+                              rows="2" 
+                              placeholder="Ej: Reposición de sencillo, monedas para dar vuelto, etc."></textarea>
                 </div>
             </form>
         `;
 
         const footer = `
-            <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-            <button type="button" class="btn btn-success" onclick="CashView.addCash()">Agregar Dinero</button>
+            <button type="button" class="btn btn-secondary" onclick="closeModal()" style="border-radius:0.75rem; font-weight:700;">Cancelar</button>
+            <button type="button" class="btn btn-success" onclick="CashView.addCash()" style="border-radius:0.75rem; font-weight:900; padding:0.6rem 1.5rem;">
+                ➕ Agregar Dinero a Caja
+            </button>
         `;
 
-        showModal(content, { title: 'Agregar Dinero a la Caja', footer, width: '500px' });
+        showModal(content, { title: '➕ Ingreso de Dinero a la Caja', footer, width: '500px' });
     },
 
     async showWithdrawCashForm() {
@@ -2511,13 +2763,17 @@ const CashView = {
         const summary = await CashRegister.getSummary(openCash.id);
 
         const content = `
-            <div style="margin-bottom: 1rem; padding: 1rem; background: var(--light); border-radius: 0.375rem;">
-                <p style="margin-bottom: 0.5rem;"><strong>Efectivo Disponible:</strong> ${formatCLP(summary.expectedCash)}</p>
+            <div style="margin-bottom: 1.25rem; padding: 1rem 1.25rem; background: #ecfdf5; border: 1.5px solid #a7f3d0; border-radius: 0.85rem; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="font-size: 0.75rem; font-weight: 800; color: #059669; text-transform: uppercase;">Efectivo Físico Disponible</span>
+                    <div style="font-size: 1.5rem; font-weight: 950; color: #059669;">${formatCLP(summary.expectedCash)}</div>
+                </div>
+                <span style="font-size: 2rem;">💵</span>
             </div>
             
             <form id="withdrawCashForm" onsubmit="event.preventDefault(); CashView.withdrawCash(); return false;">
-                <div class="form-group">
-                    <label>Monto a Retirar (CLP) *</label>
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label style="font-weight: 800; font-size: 0.85rem; color: #334155;">Monto a Retirar (CLP) *</label>
                     <input type="number" 
                            id="withdrawAmount" 
                            class="form-control" 
@@ -2526,25 +2782,38 @@ const CashView = {
                            step="1"
                            max="${summary.expectedCash}"
                            required 
-                           autofocus>
+                           autofocus
+                           style="font-size: 1.6rem; height: 3.8rem; font-weight: 950; text-align: center; border: 2px solid #cbd5e1; border-radius: 0.75rem;">
+                </div>
+
+                <div style="margin-bottom: 1.25rem;">
+                    <span style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Montos Sugeridos:</span>
+                    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.4rem;">
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('withdrawAmount', 10000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">$10.000</button>
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('withdrawAmount', 20000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">$20.000</button>
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('withdrawAmount', 50000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">$50.000</button>
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('withdrawAmount', 100000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">$100.000</button>
+                    </div>
                 </div>
                 
                 <div class="form-group">
-                    <label>Motivo (opcional)</label>
+                    <label style="font-weight: 800; font-size: 0.85rem; color: #334155;">Motivo o Destino del Dinero</label>
                     <textarea id="withdrawReason" 
                               class="form-control" 
-                              rows="3" 
-                              placeholder="Ej: Retiro para compras, pago a proveedor, etc."></textarea>
+                              rows="2" 
+                              placeholder="Ej: Retiro personal, compra urgente de insumos, etc."></textarea>
                 </div>
             </form>
         `;
 
         const footer = `
-            <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-            <button type="button" class="btn btn-warning" onclick="CashView.withdrawCash()">Retirar Dinero</button>
+            <button type="button" class="btn btn-secondary" onclick="closeModal()" style="border-radius:0.75rem; font-weight:700;">Cancelar</button>
+            <button type="button" class="btn btn-warning" onclick="CashView.withdrawCash()" style="border-radius:0.75rem; font-weight:900; padding:0.6rem 1.5rem;">
+                ➖ Confirmar Retiro
+            </button>
         `;
 
-        showModal(content, { title: 'Retirar Dinero de la Caja', footer, width: '500px' });
+        showModal(content, { title: '➖ Retiro de Dinero de la Caja', footer, width: '500px' });
     },
 
     async addCash() {

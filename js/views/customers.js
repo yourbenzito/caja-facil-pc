@@ -150,7 +150,7 @@ const CustomersView = {
             if (app.currentView !== 'customers') return;
             const activeElem = document.activeElement;
             const activeTag = activeElem ? activeElem.tagName.toUpperCase() : '';
-            const activeModal = document.querySelector('.modal-backdrop, .modal.show');
+            const activeModal = document.querySelector('.modal') || document.body.classList.contains('modal-open');
             if (!activeModal && activeTag !== 'INPUT' && activeTag !== 'TEXTAREA' && activeTag !== 'SELECT') {
                 if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
                     if (searchInput && activeElem !== searchInput) {
@@ -431,213 +431,12 @@ const CustomersView = {
     },
 
     async showUnifiedAbonoModal(customerId) {
-        const customer = await Customer.getById(customerId);
         const balance = await CustomerAccountService.getCustomerBalance(customerId);
-        const cashOpen = await CashRegister.getOpen();
-
-        if (!cashOpen) {
-            showNotification('Abre la caja para poder registrar movimientos de dinero.', 'warning');
-            return;
-        }
-
-        const totalDebt = parseFloat(balance.totalDebt) || 0;
-        const currentCredit = parseFloat(balance.balanceCredit) || 0;
-
-        // Decidir el modo inicial sugerido
-        const initialMode = totalDebt > 0 ? 'debt' : 'credit';
-
-        const content = `
-            <div style="margin-bottom: 1.5rem; text-align: center;">
-                <div style="font-size: 1.1rem; color: #1e293b;">Cliente: <strong style="color: var(--primary);">${safeHTML(customer?.name || '')}</strong></div>
-            </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
-                <div id="mode_debt" onclick="CustomersView.setAbonoMode('debt')" 
-                     style="cursor: pointer; padding: 1rem; border-radius: 0.75rem; border: 2px solid ${initialMode === 'debt' ? '#3b82f6' : '#e2e8f0'}; background: ${initialMode === 'debt' ? '#eff6ff' : 'white'}; text-align: center; transition: all 0.2s;">
-                    <div style="font-size: 1.5rem; margin-bottom: 0.25rem;">📉</div>
-                    <div style="font-weight: 800; font-size: 0.85rem; color: #1e293b;">PAGAR DEUDA</div>
-                    <div style="font-size: 0.75rem; color: #ef4444; font-weight: 700;">Debe: ${formatCLP(totalDebt)}</div>
-                </div>
-                <div id="mode_credit" 
-                     ${totalDebt > 0 ? '' : 'onclick="CustomersView.setAbonoMode(\'credit\')"'} 
-                     style="cursor: ${totalDebt > 0 ? 'not-allowed' : 'pointer'}; padding: 1rem; border-radius: 0.75rem; border: 2px solid ${initialMode === 'credit' ? '#10b981' : '#e2e8f0'}; background: ${totalDebt > 0 ? '#f8fafc' : (initialMode === 'credit' ? '#f0fdf4' : 'white')}; text-align: center; transition: all 0.2s; opacity: ${totalDebt > 0 ? '0.6' : '1'};">
-                    <div style="font-size: 1.5rem; margin-bottom: 0.25rem;">💰</div>
-                    <div style="font-weight: 800; font-size: 0.85rem; color: ${totalDebt > 0 ? '#94a3b8' : '#1e293b'};">DINERO A FAVOR</div>
-                    <div style="font-size: 0.75rem; color: #10b981; font-weight: 700;">Saldo: ${formatCLP(currentCredit)}</div>
-                    ${totalDebt > 0 ? '<div style="font-size: 0.65rem; color: #ef4444; font-weight: 700; margin-top: 5px;">PAGAR DEUDA PRIMERO</div>' : ''}
-                </div>
-            </div>
-
-            <input type="hidden" id="abonoMode" value="${initialMode}">
-
-            <div class="form-group">
-                <label id="abonoAmountLabel">${initialMode === 'debt' ? 'Monto a pagar de la deuda *' : 'Monto a cargar a favor *'}</label>
-                <input type="number" id="abonoAmount" class="form-control" min="1" step="1" placeholder="Ej: 5000" autofocus>
-                <small id="abonoAmountHelp" style="color: #64748b;">
-                    ${initialMode === 'debt' ? `Máximo permitido: ${formatCLP(totalDebt)}` : 'Este monto se sumará al saldo del cliente.'}
-                </small>
-            </div>
-
-            <div class="form-group">
-                <label>Método de Pago</label>
-                <select id="abonoPaymentMethod" class="form-control">
-                    <option value="cash">💵 Efectivo</option>
-                    <option value="card">💳 Tarjeta</option>
-                    <option value="qr">📱 QR</option>
-                    <option value="other">➕ Otro</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label>Notas (opcional)</label>
-                <textarea id="abonoNotes" class="form-control" rows="2" placeholder="Observaciones del abono..."></textarea>
-            </div>
-        `;
-
-        const footer = `
-            <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-            <button class="btn btn-primary" id="abonoConfirmBtn" onclick="CustomersView.processUnifiedAbono('${customerId}')" style="background: ${initialMode === 'debt' ? '#3b82f6' : '#10b981'}; border: none;">
-                Confirmar Abono
-            </button>
-        `;
-
-        showModal(content, { title: 'Registrar Abono / Pago', footer, width: '500px' });
-        
-        // Guardar máximos para validación en tiempo real
-        window._currentMaxDebt = totalDebt;
-    },
-
-    setAbonoMode(mode) {
-        const debtBox = document.getElementById('mode_debt');
-        const creditBox = document.getElementById('mode_credit');
-        const modeInput = document.getElementById('abonoMode');
-        const label = document.getElementById('abonoAmountLabel');
-        const help = document.getElementById('abonoAmountHelp');
-        const btn = document.getElementById('abonoConfirmBtn');
-
-        if (!modeInput) return;
-
-        modeInput.value = mode;
-        
-        if (mode === 'debt') {
-            debtBox.style.borderColor = '#3b82f6';
-            debtBox.style.background = '#eff6ff';
-            creditBox.style.borderColor = '#e2e8f0';
-            creditBox.style.background = 'white';
-            label.textContent = 'Monto a pagar de la deuda *';
-            help.textContent = `Máximo permitido: ${formatCLP(window._currentMaxDebt || 0)}`;
-            btn.style.background = '#3b82f6';
-            btn.textContent = 'Confirmar Pago de Deuda';
-        } else {
-            creditBox.style.borderColor = '#10b981';
-            creditBox.style.background = '#f0fdf4';
-            debtBox.style.borderColor = '#e2e8f0';
-            debtBox.style.background = 'white';
-            label.textContent = 'Monto a cargar a favor *';
-            help.textContent = 'Este monto se sumará al saldo del cliente.';
-            btn.style.background = '#10b981';
-            btn.textContent = 'Confirmar Carga de Saldo';
-        }
-    },
-
-    async processUnifiedAbono(customerId) {
-        const mode = document.getElementById('abonoMode').value;
-        const amountInput = document.getElementById('abonoAmount');
-        const amount = parseFloat(amountInput.value);
-        const paymentMethod = document.getElementById('abonoPaymentMethod').value;
-        const notes = document.getElementById('abonoNotes').value.trim();
-        const openCash = await CashRegister.getOpen();
-
-        if (!amount || amount <= 0) {
-            showNotification('Ingresa un monto válido mayor a 0', 'warning');
-            return;
-        }
-
-        const totalDebt = window._currentMaxDebt || 0;
-
-        // C10: PRIORIDAD ABSOLUTA - Si hay deuda, el dinero va a la deuda primero, 
-        // sin importar si el usuario seleccionó "Saldo a Favor".
-        if (totalDebt > 0) {
-            if (amount > totalDebt) {
-                const surplus = amount - totalDebt;
-                
-                // Excedente detectado: Preguntar qué hacer con el resto
-                const decisionContent = `
-                    <div style="text-align: center; padding: 1rem;">
-                        <div style="font-size: 3rem; margin-bottom: 1rem;">⚖️</div>
-                        <h3 style="margin-bottom: 1rem;">El monto (${formatCLP(amount)}) supera la deuda (${formatCLP(totalDebt)})</h3>
-                        <p style="color: #64748b; margin-bottom: 2rem;">¿Qué deseas hacer con el excedente de <strong>${formatCLP(surplus)}</strong>?</p>
-                        
-                        <div style="display: flex; flex-direction: column; gap: 1rem;">
-                            <button class="btn btn-lg" onclick="window._abonoDecision('credit')" style="background: #10b981; color: white; height: 4rem; font-weight: 800;">
-                                💰 PAGAR DEUDA Y DEJAR EL RESTO A FAVOR
-                            </button>
-                            <button class="btn btn-lg" onclick="window._abonoDecision('only_debt')" style="background: #3b82f6; color: white; height: 4rem; font-weight: 800;">
-                                💵 SOLO PAGAR DEUDA (DAR VUELTO)
-                            </button>
-                            <button class="btn btn-outline-secondary" onclick="closeModal(); CustomersView.showUnifiedAbonoModal('${customerId}')">
-                                CANCELAR Y CORREGIR MONTO
-                            </button>
-                        </div>
-                    </div>
-                `;
-
-                window._abonoDecision = async (choice) => {
-                    try {
-                        closeModal();
-                        showNotification('Procesando pago total...', 'info');
-                        
-                        // 1. Pagar deuda completa
-                        await CustomerAccountService.registerAccountPayment(customerId, totalDebt, paymentMethod, openCash.id, notes || 'Pago total de deuda con excedente');
-                        
-                        if (choice === 'credit') {
-                            // 2. Cargar el resto como saldo a favor
-                            await CustomerAccountService.registerCreditDeposit(customerId, surplus, paymentMethod, openCash.id, 'Excedente de pago de deuda');
-                            showNotification(`Deuda saldada. Se cargaron ${formatCLP(surplus)} a favor del cliente.`, 'success');
-                        } else {
-                            showNotification(`Deuda saldada. Entrega ${formatCLP(surplus)} de vuelto al cliente.`, 'success');
-                        }
-                        
-                        await CustomersView.refresh();
-                        if (CustomersView._lastAccountDetailsId === customerId) await CustomersView.showAccountDetails(customerId, 'tab-resumen', true);
-                    } catch (e) {
-                        showNotification('Error: ' + e.message, 'error');
-                    }
-                };
-
-                showModal(decisionContent, { title: 'Decisión de Excedente', width: '450px' });
-                return;
-            } else {
-                // El monto es menor o igual a la deuda -> Se va TODO a la deuda
-                try {
-                    showNotification('Procesando abono a deuda...', 'info');
-                    const result = await CustomerAccountService.registerAccountPayment(customerId, amount, paymentMethod, openCash.id, notes || 'Abono a cuenta corriente');
-                    showNotification(`Se abonaron ${formatCLP(result.totalPaid || amount)} a la deuda del cliente.`, 'success');
-                    closeModal();
-                    await CustomersView.refresh();
-                    if (CustomersView._lastAccountDetailsId === customerId) await CustomersView.showAccountDetails(customerId, 'tab-resumen', true);
-                } catch (e) {
-                    showNotification('Error: ' + e.message, 'error');
-                }
-                return;
-            }
-        }
-
-        // Si NO hay deuda, entonces sí permitimos cargar como saldo a favor normalmente
-        try {
-            showNotification('Cargando saldo a favor...', 'info');
-            await CustomerAccountService.registerCreditDeposit(customerId, amount, paymentMethod, openCash.id, notes || 'Carga de dinero a favor');
-            showNotification(`Se cargaron ${formatCLP(amount)} como saldo a favor.`, 'success');
-            closeModal();
-            await this.refresh();
-            if (this._lastAccountDetailsId === customerId) await this.showAccountDetails(customerId, 'tab-resumen', true);
-        } catch (error) {
-            showNotification('Error: ' + error.message, 'error');
-        }
+        const totalDebt = balance ? (parseFloat(balance.totalDebt) || 0) : 0;
+        return this.showPayTotalDebtForm(customerId, totalDebt);
     },
 
     async showAddCreditForm(customerId) {
-        // Redirigir a la nueva versión unificada
         return this.showUnifiedAbonoModal(customerId);
     },
 
@@ -1508,12 +1307,6 @@ const CustomersView = {
         }
     },
 
-    async showUnifiedAbonoModal(customerId) {
-        const fullStatus = await CustomerAccountService.getFullAccountStatus(customerId);
-        const maxAmount = fullStatus ? fullStatus.summary.totalDebt : 0;
-        this.showPayTotalDebtForm(customerId, maxAmount);
-    },
-
 
     async showPayTotalDebtForm(customerId, totalDebt) {
         const customer = await Customer.getById(customerId);
@@ -1760,26 +1553,28 @@ const CustomersView = {
                 }
             }
 
-            // 2. Aplicar descuentos (perdonar deuda restante)
-            const finalBalance = await Customer.getAccountBalance(customerId);
-            const nowISO = new Date().toISOString();
-            
-            for (const sale of finalBalance.pendingSales) {
-                const fullSale = await Sale.getById(sale.saleId);
-                if (!fullSale) continue;
+            // 2. Aplicar descuentos (perdonar deuda restante SOLO si hay descuento explícito autorizado)
+            if (discountInfo && discountInfo.discountAmount > 0) {
+                const finalBalance = await Customer.getAccountBalance(customerId);
+                const nowISO = new Date().toISOString();
                 
-                const remaining = parseFloat(fullSale.total) - (parseFloat(fullSale.paidAmount) || 0);
-                if (remaining > 0.9) {
-                    await Payment.createPaymentRecord({
-                        saleId: sale.saleId,
-                        customerId: customerId,
-                        amount: Math.round(remaining),
-                        paymentMethod: 'discount',
-                        date: nowISO,
-                        notes: notes,
-                        cashRegisterId: openCash.id
-                    });
-                    await Sale.updateSale(sale.saleId, { paidAmount: fullSale.total, status: 'completed' });
+                for (const sale of finalBalance.pendingSales) {
+                    const fullSale = await Sale.getById(sale.saleId);
+                    if (!fullSale) continue;
+                    
+                    const remaining = parseFloat(fullSale.total) - (parseFloat(fullSale.paidAmount) || 0);
+                    if (remaining > 0.9) {
+                        await Payment.createPaymentRecord({
+                            saleId: sale.saleId,
+                            customerId: customerId,
+                            amount: Math.round(remaining),
+                            paymentMethod: 'discount',
+                            date: nowISO,
+                            notes: notes || 'Descuento aplicado',
+                            cashRegisterId: openCash.id
+                        });
+                        await Sale.updateSale(sale.saleId, { paidAmount: fullSale.total, status: 'completed' });
+                    }
                 }
             }
 
@@ -1810,7 +1605,14 @@ const CustomersView = {
                 });
             } catch(se) { console.warn('[PaymentSession] payTotalDebtMulti:', se); }
 
-            showNotification('Deuda saldada exitosamente', 'success');
+            const updatedBalanceAfter = await Customer.getAccountBalance(customerId);
+            const remainingDebtAfter = (updatedBalanceAfter.pendingSales || []).reduce((sum, s) => sum + (parseFloat(s.remaining) || 0), 0);
+
+            if (remainingDebtAfter <= 0.9) {
+                showNotification('Deuda saldada exitosamente', 'success');
+            } else {
+                showNotification(`Abono de ${formatCLP(totalPaidAmount)} registrado exitosamente. Deuda restante: ${formatCLP(remainingDebtAfter)}`, 'success');
+            }
             this.showAccountDetails(customerId, 'tab-resumen', true);
             this.refresh();
         } catch (error) {
@@ -1881,33 +1683,30 @@ const CustomersView = {
                 remainingToPay -= paymentAmount;
             }
 
-            // Saldar completamente: marcar cada venta pendiente como pagada al 100%
-            // CRITICAL FIX: Para ventas que no recibieron pago real (o solo parcial),
-            // crear un Payment tipo 'discount' con el monto perdonado.
-            // Esto evita que getTotalByPaymentMethod cuente paidAmount como dinero real
-            // (porque payments.length > 0 hace que se use la suma de Payments, no paidAmount).
-            // 'discount' NO está en el mapa de totals {cash,card,qr,other}, así que la caja lo ignora.
-            const nowISO = new Date().toISOString();
-            for (const sale of balance.pendingSales) {
-                const fullSale = await Sale.getById(sale.saleId);
-                if (!fullSale) continue;
-                const total = parseFloat(fullSale.total) || 0;
-                const paid = parseFloat(fullSale.paidAmount) || 0;
-                if (total > 0 && paid < total - 0.01) {
-                    const forgivenAmount = Math.round((total - paid) * 10) / 10;
-                    if (forgivenAmount > 0) {
-                        // Crear Payment de descuento para que la venta tenga payments.length > 0
-                        await Payment.createPaymentRecord({
-                            saleId: sale.saleId,
-                            customerId: customerId,
-                            amount: forgivenAmount,
-                            paymentMethod: 'discount',
-                            date: nowISO,
-                            notes: notes || 'Descuento aplicado',
-                            cashRegisterId: openCash.id
-                        });
+            // Saldar completamente: SOLO si hay descuento explícito autorizado
+            if (discountInfo && discountInfo.discountAmount > 0) {
+                const nowISO = new Date().toISOString();
+                for (const sale of balance.pendingSales) {
+                    const fullSale = await Sale.getById(sale.saleId);
+                    if (!fullSale) continue;
+                    const total = parseFloat(fullSale.total) || 0;
+                    const paid = parseFloat(fullSale.paidAmount) || 0;
+                    if (total > 0 && paid < total - 0.01) {
+                        const forgivenAmount = Math.round((total - paid) * 10) / 10;
+                        if (forgivenAmount > 0) {
+                            // Crear Payment de descuento para que la venta tenga payments.length > 0
+                            await Payment.createPaymentRecord({
+                                saleId: sale.saleId,
+                                customerId: customerId,
+                                amount: forgivenAmount,
+                                paymentMethod: 'discount',
+                                date: nowISO,
+                                notes: notes || 'Descuento aplicado',
+                                cashRegisterId: openCash.id
+                            });
+                        }
+                        await Sale.updateSale(sale.saleId, { paidAmount: total, status: 'completed' });
                     }
-                    await Sale.updateSale(sale.saleId, { paidAmount: total, status: 'completed' });
                 }
             }
 
@@ -1928,8 +1727,15 @@ const CustomersView = {
             }
 
             const methodName = this.getPaymentMethodName(paymentMethod);
-            const discountMsg = discountInfo ? ` — Descuento: ${formatCLP(discountInfo.discountAmount)}` : '';
-            showNotification(`Deuda saldada (${formatCLP(totalPaid)} - ${methodName}${discountMsg})`, 'success');
+            const updatedBalanceAfter = await Customer.getAccountBalance(customerId);
+            const remainingDebtAfter = (updatedBalanceAfter.pendingSales || []).reduce((sum, s) => sum + (parseFloat(s.remaining) || 0), 0);
+
+            if (remainingDebtAfter <= 0.9) {
+                const discountMsg = discountInfo ? ` — Descuento: ${formatCLP(discountInfo.discountAmount)}` : '';
+                showNotification(`Deuda saldada (${formatCLP(totalPaid)} - ${methodName}${discountMsg})`, 'success');
+            } else {
+                showNotification(`Abono de ${formatCLP(totalPaid)} registrado (${methodName}). Deuda restante: ${formatCLP(remainingDebtAfter)}`, 'success');
+            }
             this.showAccountDetails(customerId);
             this.refresh();
         } catch (error) {

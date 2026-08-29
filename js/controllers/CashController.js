@@ -198,13 +198,19 @@ class CashController {
             }
         });
         
+        const parseDateKey = (str) => {
+            if (!str) return 0;
+            const parts = str.split(/[-/]/);
+            if (parts.length === 3) {
+                if (parts[0].length === 4) return new Date(parts[0], parts[1] - 1, parts[2]).getTime();
+                return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
+            }
+            const d = new Date(str).getTime();
+            return isNaN(d) ? 0 : d;
+        };
+
         // Convert to array and sort (oldest first)
-        return Object.values(movementsByDate).sort((a, b) => {
-            // Parse DD/MM/YYYY back to comparison
-            const [da, ma, ya] = a.date.split('/');
-            const [db, mb, yb] = b.date.split('/');
-            return new Date(`${ya}-${ma}-${da}`) - new Date(`${yb}-${mb}-${db}`);
-        });
+        return Object.values(movementsByDate).sort((a, b) => parseDateKey(a.date) - parseDateKey(b.date));
     }
 
     /**
@@ -301,15 +307,52 @@ class CashController {
         allCashMovements.forEach(m => {
             const dateKey = toDateKey(m.date);
             const day = ensureDay(dateKey);
-            const row = { amount: m.amount, reason: m.description || m.reason || '-', date: m.date };
+            const row = { id: m.id, amount: m.amount, reason: m.description || m.reason || '-', date: m.date, type: m.type };
             if (m.type === 'in') day.cashMovementsIn.push(row);
             else day.cashMovementsOut.push(row);
         });
 
-        return Object.values(daysMap).sort((a, b) => {
-            const [da, ma, ya] = a.date.split('/');
-            const [db, mb, yb] = b.date.split('/');
-            return new Date(`${ya}-${ma}-${da}`) - new Date(`${yb}-${mb}-${db}`);
-        });
+        const parseDateKey = (str) => {
+            if (!str) return 0;
+            const parts = str.split(/[-/]/);
+            if (parts.length === 3) {
+                if (parts[0].length === 4) return new Date(parts[0], parts[1] - 1, parts[2]).getTime();
+                return new Date(parts[2], parts[1] - 1, parts[0]).getTime();
+            }
+            const d = new Date(str).getTime();
+            return isNaN(d) ? 0 : d;
+        };
+
+        return Object.values(daysMap).sort((a, b) => parseDateKey(a.date) - parseDateKey(b.date));
+    }
+
+    static async editCashMovement(movementId, newAmount, newReason) {
+        if (!movementId) throw new Error('ID de movimiento inválido');
+        const amount = parseFloat(newAmount);
+        if (!(amount > 0)) throw new Error('El monto debe ser mayor a 0');
+
+        try {
+            await CashMovement.update(movementId, {
+                amount: amount,
+                description: newReason || 'Movimiento de caja editado'
+            });
+            showNotification('Movimiento de caja actualizado', 'success');
+            return true;
+        } catch (error) {
+            showNotification(error.message, 'error');
+            throw error;
+        }
+    }
+
+    static async deleteCashMovement(movementId) {
+        if (!movementId) throw new Error('ID de movimiento inválido');
+        try {
+            await CashMovement.delete(movementId);
+            showNotification('Movimiento de caja eliminado', 'success');
+            return true;
+        } catch (error) {
+            showNotification(error.message, 'error');
+            throw error;
+        }
     }
 }

@@ -157,7 +157,7 @@ const ProductsView = {
             if (app.currentView !== 'products') return;
             const activeElem = document.activeElement;
             const activeTag = activeElem ? activeElem.tagName.toUpperCase() : '';
-            const activeModal = document.querySelector('.modal-backdrop, .modal.show');
+            const activeModal = document.querySelector('.modal') || document.body.classList.contains('modal-open');
             if (!activeModal && activeTag !== 'INPUT' && activeTag !== 'TEXTAREA' && activeTag !== 'SELECT') {
                 if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
                     if (searchInput && activeElem !== searchInput) {

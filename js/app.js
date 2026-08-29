@@ -487,6 +487,16 @@ const app = {
         db.clearCache('suppliers');
         db.clearCache('payments');
 
+        // ponytail: Si hay modales abiertos o el usuario está interactuando con inputs, NO refrescar la vista para no borrar datos
+        const hasOpenModal = !!(document.querySelector('.modal') || document.body.classList.contains('modal-open'));
+        const activeTag = document.activeElement ? document.activeElement.tagName.toUpperCase() : '';
+        const isUserTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeTag);
+
+        if (hasOpenModal || isUserTyping) {
+            console.log('⏳ [Sync] Sincronización visual pospuesta: usuario operando en modal o formulario.');
+            return;
+        }
+
         // 2. Refrescar la vista actual de forma "silenciosa" si es seguro
         const safeToRefresh = ['sales', 'purchases', 'inventory', 'reports', 'auditLogs', 'customers', 'suppliers'];
         

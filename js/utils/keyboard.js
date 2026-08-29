@@ -73,9 +73,9 @@ const KeyboardManager = {
         const modal = document.querySelector('.modal');
         if (!modal) return;
         
-        const activeTag = document.activeElement.tagName;
-        // Don't trigger if in textarea or button
-        if (activeTag === 'TEXTAREA' || activeTag === 'BUTTON') {
+        const activeTag = document.activeElement ? document.activeElement.tagName.toUpperCase() : '';
+        // ponytail: No interferir si el usuario está escribiendo o interactuando con un campo de formulario
+        if (['INPUT', 'TEXTAREA', 'BUTTON', 'SELECT'].includes(activeTag)) {
             return;
         }
         
