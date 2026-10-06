@@ -1,0 +1,9 @@
+{
+    "version": "1.0.0",
+    "lastUpdate": "2026-06-18T00:00:00Z",
+    "notes": "Versión inicial de lanzamiento con mejoras de seguridad",
+    "description": "Sistema de ventas POS con mejoras de seguridad críticas",
+    "cacheName": "cajafacil-v1.0.0",
+    "downloadUrl": "",
+    "mandatory": false
+}

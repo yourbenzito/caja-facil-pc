@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="es"> <!-- Actualizado: 29-03-2026 14:15 -->
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="description" content="Sistema POS para Minimarket - Chile - 100% Offline">
+    <meta name="author" content="Caja Fácil">
+    <meta name="keywords" content="pos, punto de venta, minimarket, chile, offline, inventario">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>CajaFácil - Sistema POS</title>
+    <link rel="icon" type="image/x-icon" href="icons/favicon.ico">
+    <link rel="icon" type="image/png" sizes="256x256" href="icons/icon.png">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="css/styles.css?v=2026.final">
+    <link rel="stylesheet" href="css/reports.css?v=2026.final">
+
+    <!-- Cargar Tema y Brillo de forma inmediata para prevenir parpadeo (FOUC) -->
+    <script>
+        (function() {
+            const theme = localStorage.getItem('APP_THEME') || 'indigo';
+            const brightness = localStorage.getItem('APP_BRIGHTNESS') || '1';
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.style.setProperty('--app-brightness', brightness);
+        })();
+    </script>
+
+    <!-- Sistema blindado 100% Offline -->
+    <!-- Fuentes locales del sistema (Outfit/Inter) -->
+</head>
+
+<body>
+    <!-- Gateway blindado fue removido de la versión local para acceso rápido -->
+    <!-- Banner de actualización removido para versión escritorio -->
+
+    <!-- BANNER DE SUSCRIPCIÓN ELIMINADO -->
+
+    <style>
+        @keyframes slideDown {
+            from {
+                transform: translateY(-100%);
+            }
+
+            to {
+                transform: translateY(0);
+            }
+        }
+        .held-sale-compact-item:hover {
+            border-color: var(--primary) !important;
+            background: rgba(79, 70, 229, 0.05) !important;
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-sm);
+        }
+        .held-sale-compact-item:active {
+            transform: translateY(0);
+        }
+    </style>
+
+    <!-- Script de actualización removido -->
+    <!-- Google Fonts movidas al <head> con preload para mejor rendimiento -->
+
+    <!-- Splash screen para carga (Diseño Minimalista Ejecutivo Claro - Estilo Apple Business / Square) -->
+    <div id="splash-screen"
+        style="position: fixed; inset: 0; background: radial-gradient(circle at 50% 40%, #ffffff 0%, #f8fafc 60%, #f1f5f9 100%); display: flex; align-items: center; justify-content: center; z-index: 10000; font-family: 'Outfit', sans-serif; overflow: hidden;">
+        
+        <!-- Contenedor Ejecutivo Minimalista -->
+        <div style="position: relative; z-index: 10; text-align: center; background: #ffffff; border: 1px solid #e2e8f0; padding: 2.75rem 2.25rem; border-radius: 1.5rem; box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.05), 0 8px 10px -6px rgba(15, 23, 42, 0.02); animation: splashFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; max-width: 410px; width: 88%;">
+            
+            <!-- Icono Caja Registradora / Terminal POS Formal -->
+            <div style="width: 72px; height: 72px; margin: 0 auto 1.25rem; border-radius: 1.15rem; background: #f8fafc; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04);">
+                <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2"></rect>
+                    <line x1="8" y1="21" x2="16" y2="21"></line>
+                    <line x1="12" y1="17" x2="12" y2="21"></line>
+                    <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01"></path>
+                </svg>
+            </div>
+            
+            <h1 style="color: #0f172a; font-size: 2rem; font-weight: 800; margin: 0; letter-spacing: -0.5px; line-height: 1.1;">
+                Caja<span style="color: #2563eb;">Fácil</span> 
+                <span style="font-size: 0.72rem; vertical-align: middle; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; padding: 0.15rem 0.55rem; border-radius: 9999px; font-weight: 800; letter-spacing: 0.5px;">POS</span>
+            </h1>
+            <p style="color: #64748b; font-size: 0.85rem; margin-top: 0.4rem; margin-bottom: 2rem; font-weight: 500; letter-spacing: 0.2px;">Sistema de Punto de Venta & Gestión Comercial</p>
+            
+            <!-- Barra de Progreso Sutil Corporativa -->
+            <div style="width: 100%; height: 5px; background: #f1f5f9; border-radius: 9999px; margin: 0 auto 1.1rem; overflow: hidden; position: relative; border: 1px solid #e2e8f0;">
+                <div style="position: absolute; height: 100%; width: 40%; background: #2563eb; border-radius: 9999px; animation: clean-scroll 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;"></div>
+            </div>
+            
+            <p id="loading-text" style="color: #475569; font-size: 0.82rem; font-family: 'Inter', sans-serif; font-weight: 600; margin: 0;">Iniciando sistema de venta...</p>
+        </div>
+    </div>
+
+    <style>
+        @keyframes splashFadeIn {
+            from { opacity: 0; transform: translateY(10px) scale(0.99); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes clean-scroll {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(280%); }
+        }
+    </style>
+
+    <div id="app" style="display: none;">
+        <main id="main-content">
+            <div id="view-container"></div>
+        </main>
+
+        <!-- BARRA DE NAVEGACIÓN INFERIOR (BOTTOM DOCK) -->
+        <nav id="bottom-nav" class="bottom-nav">
+            <a href="#" data-view="pos" class="nav-item active" onclick="app.navigate('pos')">
+                <span class="nav-icon">🛒</span>
+                <span class="nav-label">Punto de Venta</span>
+            </a>
+            <a href="#" data-view="customers" class="nav-item" onclick="app.navigate('customers')">
+                <span class="nav-icon">👥</span>
+                <span class="nav-label">Clientes</span>
+            </a>
+            <a href="#" data-view="purchases" class="nav-item" onclick="app.navigate('purchases')">
+                <span class="nav-icon">📋</span>
+                <span class="nav-label">Compras</span>
+            </a>
+            <a href="#" data-view="cash" class="nav-item" onclick="app.navigate('cash')">
+                <span class="nav-icon">💰</span>
+                <span class="nav-label">Caja</span>
+            </a>
+            <button type="button" class="nav-item nav-more-btn" onclick="app.toggleMoreMenu()">
+                <span class="nav-icon">☰</span>
+                <span class="nav-label">Más Módulos</span>
+            </button>
+        </nav>
+
+        <!-- MENÚ DESPLEGABLE "MÁS MÓDULOS" -->
+        <div id="more-menu-overlay" class="more-menu-overlay" style="display: none;" onclick="app.toggleMoreMenu(false)">
+            <div class="more-menu-container" onclick="event.stopPropagation()">
+                <div class="more-menu-header">
+                    <div style="display: flex; align-items: center; gap: 0.75rem;">
+                        <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--primary); color:#fff; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; font-weight: 900;">👤</div>
+                        <div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                                <strong id="currentUserName" style="font-size: 0.95rem; color: var(--text-main);">Administrador</strong>
+                                <button id="branchSelectorBtn" onclick="AuthManager.toggleBusinessDropdown(this, event)" class="badge-branch-btn" title="Cambiar de Negocio o Sucursal" style="display: inline-flex; align-items: center; gap: 0.35rem; background: rgba(79, 70, 229, 0.1); border: 1.5px solid #6366f1; color: #4338ca; border-radius: 9999px; padding: 0.15rem 0.6rem; font-size: 0.75rem; font-weight: 800; cursor: pointer; transition: all 0.2s;">
+                                    🏪 <span id="currentBusinessBadge">Mi Negocio</span> ▾
+                                </button>
+                            </div>
+                            <div style="font-size: 0.75rem; color: var(--secondary);">Caja abierta: <span id="currentCashStatus" style="font-weight: 800; color: #10b981;">Sí</span></div>
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-ghost" onclick="app.toggleMoreMenu(false)" style="font-size: 1.1rem; font-weight: 900; padding: 0.3rem 0.6rem;">✕</button>
+                </div>
+                <div class="more-menu-grid">
+                    <a href="#" data-view="products" class="more-menu-item" onclick="app.navigate('products'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">📦</span>
+                        <span class="item-title">Productos</span>
+                    </a>
+                    <a href="#" data-view="inventory" class="more-menu-item" onclick="app.navigate('inventory'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">📋</span>
+                        <span class="item-title">Control Stock</span>
+                    </a>
+                    <a href="#" data-view="suppliers" class="more-menu-item" onclick="app.navigate('suppliers'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">🚚</span>
+                        <span class="item-title">Proveedores</span>
+                    </a>
+                    <a href="#" data-view="expenses" class="more-menu-item" onclick="app.navigate('expenses'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">💸</span>
+                        <span class="item-title">Gastos</span>
+                    </a>
+                    <a href="#" data-view="sales" class="more-menu-item" onclick="app.navigate('sales'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">🧾</span>
+                        <span class="item-title">Historial Ventas</span>
+                    </a>
+                    <a href="#" data-view="reports" class="more-menu-item" onclick="app.navigate('reports'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">📈</span>
+                        <span class="item-title">Reportes</span>
+                    </a>
+                    <a href="#" data-view="creditNotes" class="more-menu-item" onclick="app.navigate('creditNotes'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">↩️</span>
+                        <span class="item-title">Devoluciones</span>
+                    </a>
+                    <a href="#" data-view="settings" class="more-menu-item" onclick="app.navigate('settings'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">⚙️</span>
+                        <span class="item-title">Configuración</span>
+                    </a>
+                    <a href="#" data-view="auditLogs" class="more-menu-item" onclick="app.navigate('auditLogs'); app.toggleMoreMenu(false);">
+                        <span class="item-icon">🕵️</span>
+                        <span class="item-title">Auditoría</span>
+                    </a>
+                </div>
+                <div class="more-menu-footer">
+                    <button id="license-status-badge" class="btn btn-sm" onclick="LicenseService.showLicenseModal()" style="font-weight: 750; border: 1px solid #d1d5db; background: #f3f4f6; color: #4b5563; cursor: pointer; transition: all 0.2s;" title="Estado de Licencia">🌱 PLAN FREE</button>
+                    <button id="cloud-sync-badge" class="btn btn-sm" onclick="SyncService.syncAll(true)" style="font-weight: 750; border: 1px solid #d1d5db; background: #f3f4f6; color: #4b5563; cursor: pointer; transition: all 0.2s;" title="Estado de sincronización">💻 Modo Local Offline</button>
+                    <button class="btn btn-sm btn-ghost" onclick="NotificationCenter.show(); app.toggleMoreMenu(false);" style="font-weight: 700;">🔔 Avisos</button>
+                    <button id="btn-logout-or-unlink" class="btn btn-sm btn-danger" onclick="AuthManager.confirmFullLogout(); app.toggleMoreMenu(false);" style="font-weight: 800; border-radius: 0.5rem;">🚪 Cerrar Sesión</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-overlay" class="modal-overlay"></div>
+    <div id="notification-container"></div>
+
+    <!-- Scripts en orden de dependencia -->
+    <!-- v2.1 - Fixed payment duplication and payment method selector -->
+    <!-- Librerías externas con defer para no bloquear el renderizado -->
+    <script src="js/libs/jspdf.umd.min.js" defer></script>
+    <script src="js/libs/jspdf.plugin.autotable.min.js" defer></script>
+    <script src="js/libs/xlsx.full.min.js" defer></script>
+    <!-- html5-qrcode: carga DINÁMICA solo cuando se necesita (ahorra ~200KB en carga inicial) -->
+    <script>
+        window._loadQrScanner = function() {
+            return new Promise((resolve, reject) => {
+                if (window.Html5Qrcode) return resolve();
+                const s = document.createElement('script');
+                s.src = 'js/libs/html5-qrcode.min.js';
+                s.onload = resolve;
+                s.onerror = reject;
+                document.head.appendChild(s);
+            });
+        };
+    </script>
+    <!-- === CORE: Deben ejecutarse en orden, sin defer === -->
+    <script src="js/config.js"></script>
+    <script src="js/utils/api-client.js"></script>
+    <script src="js/db.js?v=20.11"></script>
+
+    <!-- === RESTO DE SCRIPTS: defer permite parsear HTML mientras se descargan === -->
+    <script src="js/utils/formatter.js?v=2.1" defer></script>
+    <script src="js/utils/dom-patcher.js" defer></script>
+    <script src="js/utils/alerts.js?v=2026.final.2" defer></script>
+    <script src="js/services/NotificationCenter.js?v=2026.final" defer></script>
+    <script src="js/utils/loading-pipeline.js?v=1.0" defer></script>
+    <script src="js/utils/backup.js?v=4.0" defer></script>
+    <script src="js/utils/debounce.js?v=2.4" defer></script>
+    <script src="js/utils/keyboard.js?v=2.4" defer></script>
+    <script src="js/utils/validator.js?v=2.1" defer></script>
+    <script src="js/utils/categoryHelper.js?v=1.0" defer></script>
+    <script src="js/utils/CashReportPDF.js?v=1.0" defer></script>
+    <!-- Repositories -->
+    <script src="js/repositories/BaseRepository.js?v=2.3" defer></script>
+    <script src="js/repositories/productRepository.js?v=2.2" defer></script>
+    <script src="js/repositories/SaleRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/CustomerRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/PaymentRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/PurchaseRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/StockMovementRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/CashRegisterRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/CashMovementRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/SupplierRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/UserRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/CustomerCreditUseRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/CustomerCreditDepositRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/SaleReturnRepository.js?v=4.0" defer></script>
+    <script src="js/repositories/SupplierPaymentRepository.js?v=1.0" defer></script>
+    <script src="js/repositories/ProductPriceHistoryRepository.js?v=1.0" defer></script>
+    <script src="js/repositories/ExpenseRepository.js?v=1.0" defer></script>
+    <!-- Gráficos (Chart.js — 100% Local) -->
+    <script src="js/libs/chart.js"></script>
+    <!-- Excel (XLSX — 100% Local. Ya cargado arriba con defer en línea 172) -->
+    <!-- Services -->
+    <script src="js/services/PermissionService.js?v=1.0" defer></script>
+    <script src="js/services/AuditLogService.js?v=1.0" defer></script>
+    <script src="js/services/StockService.js?v=2.3" defer></script>
+    <script src="js/services/PaymentService.js?v=2.4" defer></script>
+    <script src="js/services/AccountService.js?v=2.3" defer></script>
+    <script src="js/services/SaleService.js?v=2.4" defer></script>
+    <script src="js/services/SaleReturnService.js?v=1.1" defer></script>
+    <script src="js/services/SupplierPaymentService.js?v=6.1" defer></script>
+    <script src="js/services/CustomerAccountService.js?v=1.1" defer></script>
+    <script src="js/services/SyncService.js?v=2.0" defer></script>
+    <script src="js/services/LicenseService.js?v=1.0" defer></script>
+    <script src="js/services/NotesService.js?v=1.0" defer></script>
+    <!-- Validators -->
+    <script src="js/validators/PaymentValidator.js?v=2.2" defer></script>
+    <script src="js/validators/SaleValidator.js?v=2.2" defer></script>
+    <script src="js/validators/ProductValidator.js?v=2.2" defer></script>
+    <!-- Models -->
+    <script src="js/models/User.js?v=2.3" defer></script>
+    <!-- Supabase Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="js/supabase_client.js" defer></script>
+    <script src="js/auth.js?v=2.1" defer></script>
+    <script src="js/utils/db-utilities.js?v=2.1" defer></script>
+    <script src="js/models/product.js?v=2.1" defer></script>
+    <script src="js/models/Category.js?v=1.0" defer></script>
+    <script src="js/models/ProductPriceHistory.js?v=1.0" defer></script>
+    <script src="js/services/ProductService.js?v=1.0" defer></script>
+    <script src="js/models/Sale.js?v=2.4" defer></script>
+    <script src="js/models/SaleReturn.js?v=1.0" defer></script>
+    <script src="js/models/Customer.js?v=2.1" defer></script>
+    <script src="js/models/Supplier.js?v=2.1" defer></script>
+    <script src="js/models/Purchase.js?v=7.1" defer></script>
+    <script src="js/models/SupplierPayment.js?v=1.0" defer></script>
+    <script src="js/models/CashRegister.js?v=2.3" defer></script>
+    <script src="js/models/StockMovement.js?v=2.1" defer></script>
+    <script src="js/models/CashMovement.js?v=2.1" defer></script>
+    <script src="js/models/Payment.js?v=2.2" defer></script>
+    <script src="js/models/CustomerCreditUse.js?v=1.0" defer></script>
+    <script src="js/models/CustomerCreditDeposit.js?v=1.0" defer></script>
+    <script src="js/models/Expense.js?v=1.0" defer></script>
+    <script src="js/controllers/ProductController.js?v=2.1" defer></script>
+    <script src="js/controllers/POSController.js?v=2.2" defer></script>
+    <script src="js/controllers/CustomerController.js?v=2.1" defer></script>
+    <script src="js/controllers/SupplierController.js?v=5.1" defer></script>
+    <script src="js/controllers/CashController.js?v=2026.final" defer></script>
+    <script src="js/controllers/ReportController.js?v=2.5" defer></script>
+    <script src="js/utils/touch-numpad.js?v=2026.1" defer></script>
+    <script src="js/views/pos.js?v=4.4" defer></script>
+    <script src="js/views/products.js?v=20.10" defer></script>
+    <script src="js/views/customers.js?v=20.10" defer></script>
+    <script src="js/views/suppliers.js?v=5.1" defer></script>
+    <script src="js/views/purchases.js?v=7.1" defer></script>
+    <script src="js/services/NotesService.js?v=1.0" defer></script>
+    <script src="js/views/cash.js?v=2026.final.3" defer></script>
+    <script src="js/views/inventory.js?v=2.4" defer></script>
+    <script src="js/utils/reports-explanations.js" defer></script>
+    <script src="js/views/reports.js?v=2026.final" defer></script>
+    <script src="js/views/sales.js?v=4.2" defer></script>
+    <script src="js/views/creditNotes.js?v=1.0" defer></script>
+    <script src="js/helpers/bluetoothPrinter.js?v=1.0" defer></script>
+    <script src="js/views/settings.js?v=4.2" defer></script>
+    <script src="js/views/auditLogs.js?v=4.0" defer></script>
+    <script src="js/views/expenses.js?v=1.0" defer></script>
+    <script src="js/app.js?v=2026.final" defer></script>
+    <script src="js/utils/auto-backup.js?v=1.0" defer></script>
+
+    <script>
+        // Nombre del negocio en sidebar (splash lo controla app.js)
+        window.addEventListener('load', () => {
+            try {
+                const businessData = localStorage.getItem('CURRENT_BUSINESS');
+                if (businessData) {
+                    const business = JSON.parse(businessData);
+                    const sidebarName = document.getElementById('sidebar-business-name');
+                    if (sidebarName && business.name) {
+                        sidebarName.textContent = '🛒 ' + business.name;
+                    }
+                }
+            } catch (e) { }
+        });
+
+        // Monitorear estado de red
+        window.addEventListener('online', () => {
+            const indicator = document.getElementById('online-indicator');
+            if (indicator) indicator.innerHTML = '🟢 Sistema Local Listo';
+        });
+
+        window.addEventListener('offline', () => {
+            const indicator = document.getElementById('online-indicator');
+            if (indicator) indicator.innerHTML = '🟢 Sistema Local (Sin Internet)';
+        });
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('mobile-overlay');
+            if (sidebar) sidebar.classList.toggle('active');
+            if (overlay) overlay.style.display = sidebar && sidebar.classList.contains('active') ? 'block' : 'none';
+        }
+    </script>
+
+
+    <div id="brightness-overlay"></div>
+</body>
+
+
+</html>

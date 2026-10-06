@@ -1,0 +1,4842 @@
+const CashView = {
+    openCalculatorModal(targetInputId) {
+        const targetInput = document.getElementById(targetInputId);
+        if (!targetInput) return;
+
+        let initialVal = targetInput.value ? targetInput.value.trim() : '';
+
+        const content = `
+            <div style="padding: 0.5rem; display: flex; flex-direction: column; gap: 1rem; align-items: center; background: #f8fafc; border-radius: 1rem;">
+                <input type="text" id="cashCalcDisplay" value="${initialVal}" 
+                       placeholder="0"
+                       style="width: 100%; height: 60px; font-size: 2.2rem; font-weight: 950; text-align: right; padding: 0 1rem; border-radius: 0.75rem; border: 3px solid #cbd5e1; background: #ffffff; color: #0f172a; box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);"
+                       onkeydown="if(event.key === 'Enter') { event.preventDefault(); CashView.evaluateCalculator(); }">
+                
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.5rem; width: 100%;">
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('7')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">7</button>
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('8')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">8</button>
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('9')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">9</button>
+                    <button type="button" class="btn btn-warning" onclick="CashView.pressCalcKey('/')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #f59e0b; color: #fff; border: none;">÷</button>
+                    
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('4')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">4</button>
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('5')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">5</button>
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('6')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">6</button>
+                    <button type="button" class="btn btn-warning" onclick="CashView.pressCalcKey('*')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #f59e0b; color: #fff; border: none;">×</button>
+                    
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('1')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">1</button>
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('2')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">2</button>
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('3')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">3</button>
+                    <button type="button" class="btn btn-warning" onclick="CashView.pressCalcKey('-')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #f59e0b; color: #fff; border: none;">-</button>
+                    
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('0')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">0</button>
+                    <button type="button" class="btn btn-secondary" onclick="CashView.pressCalcKey('.')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #e2e8f0; border: 1.5px solid #cbd5e1; color: #000;">.</button>
+                    <button type="button" class="btn btn-danger" onclick="CashView.clearCalculator()" style="height: 55px; font-size: 1.2rem; font-weight: 900; border-radius: 0.5rem; background: #ef4444; color: #fff; border: none;">C</button>
+                    <button type="button" class="btn btn-warning" onclick="CashView.pressCalcKey('+')" style="height: 55px; font-size: 1.4rem; font-weight: 900; border-radius: 0.5rem; background: #f59e0b; color: #fff; border: none;">+</button>
+                </div>
+            </div>
+        `;
+
+        const footer = `
+            <div style="display: flex; gap: 1rem; width: 100%;">
+                <button type="button" class="btn btn-success" onclick="CashView.useCalculatorResult('${targetInputId}')" style="flex: 2; height: 50px; font-weight: 900; font-size: 1.1rem; border-radius: 0.75rem; background: #10b981; border: none; color: #fff;">
+                    📥 APLICAR RESULTADO
+                </button>
+                <button type="button" class="btn btn-secondary" onclick="closeModal()" style="flex: 1; height: 50px; font-weight: 800; border-radius: 0.75rem; background: #cbd5e1; color: #1e293b; border: none;">
+                    Cancelar
+                </button>
+            </div>
+        `;
+
+        showModal(content, { title: '🧮 Calculadora de Caja', footer, width: '400px' });
+        
+        setTimeout(() => {
+            const disp = document.getElementById('cashCalcDisplay');
+            if (disp) { disp.focus(); disp.select(); }
+        }, 100);
+    },
+
+    pressCalcKey(key) {
+        const disp = document.getElementById('cashCalcDisplay');
+        if (!disp) return;
+        disp.value = (disp.value || '') + key;
+    },
+
+    clearCalculator() {
+        const disp = document.getElementById('cashCalcDisplay');
+        if (!disp) return;
+        disp.value = '';
+    },
+
+    /**
+     * Evaluador aritmético seguro (OWASP compliant: sin eval ni Function)
+     * Soporta suma (+), resta (-), multiplicación (*) y división (/) con precedencia estándar.
+     */
+    safeEvaluateMath(expr) {
+        if (!expr || typeof expr !== 'string') return 0;
+        const sanitized = expr.replace(/[^0-9+\-*/.]/g, '');
+        if (!sanitized) return 0;
+
+        const tokens = [];
+        let currentNumber = '';
+        for (let i = 0; i < sanitized.length; i++) {
+            const ch = sanitized[i];
+            if ((ch >= '0' && ch <= '9') || ch === '.') {
+                currentNumber += ch;
+            } else if (['+', '-', '*', '/'].includes(ch)) {
+                if (currentNumber !== '' && currentNumber !== '.' && currentNumber !== '-') {
+                    const parsed = parseFloat(currentNumber);
+                    if (!isNaN(parsed)) tokens.push(parsed);
+                    currentNumber = '';
+                } else if (ch === '-' && (tokens.length === 0 || typeof tokens[tokens.length - 1] === 'string')) {
+                    currentNumber = '-';
+                    continue;
+                } else if (ch === '+' && (tokens.length === 0 || typeof tokens[tokens.length - 1] === 'string')) {
+                    // Ignorar signo + unario redundante
+                    continue;
+                } else if (tokens.length > 0 && typeof tokens[tokens.length - 1] === 'string') {
+                    // Si ya hay un operador consecutivo, reemplazarlo
+                    tokens[tokens.length - 1] = ch;
+                    continue;
+                }
+                tokens.push(ch);
+            }
+        }
+        if (currentNumber !== '' && currentNumber !== '.' && currentNumber !== '-') {
+            const parsed = parseFloat(currentNumber);
+            if (!isNaN(parsed)) tokens.push(parsed);
+        }
+
+        if (tokens.length === 0) return 0;
+        while (tokens.length > 0 && typeof tokens[tokens.length - 1] === 'string') {
+            tokens.pop();
+        }
+
+        // 1. Resolver operadores con alta prioridad (* y /)
+        const stage1 = [];
+        let i = 0;
+        while (i < tokens.length) {
+            const token = tokens[i];
+            if (token === '*' || token === '/') {
+                const prev = stage1.pop();
+                const next = tokens[i + 1];
+                if (typeof prev !== 'number' || typeof next !== 'number') return 0;
+                if (token === '/') {
+                    if (next === 0) throw new Error('División por cero');
+                    stage1.push(prev / next);
+                } else {
+                    stage1.push(prev * next);
+                }
+                i += 2;
+            } else {
+                stage1.push(token);
+                i++;
+            }
+        }
+
+        // 2. Resolver suma (+) y resta (-)
+        if (stage1.length === 0) return 0;
+        let result = typeof stage1[0] === 'number' ? stage1[0] : 0;
+        let j = 1;
+        while (j < stage1.length) {
+            const op = stage1[j];
+            const nextVal = stage1[j + 1];
+            if (typeof nextVal === 'number') {
+                if (op === '+') result += nextVal;
+                else if (op === '-') result -= nextVal;
+            }
+            j += 2;
+        }
+
+        return Number.isFinite(result) ? result : 0;
+    },
+
+    evaluateCalculator() {
+        const disp = document.getElementById('cashCalcDisplay');
+        if (!disp) return;
+        try {
+            const res = this.safeEvaluateMath(disp.value);
+            disp.value = Math.round(res);
+        } catch (e) {
+            showNotification('Operación matemática inválida', 'warning');
+        }
+    },
+
+    useCalculatorResult(targetInputId) {
+        this.evaluateCalculator();
+        const disp = document.getElementById('cashCalcDisplay');
+        const targetInput = document.getElementById(targetInputId);
+        if (disp && targetInput) {
+            targetInput.value = disp.value;
+            targetInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        closeModal();
+    },
+    /**
+     * Enrich open registers with getSummary so "Ventas" / total received are correct.
+     * @param {Array} registers - From CashRegister.getAll()
+     */
+    async enrichHistoryWithSummaries(registers) {
+        // Solo enriquecer los registros que están abiertos (normalmente solo uno)
+        const openRegisters = registers.filter(r => r.status === 'open');
+        if (openRegisters.length === 0) return;
+
+        await Promise.all(openRegisters.map(async (r) => {
+            const s = await CashRegister.getSummary(r.id);
+            if (s) {
+                r.paymentSummary = s.paymentSummary;
+                r.expectedAmount = s.expectedCash;
+            }
+        }));
+    },
+
+    async render() {
+        // Carga paralela de caja abierta e historial reciente (limitado a 20 para velocidad)
+        const [openCash, history] = await Promise.all([
+            CashRegister.getOpen(),
+            CashRegister.getLatest(20)
+        ]);
+        
+        let lastClosing = null;
+        if (!openCash && history.length > 0) {
+            // Buscar el último cierre en los registros cargados
+            const last = history.find(r => r.status === 'closed');
+            if (last) {
+                lastClosing = await CashRegister.getSummary(last.id);
+            }
+        }
+
+        // Enriquecer solo lo necesario de forma paralela
+        await this.enrichHistoryWithSummaries(history);
+
+        if (!openCash) {
+            return await this.renderOpenCashForm(history, lastClosing);
+        } else {
+            return this.renderCashSummary(openCash, history);
+        }
+    },
+
+    historyDateFilter: '',
+    _cashHistoryDataset: [],
+
+    async renderOpenCashForm(history, lastClosing = null) {
+        const lastTotal = lastClosing ? (lastClosing.finalAmount || 0) : 0;
+        const lastDate = lastClosing && lastClosing.closeDate ? formatDateTime(lastClosing.closeDate) : 'N/A';
+        const lastDiff = lastClosing ? (lastClosing.difference || 0) : 0;
+        const lastDiffColor = lastDiff === 0 ? '#10b981' : (lastDiff > 0 ? '#3b82f6' : '#ef4444');
+        const lastDiffIcon = lastDiff === 0 ? '✅' : (lastDiff > 0 ? '📈' : '📉');
+        const lastDiffLabel = lastDiff === 0 ? 'Cuadró' : (lastDiff > 0 ? 'Sobrante' : 'Faltante');
+
+        // Contadores en vivo para las tarjetas ejecutivas
+        const notesCounts = (typeof NotesService !== 'undefined' && typeof NotesService.getCounts === 'function')
+            ? NotesService.getCounts()
+            : { totalPending: 0, pendingOrders: 0, pendingTasks: 0 };
+
+        let lowStockCount = 0;
+        let outOfStockCount = 0;
+        try {
+            if (typeof Product !== 'undefined' && typeof Product.getLowStock === 'function') {
+                const lowList = await Product.getLowStock();
+                if (Array.isArray(lowList)) {
+                    lowStockCount = lowList.length;
+                    outOfStockCount = lowList.filter(p => (parseFloat(p.stock) || 0) <= 0).length;
+                }
+            }
+        } catch (e) {
+            console.warn('[CashView] Error cargando stock bajo:', e);
+        }
+
+        let debtorsCount = 0;
+        let totalDebtSum = 0;
+        try {
+            if (typeof CustomerAccountService !== 'undefined' && typeof CustomerAccountService.getCustomersWithBalance === 'function') {
+                const summary = await CustomerAccountService.getCustomersWithBalance();
+                if (Array.isArray(summary)) {
+                    const debtors = summary.filter(c => (parseFloat(c.totalDebt) || 0) > 0);
+                    debtorsCount = debtors.length;
+                    totalDebtSum = debtors.reduce((sum, c) => sum + (parseFloat(c.totalDebt) || 0), 0);
+                }
+            }
+            if (debtorsCount === 0 && typeof Customer !== 'undefined' && typeof Customer.getAll === 'function') {
+                const allCust = await Customer.getAll();
+                const debtors = (allCust || []).filter(c => (parseFloat(c.totalDebt) || 0) > 0);
+                debtorsCount = debtors.length;
+                totalDebtSum = debtors.reduce((sum, c) => sum + (parseFloat(c.totalDebt) || 0), 0);
+            }
+        } catch (e) {
+            console.warn('[CashView] Error cargando cuentas por cobrar:', e);
+        }
+
+        return `
+            <style>
+                .cash-exec-grid {
+                    display: grid;
+                    grid-template-columns: repeat(2, 1fr);
+                    gap: 1.25rem;
+                }
+                @media (max-width: 900px) {
+                    .cash-exec-grid {
+                        grid-template-columns: 1fr;
+                    }
+                }
+                .cash-exec-card {
+                    background: #ffffff;
+                    border: 1.5px solid #e2e8f0;
+                    border-radius: 1.5rem;
+                    padding: 1.4rem;
+                    cursor: pointer;
+                    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: space-between;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+                    position: relative;
+                    user-select: none;
+                }
+                .cash-exec-card:hover {
+                    transform: translateY(-5px);
+                    box-shadow: 0 16px 32px -8px rgba(0,0,0,0.12);
+                }
+                .cash-exec-card:active {
+                    transform: translateY(-2px) scale(0.99);
+                }
+                .cash-exec-card.card-history:hover {
+                    border-color: #3b82f6;
+                    background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%);
+                }
+                .cash-exec-card.card-notes:hover {
+                    border-color: #f59e0b;
+                    background: linear-gradient(180deg, #ffffff 0%, #fffbeb 100%);
+                }
+                .cash-exec-card.card-stock:hover {
+                    border-color: #ef4444;
+                    background: linear-gradient(180deg, #ffffff 0%, #fef2f2 100%);
+                }
+                .cash-exec-card.card-debts:hover {
+                    border-color: #10b981;
+                    background: linear-gradient(180deg, #ffffff 0%, #ecfdf5 100%);
+                }
+                .cash-badge-pill {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 0.35rem;
+                    padding: 0.35rem 0.75rem;
+                    border-radius: 9999px;
+                    font-size: 0.78rem;
+                    font-weight: 800;
+                    width: fit-content;
+                }
+            </style>
+
+            <div class="view-header animate-fade-in" style="margin-bottom: 1.75rem;">
+                <h1 style="color: #111827; font-size: 2.2rem; font-weight: 950; letter-spacing: -1px; margin: 0;">Control de Caja</h1>
+                <p style="color: #64748b; font-size: 1rem; margin: 0.35rem 0 0 0; font-weight: 600;">Apertura ágil de turno y panel de control del negocio</p>
+            </div>
+            
+            <div class="grid grid-2 cash-open-grid animate-fade-in" style="gap: 2rem; align-items: start;">
+                <!-- PANEL DE APERTURA IZQUIERDO (MIDNIGHT GLASS) -->
+                <div class="card glass-card-midnight" style="background: #0f172a; border: none; padding: 2.5rem; position: relative; overflow: hidden; border-radius: 2rem; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+                    <!-- Decoración luminosa de fondo -->
+                    <div style="position: absolute; top: -60px; right: -60px; width: 220px; height: 220px; background: radial-gradient(circle, rgba(16, 185, 129, 0.2) 0%, transparent 70%); pointer-events: none;"></div>
+                    
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; position: relative; z-index: 2;">
+                        <div>
+                            <h2 style="margin: 0; font-weight: 950; font-size: 2.2rem; color: #fff; letter-spacing: -1.5px;">Apertura</h2>
+                            <p style="margin: 5px 0 0; color: #94a3b8; font-weight: 600; font-size: 0.95rem;">Inicia una nueva jornada de ventas</p>
+                        </div>
+                        <div style="width: 58px; height: 58px; background: rgba(255,255,255,0.05); border-radius: 1.25rem; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; border: 1px solid rgba(255,255,255,0.1);">💰</div>
+                    </div>
+                    
+                    <form id="openCashForm" onsubmit="CashView.openCash(event)" style="position: relative; z-index: 2;">
+                        <div class="form-group" style="margin-bottom: 2rem;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+                                <label style="margin: 0; font-weight: 800; color: #cbd5e1; text-transform: uppercase; letter-spacing: 1.5px; font-size: 0.8rem;">Monto inicial en efectivo</label>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <button type="button" class="btn btn-sm" onclick="TouchNumpad.open(document.getElementById('quickAmount'), { title: 'Monto Inicial de Apertura', mode: 'currency' })" style="background:rgba(16,185,129,0.15); color:#10b981; border:1px solid rgba(16,185,129,0.4); font-weight:800; border-radius:0.75rem; padding:0.4rem 0.8rem; font-size:0.78rem; cursor:pointer;">🔢 Teclado Táctil</button>
+                                    <button type="button" class="btn btn-sm" onclick="CashView.showPartialSumsCalculator('quickAmount')" style="background:rgba(56,189,248,0.15); color:#38bdf8; border:1px solid rgba(56,189,248,0.4); font-weight:800; border-radius:0.75rem; padding:0.4rem 0.8rem; font-size:0.78rem; cursor:pointer;">🧮 Sumar Montos</button>
+                                </div>
+                            </div>
+                            
+                            <div style="position: relative;">
+                                <span style="position: absolute; left: 1.5rem; top: 50%; transform: translateY(-50%); font-size: 2rem; font-weight: 900; color: #10b981;">$</span>
+                                <input type="number" 
+                                       id="quickAmount" 
+                                       class="form-control" 
+                                       placeholder="0" 
+                                       min="0" 
+                                       required
+                                       onfocus="this.select()"
+                                       style="padding-left: 3.5rem; font-size: 3.5rem; height: 6.5rem; width: 100%; border-radius: 1.5rem; background: rgba(255,255,255,0.03); border: 2.5px solid rgba(255,255,255,0.1); color: white; font-weight: 950; transition: all 0.3s; box-shadow: inset 0 4px 10px rgba(0,0,0,0.2); outline: none;">
+                            </div>
+
+                            ${(lastClosing && lastTotal > 0) ? `
+                                <div style="margin-top: 1rem;">
+                                    <button type="button" 
+                                            onclick="CashView.useLastClosingAmount(${lastTotal})" 
+                                            style="width: 100%; background: rgba(59, 130, 246, 0.12); border: 1.5px dashed rgba(96, 165, 250, 0.5); color: #93c5fd; padding: 0.75rem 1rem; border-radius: 1rem; font-weight: 800; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: all 0.2s;"
+                                            onmouseover="this.style.background='rgba(59, 130, 246, 0.22)'; this.style.borderColor='#60a5fa';"
+                                            onmouseout="this.style.background='rgba(59, 130, 246, 0.12)'; this.style.borderColor='rgba(96, 165, 250, 0.5)';">
+                                        🔄 Usar saldo de cierre anterior (${formatCLP(lastTotal)})
+                                    </button>
+                                </div>
+                            ` : ''}
+
+                            <p style="margin-top: 0.9rem; color: #64748b; font-size: 0.85rem; font-weight: 600; text-align: center;">Ingresa el dinero físico con el que arranca la gaveta para dar vuelto.</p>
+                        </div>
+                        
+                        <button type="submit" class="btn btn-lg" style="width: 100%; height: 5rem; font-size: 1.5rem; font-weight: 950; border-radius: 1.5rem; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; border: none; box-shadow: 0 15px 30px rgba(16, 185, 129, 0.3); transition: all 0.3s; cursor: pointer;" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 20px 40px rgba(16, 185, 129, 0.4)'" onmouseout="this.style.transform='translateY(0)'">
+                            ABRIR CAJA <span style="margin-left: 10px; opacity: 0.8;">→</span>
+                        </button>
+                        
+                        <div style="margin-top: 1.5rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; color: #64748b; font-size: 0.8rem; font-weight: 700;">
+                            <span>🔐</span>
+                            <span>Registro protegido bajo tu cuenta activa de cajero</span>
+                        </div>
+                    </form>
+                </div>
+                
+                <!-- PANEL DERECHO: 4 BOTONES / TARJETAS EJECUTIVAS INTERACTIVAS -->
+                <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 0.25rem;">
+                        <div>
+                            <h3 style="margin: 0; font-size: 1.25rem; font-weight: 950; color: #0f172a; letter-spacing: -0.5px;">Panel Ejecutivo de Control</h3>
+                            <p style="margin: 3px 0 0; font-size: 0.88rem; color: #64748b; font-weight: 600;">Información clave antes de abrir. Haz clic en cualquier tarjeta para ver su detalle.</p>
+                        </div>
+                    </div>
+
+                    <div class="cash-exec-grid">
+                        <!-- TARJETA 1: HISTORIAL Y CIERRES PASADOS -->
+                        <div class="cash-exec-card card-history" onclick="CashView.openHistoryModal()">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+                                <div style="width: 46px; height: 46px; border-radius: 1rem; background: #eff6ff; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; border: 1px solid #dbeafe;">📊</div>
+                                <span class="cash-badge-pill" style="background: ${lastDiffColor}15; color: ${lastDiffColor}; border: 1px solid ${lastDiffColor}30;">
+                                    ${lastDiffIcon} ${lastDiffLabel} ${lastDiff !== 0 ? formatCLP(Math.abs(lastDiff)) : ''}
+                                </span>
+                            </div>
+                            <div>
+                                <span style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; display: block;">Último Cierre</span>
+                                <div style="font-size: 1.6rem; font-weight: 950; color: #0f172a; margin: 0.25rem 0;">
+                                    ${lastClosing ? formatCLP(lastTotal) : 'Sin registros'}
+                                </div>
+                                <small style="color: #94a3b8; font-weight: 600; display: block; margin-bottom: 1rem;">
+                                    ${lastClosing ? 'Cerrado el ' + lastDate : 'Aún no hay turnos cerrados'}
+                                </small>
+                            </div>
+                            <div style="font-size: 0.82rem; font-weight: 800; color: #3b82f6; display: flex; align-items: center; gap: 0.35rem; border-top: 1px solid #f1f5f9; padding-top: 0.75rem;">
+                                <span>Ver historial completo</span>
+                                <span style="font-size: 1rem;">→</span>
+                            </div>
+                        </div>
+
+                        <!-- TARJETA 2: PIZARRA DE NOTAS Y ENCARGOS -->
+                        <div class="cash-exec-card card-notes" onclick="CashView.openNotesModal()">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+                                <div style="width: 46px; height: 46px; border-radius: 1rem; background: #fffbeb; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; border: 1px solid #fef3c7;">📝</div>
+                                <span id="cash-exec-notes-badge" class="cash-badge-pill" style="background: ${notesCounts.totalPending > 0 ? '#fef3c7' : '#ecfdf5'}; color: ${notesCounts.totalPending > 0 ? '#b45309' : '#047857'}; border: 1px solid ${notesCounts.totalPending > 0 ? '#fde68a' : '#a7f3d0'};">
+                                    ${notesCounts.totalPending > 0 ? `📌 ${notesCounts.pendingOrders} encargos · ${notesCounts.pendingTasks} tareas` : '✅ Al día'}
+                                </span>
+                            </div>
+                            <div>
+                                <span style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; display: block;">Pizarra de Turno</span>
+                                <div id="cash-exec-notes-val" style="font-size: 1.6rem; font-weight: 950; color: #0f172a; margin: 0.25rem 0;">
+                                    ${notesCounts.totalPending} pendientes
+                                </div>
+                                <small style="color: #94a3b8; font-weight: 600; display: block; margin-bottom: 1rem;">
+                                    Encargos de pan, envases y tareas
+                                </small>
+                            </div>
+                            <div style="font-size: 0.82rem; font-weight: 800; color: #d97706; display: flex; align-items: center; gap: 0.35rem; border-top: 1px solid #f1f5f9; padding-top: 0.75rem;">
+                                <span>Abrir pizarra y anotar</span>
+                                <span style="font-size: 1rem;">→</span>
+                            </div>
+                        </div>
+
+                        <!-- TARJETA 3: STOCK CRÍTICO & FALTANTES -->
+                        <div class="cash-exec-card card-stock" onclick="CashView.openStockModal()">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+                                <div style="width: 46px; height: 46px; border-radius: 1rem; background: #fef2f2; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; border: 1px solid #fee2e2;">📦</div>
+                                <span class="cash-badge-pill" style="background: ${lowStockCount > 0 ? '#fee2e2' : '#ecfdf5'}; color: ${lowStockCount > 0 ? '#b91c1c' : '#047857'}; border: 1px solid ${lowStockCount > 0 ? '#fecaca' : '#a7f3d0'};">
+                                    ${lowStockCount > 0 ? `⚠️ ${outOfStockCount} en cero` : '✅ Stock óptimo'}
+                                </span>
+                            </div>
+                            <div>
+                                <span style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; display: block;">Inventario Crítico</span>
+                                <div style="font-size: 1.6rem; font-weight: 950; color: #0f172a; margin: 0.25rem 0;">
+                                    ${lowStockCount} por reponer
+                                </div>
+                                <small style="color: #94a3b8; font-weight: 600; display: block; margin-bottom: 1rem;">
+                                    Productos agotados o bajo el mínimo
+                                </small>
+                            </div>
+                            <div style="font-size: 0.82rem; font-weight: 800; color: #dc2626; display: flex; align-items: center; gap: 0.35rem; border-top: 1px solid #f1f5f9; padding-top: 0.75rem;">
+                                <span>Revisar faltantes</span>
+                                <span style="font-size: 1rem;">→</span>
+                            </div>
+                        </div>
+
+                        <!-- TARJETA 4: FIADOS Y CUENTAS POR COBRAR -->
+                        <div class="cash-exec-card card-debts" onclick="CashView.openDebtsModal()">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+                                <div style="width: 46px; height: 46px; border-radius: 1rem; background: #ecfdf5; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; border: 1px solid #d1fae5;">💳</div>
+                                <span class="cash-badge-pill" style="background: ${debtorsCount > 0 ? '#ecfdf5' : '#f1f5f9'}; color: ${debtorsCount > 0 ? '#047857' : '#64748b'}; border: 1px solid ${debtorsCount > 0 ? '#a7f3d0' : '#e2e8f0'};">
+                                    ${debtorsCount > 0 ? `👥 ${debtorsCount} clientes` : '✅ Al día'}
+                                </span>
+                            </div>
+                            <div>
+                                <span style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; display: block;">Fiados por Cobrar</span>
+                                <div style="font-size: 1.6rem; font-weight: 950; color: #0f172a; margin: 0.25rem 0;">
+                                    ${formatCLP(totalDebtSum)}
+                                </div>
+                                <small style="color: #94a3b8; font-weight: 600; display: block; margin-bottom: 1rem;">
+                                    Suma total en libreta de clientes
+                                </small>
+                            </div>
+                            <div style="font-size: 0.82rem; font-weight: 800; color: #059669; display: flex; align-items: center; gap: 0.35rem; border-top: 1px solid #f1f5f9; padding-top: 0.75rem;">
+                                <span>Ver lista de deudores</span>
+                                <span style="font-size: 1rem;">→</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- BANNER INFORMATIVO INFERIOR -->
+                    <div style="padding: 1.25rem; background: #ffffff; border-radius: 1.25rem; border: 1.5px solid #e2e8f0; display: flex; align-items: center; gap: 1rem; box-shadow: 0 4px 12px rgba(0,0,0,0.02);">
+                        <div style="width: 42px; height: 42px; border-radius: 50%; background: #eff6ff; color: #3b82f6; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; flex-shrink: 0;">💡</div>
+                        <p style="margin: 0; font-size: 0.88rem; color: #475569; font-weight: 600; line-height: 1.4;">
+                            <strong>Consejo de Control:</strong> Revisa la pizarra de encargos y verifica que el dinero físico en la gaveta coincida con el monto ingresado antes de realizar la primera venta.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        `;
+    },
+
+    useLastClosingAmount(amount) {
+        const input = document.getElementById('quickAmount');
+        if (input) {
+            input.value = amount;
+            input.focus();
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            if (typeof showNotification === 'function') {
+                showNotification(`Monto fijado en ${formatCLP(amount)}`, 'info');
+            }
+        }
+    },
+
+    async openHistoryModal() {
+        await this.showAllCashRegistersHistory();
+    },
+
+    openNotesModal() {
+        const renderListHtml = (filter = 'all') => {
+            let currentNotes = typeof NotesService !== 'undefined' ? NotesService.getAll() : [];
+            if (filter === 'order') currentNotes = currentNotes.filter(n => n.category === 'order');
+            if (filter === 'task') currentNotes = currentNotes.filter(n => n.category === 'task');
+            if (filter === 'pending') currentNotes = currentNotes.filter(n => !n.isCompleted);
+
+            if (currentNotes.length === 0) {
+                return `
+                    <div style="text-align: center; padding: 2.5rem 1rem; color: #94a3b8;">
+                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📝</div>
+                        <p style="font-weight: 700; font-size: 1rem; margin: 0; color: #64748b;">No hay notas registradas en esta vista.</p>
+                        <small style="color: #94a3b8;">Anota encargos de clientes o tareas del turno arriba.</small>
+                    </div>
+                `;
+            }
+
+            return currentNotes.map(n => `
+                <div id="note-item-${n.id}" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; padding: 1rem; background: ${n.isCompleted ? '#f8fafc' : '#ffffff'}; border: 1.5px solid ${n.isCompleted ? '#e2e8f0' : (n.category === 'task' ? '#fed7aa' : '#bbf7d0')}; border-radius: 1rem; margin-bottom: 0.75rem; transition: all 0.2s;">
+                    <div style="display: flex; align-items: flex-start; gap: 0.75rem; flex: 1;">
+                        <input type="checkbox" 
+                               ${n.isCompleted ? 'checked' : ''} 
+                               onchange="CashView.handleToggleNote('${n.id}')" 
+                               style="width: 1.25rem; height: 1.25rem; accent-color: #10b981; cursor: pointer; margin-top: 0.2rem;">
+                        <div style="flex: 1;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.35rem;">
+                                <span style="font-size: 0.7rem; font-weight: 800; text-transform: uppercase; padding: 0.2rem 0.5rem; border-radius: 0.5rem; background: ${n.category === 'task' ? '#ffedd5' : '#dcfce7'}; color: ${n.category === 'task' ? '#c2410c' : '#15803d'};">
+                                    ${n.category === 'task' ? '📋 Tarea de Personal' : '🥖 Encargo / Cliente'}
+                                </span>
+                                ${n.time ? `<span style="font-size: 0.7rem; font-weight: 700; color: #64748b; background: #f1f5f9; padding: 0.2rem 0.5rem; border-radius: 0.5rem;">⏰ ${n.time}</span>` : ''}
+                                <span style="font-size: 0.7rem; color: #94a3b8; font-weight: 600;">👤 ${safeHTML(n.createdBy || 'Mostrador')}</span>
+                            </div>
+                            <p style="margin: 0; font-size: 0.95rem; color: ${n.isCompleted ? '#94a3b8' : '#1e293b'}; ${n.isCompleted ? 'text-decoration: line-through;' : 'font-weight: 700;'}; word-break: break-word;">
+                                ${safeHTML(n.text)}
+                            </p>
+                        </div>
+                    </div>
+                    <button type="button" 
+                            onclick="CashView.handleDeleteNote('${n.id}')" 
+                            title="Eliminar nota" 
+                            style="background: transparent; border: none; color: #94a3b8; font-size: 1.1rem; cursor: pointer; padding: 0.25rem; border-radius: 0.5rem; transition: color 0.2s;"
+                            onmouseover="this.style.color='#ef4444'"
+                            onmouseout="this.style.color='#94a3b8'">
+                        🗑️
+                    </button>
+                </div>
+            `).join('');
+        };
+
+        const content = `
+            <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <!-- Formulario de nueva nota -->
+                <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 1.25rem; padding: 1.25rem;">
+                    <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; font-weight: 900; color: #1e293b; display: flex; align-items: center; gap: 0.5rem;">
+                        ➕ Nueva Nota o Encargo de Turno
+                    </h4>
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                        <input type="text" 
+                               id="modalNoteText" 
+                               placeholder="Ej: Don Juan encargó 2kg de pan / Guardar envase de bebida..." 
+                               style="width: 100%; padding: 0.75rem 1rem; border-radius: 0.75rem; border: 1.5px solid #cbd5e1; font-size: 0.95rem; font-weight: 600; outline: none; box-sizing: border-box;"
+                               onkeydown="if(event.key === 'Enter') CashView.addNoteFromModal()">
+                        
+                        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+                            <select id="modalNoteCategory" style="padding: 0.6rem 0.8rem; border-radius: 0.75rem; border: 1.5px solid #cbd5e1; font-weight: 700; font-size: 0.85rem; background: #fff; cursor: pointer;">
+                                <option value="order">🥖 Encargo / Cliente (Mostrador)</option>
+                                <option value="task">📋 Tarea de Personal (Turno)</option>
+                            </select>
+                            
+                            <div style="display: flex; align-items: center; gap: 0.35rem; background: #fff; border: 1.5px solid #cbd5e1; border-radius: 0.75rem; padding: 0.35rem 0.75rem;">
+                                <span style="font-size: 0.8rem; color: #64748b; font-weight: 700;">⏰ Hora:</span>
+                                <input type="time" id="modalNoteTime" style="border: none; outline: none; font-weight: 700; font-size: 0.85rem;">
+                            </div>
+                            
+                            <button type="button" 
+                                    onclick="CashView.addNoteFromModal()" 
+                                    style="margin-left: auto; background: #10b981; color: white; border: none; padding: 0.65rem 1.4rem; border-radius: 0.75rem; font-weight: 800; font-size: 0.9rem; cursor: pointer; transition: background 0.2s;"
+                                    onmouseover="this.style.background='#059669'"
+                                    onmouseout="this.style.background='#10b981'">
+                                Guardar Nota
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filtros de pestañas -->
+                <div style="display: flex; gap: 0.5rem; border-bottom: 2px solid #f1f5f9; padding-bottom: 0.5rem; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-sm btn-filter-notes" onclick="CashView.filterNotesInModal('all', this)" style="border-radius: 0.6rem; font-weight: 800; padding: 0.4rem 0.8rem; background: #10b981; color: #fff;">Todas</button>
+                    <button type="button" class="btn btn-sm btn-filter-notes" onclick="CashView.filterNotesInModal('pending', this)" style="border-radius: 0.6rem; font-weight: 800; padding: 0.4rem 0.8rem; background: #f1f5f9; color: #475569;">Solo Pendientes</button>
+                    <button type="button" class="btn btn-sm btn-filter-notes" onclick="CashView.filterNotesInModal('order', this)" style="border-radius: 0.6rem; font-weight: 800; padding: 0.4rem 0.8rem; background: #f1f5f9; color: #475569;">🥖 Encargos</button>
+                    <button type="button" class="btn btn-sm btn-filter-notes" onclick="CashView.filterNotesInModal('task', this)" style="border-radius: 0.6rem; font-weight: 800; padding: 0.4rem 0.8rem; background: #f1f5f9; color: #475569;">📋 Tareas Personal</button>
+                </div>
+
+                <!-- Contenedor scrollable de notas -->
+                <div id="notesModalList" style="max-height: 380px; overflow-y: auto; padding-right: 0.25rem;">
+                    ${renderListHtml('all')}
+                </div>
+                
+                <p style="margin: 0; font-size: 0.8rem; color: #94a3b8; font-weight: 600; text-align: center;">
+                    💡 Las notas marcadas se conservan al final de la lista. Las notas pendientes se traspasan de turno automáticamente.
+                </p>
+            </div>
+        `;
+
+        showModal(content, {
+            title: '📝 Pizarra de Notas y Encargos del Negocio',
+            width: '680px',
+            footer: `<button class="btn btn-secondary" onclick="closeModal()" style="border-radius: 0.75rem; font-weight: 800;">Cerrar</button>`
+        });
+    },
+
+    addNoteFromModal() {
+        const textInput = document.getElementById('modalNoteText');
+        const catSelect = document.getElementById('modalNoteCategory');
+        const timeInput = document.getElementById('modalNoteTime');
+        if (!textInput || !textInput.value.trim()) {
+            return showNotification('Escribe el texto de la nota', 'warning');
+        }
+        const text = textInput.value.trim();
+        const category = catSelect ? catSelect.value : 'order';
+        const time = timeInput ? timeInput.value : '';
+
+        if (typeof NotesService !== 'undefined') {
+            NotesService.addNote({ text, category, time });
+        }
+        textInput.value = '';
+        if (timeInput) timeInput.value = '';
+
+        this.refreshNotesModalList();
+        this.updateNotesBadgeOnMain();
+        showNotification('Nota guardada', 'success');
+    },
+
+    handleToggleNote(noteId) {
+        if (typeof NotesService !== 'undefined') {
+            NotesService.toggleNote(noteId);
+        }
+        this.refreshNotesModalList();
+        this.updateNotesBadgeOnMain();
+    },
+
+    handleDeleteNote(noteId) {
+        if (typeof NotesService !== 'undefined') {
+            NotesService.deleteNote(noteId);
+        }
+        this.refreshNotesModalList();
+        this.updateNotesBadgeOnMain();
+        showNotification('Nota eliminada', 'info');
+    },
+
+    _currentNotesFilter: 'all',
+
+    filterNotesInModal(filter, btn) {
+        this._currentNotesFilter = filter;
+        document.querySelectorAll('.btn-filter-notes').forEach(b => {
+            b.style.background = '#f1f5f9';
+            b.style.color = '#475569';
+        });
+        if (btn) {
+            btn.style.background = '#10b981';
+            btn.style.color = '#ffffff';
+        }
+        this.refreshNotesModalList(filter);
+    },
+
+    refreshNotesModalList(filter = null) {
+        const f = filter || this._currentNotesFilter || 'all';
+        const container = document.getElementById('notesModalList');
+        if (!container) return;
+
+        let currentNotes = typeof NotesService !== 'undefined' ? NotesService.getAll() : [];
+        if (f === 'order') currentNotes = currentNotes.filter(n => n.category === 'order');
+        if (f === 'task') currentNotes = currentNotes.filter(n => n.category === 'task');
+        if (f === 'pending') currentNotes = currentNotes.filter(n => !n.isCompleted);
+
+        if (currentNotes.length === 0) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 2.5rem 1rem; color: #94a3b8;">
+                    <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📝</div>
+                    <p style="font-weight: 700; font-size: 1rem; margin: 0; color: #64748b;">No hay notas en esta vista.</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = currentNotes.map(n => `
+            <div id="note-item-${n.id}" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; padding: 1rem; background: ${n.isCompleted ? '#f8fafc' : '#ffffff'}; border: 1.5px solid ${n.isCompleted ? '#e2e8f0' : (n.category === 'task' ? '#fed7aa' : '#bbf7d0')}; border-radius: 1rem; margin-bottom: 0.75rem; transition: all 0.2s;">
+                <div style="display: flex; align-items: flex-start; gap: 0.75rem; flex: 1;">
+                    <input type="checkbox" 
+                           ${n.isCompleted ? 'checked' : ''} 
+                           onchange="CashView.handleToggleNote('${n.id}')" 
+                           style="width: 1.25rem; height: 1.25rem; accent-color: #10b981; cursor: pointer; margin-top: 0.2rem;">
+                    <div style="flex: 1;">
+                        <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.35rem;">
+                            <span style="font-size: 0.7rem; font-weight: 800; text-transform: uppercase; padding: 0.2rem 0.5rem; border-radius: 0.5rem; background: ${n.category === 'task' ? '#ffedd5' : '#dcfce7'}; color: ${n.category === 'task' ? '#c2410c' : '#15803d'};">
+                                ${n.category === 'task' ? '📋 Tarea de Personal' : '🥖 Encargo / Cliente'}
+                            </span>
+                            ${n.time ? `<span style="font-size: 0.7rem; font-weight: 700; color: #64748b; background: #f1f5f9; padding: 0.2rem 0.5rem; border-radius: 0.5rem;">⏰ ${n.time}</span>` : ''}
+                            <span style="font-size: 0.7rem; color: #94a3b8; font-weight: 600;">👤 ${safeHTML(n.createdBy || 'Mostrador')}</span>
+                        </div>
+                        <p style="margin: 0; font-size: 0.95rem; color: ${n.isCompleted ? '#94a3b8' : '#1e293b'}; ${n.isCompleted ? 'text-decoration: line-through;' : 'font-weight: 700;'}; word-break: break-word;">
+                            ${safeHTML(n.text)}
+                        </p>
+                    </div>
+                </div>
+                <button type="button" 
+                        onclick="CashView.handleDeleteNote('${n.id}')" 
+                        title="Eliminar nota" 
+                        style="background: transparent; border: none; color: #94a3b8; font-size: 1.1rem; cursor: pointer; padding: 0.25rem; border-radius: 0.5rem; transition: color 0.2s;"
+                        onmouseover="this.style.color='#ef4444'"
+                        onmouseout="this.style.color='#94a3b8'">
+                    🗑️
+                </button>
+            </div>
+        `).join('');
+    },
+
+    updateNotesBadgeOnMain() {
+        if (typeof NotesService === 'undefined') return;
+        const counts = NotesService.getCounts();
+        const valEl = document.getElementById('cash-exec-notes-val');
+        const badgeEl = document.getElementById('cash-exec-notes-badge');
+        if (valEl) {
+            valEl.textContent = `${counts.totalPending} pendientes`;
+        }
+        if (badgeEl) {
+            if (counts.totalPending > 0) {
+                badgeEl.innerHTML = `📌 ${counts.pendingOrders} encargos · ${counts.pendingTasks} tareas`;
+                badgeEl.style.background = '#fef3c7';
+                badgeEl.style.color = '#b45309';
+                badgeEl.style.borderColor = '#fde68a';
+            } else {
+                badgeEl.innerHTML = `✅ Al día`;
+                badgeEl.style.background = '#ecfdf5';
+                badgeEl.style.color = '#047857';
+                badgeEl.style.borderColor = '#a7f3d0';
+            }
+        }
+    },
+
+    async openStockModal() {
+        let lowStock = [];
+        try {
+            if (typeof Product !== 'undefined' && typeof Product.getLowStock === 'function') {
+                lowStock = await Product.getLowStock();
+            }
+        } catch(e) {
+            console.warn('[CashView] Error cargando stock bajo:', e);
+        }
+
+        const outOfStock = lowStock.filter(p => (parseFloat(p.stock) || 0) <= 0);
+        const nearEmpty = lowStock.filter(p => (parseFloat(p.stock) || 0) > 0);
+
+        const content = `
+            <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div style="padding: 1rem 1.25rem; background: #fee2e2; border-radius: 1rem; border: 1.5px solid #fecaca;">
+                        <span style="font-size: 0.75rem; font-weight: 800; color: #991b1b; text-transform: uppercase;">Agotados en Cero</span>
+                        <div style="font-size: 1.8rem; font-weight: 900; color: #dc2626;">${outOfStock.length}</div>
+                        <small style="color: #b91c1c; font-weight: 600;">Productos sin existencias físicas</small>
+                    </div>
+                    <div style="padding: 1rem 1.25rem; background: #fef3c7; border-radius: 1rem; border: 1.5px solid #fde68a;">
+                        <span style="font-size: 0.75rem; font-weight: 800; color: #92400e; text-transform: uppercase;">Bajo el Mínimo</span>
+                        <div style="font-size: 1.8rem; font-weight: 900; color: #d97706;">${nearEmpty.length}</div>
+                        <small style="color: #b45309; font-weight: 600;">Por debajo del stock de seguridad</small>
+                    </div>
+                </div>
+
+                ${lowStock.length === 0 ? `
+                    <div style="text-align: center; padding: 3rem 1rem; color: #059669;">
+                        <div style="font-size: 3rem; margin-bottom: 0.75rem;">🎉</div>
+                        <h3 style="margin: 0 0 0.5rem 0; font-weight: 900; color: #065f46;">¡Todo el inventario está en orden!</h3>
+                        <p style="margin: 0; color: #047857; font-weight: 600;">No tienes productos con stock crítico o agotados en este momento.</p>
+                    </div>
+                ` : `
+                    <div style="max-height: 380px; overflow-y: auto; border: 1.5px solid #e2e8f0; border-radius: 1rem;">
+                        <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88rem;">
+                            <thead style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; z-index: 2;">
+                                <tr>
+                                    <th style="padding: 0.75rem 1rem; font-weight: 800; color: #475569;">Producto</th>
+                                    <th style="padding: 0.75rem 1rem; font-weight: 800; color: #475569;">Código / SKU</th>
+                                    <th style="padding: 0.75rem 1rem; font-weight: 800; color: #475569; text-align: center;">Stock Actual</th>
+                                    <th style="padding: 0.75rem 1rem; font-weight: 800; color: #475569; text-align: center;">Mínimo</th>
+                                    <th style="padding: 0.75rem 1rem; font-weight: 800; color: #475569; text-align: right;">Precio</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${lowStock.map(p => {
+                                    const st = parseFloat(p.stock) || 0;
+                                    const isZero = st <= 0;
+                                    return `
+                                        <tr style="border-bottom: 1px solid #f1f5f9; background: ${isZero ? 'rgba(239,68,68,0.03)' : 'transparent'};">
+                                            <td style="padding: 0.75rem 1rem;">
+                                                <div style="font-weight: 800; color: #1e293b;">${safeHTML(p.name)}</div>
+                                                <small style="color: #64748b;">${safeHTML(p.category || 'General')}</small>
+                                            </td>
+                                            <td style="padding: 0.75rem 1rem; font-family: monospace; color: #64748b; font-weight: 700;">
+                                                ${safeHTML(p.barcode || p.sku || '-')}
+                                            </td>
+                                            <td style="padding: 0.75rem 1rem; text-align: center;">
+                                                <span style="display: inline-block; padding: 0.25rem 0.6rem; border-radius: 0.5rem; font-weight: 900; background: ${isZero ? '#fee2e2' : '#fef3c7'}; color: ${isZero ? '#dc2626' : '#d97706'}; border: 1px solid ${isZero ? '#fecaca' : '#fde68a'};">
+                                                    ${st} ${safeHTML(p.unit || 'unid')}
+                                                </span>
+                                            </td>
+                                            <td style="padding: 0.75rem 1rem; text-align: center; font-weight: 700; color: #64748b;">
+                                                ${p.minStock ?? 0}
+                                            </td>
+                                            <td style="padding: 0.75rem 1rem; text-align: right; font-weight: 800; color: #0f172a;">
+                                                ${formatCLP(p.price || 0)}
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+            </div>
+        `;
+
+        const footer = `
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <button class="btn btn-primary" onclick="closeModal(); app.navigate('purchases');" style="border-radius: 0.75rem; font-weight: 800; background: #3b82f6; border: none; display: flex; align-items: center; gap: 0.4rem;">
+                    🚚 Ir a Proveedores / Compras
+                </button>
+                <button class="btn btn-secondary" onclick="closeModal()" style="border-radius: 0.75rem; font-weight: 800;">
+                    Cerrar
+                </button>
+            </div>
+        `;
+
+        showModal(content, {
+            title: '📦 Productos con Stock Crítico y Faltantes',
+            width: '780px',
+            footer
+        });
+    },
+
+    async openDebtsModal() {
+        let debtors = [];
+        try {
+            if (typeof CustomerAccountService !== 'undefined' && typeof CustomerAccountService.getCustomersWithBalance === 'function') {
+                const summary = await CustomerAccountService.getCustomersWithBalance();
+                if (Array.isArray(summary)) {
+                    debtors = summary.filter(c => (parseFloat(c.totalDebt) || 0) > 0);
+                }
+            }
+            if (debtors.length === 0 && typeof Customer !== 'undefined' && typeof Customer.getAll === 'function') {
+                const allCust = await Customer.getAll();
+                debtors = (allCust || []).filter(c => (parseFloat(c.totalDebt) || 0) > 0);
+            }
+        } catch(e) {
+            console.warn('[CashView] Error cargando cuentas por cobrar:', e);
+        }
+
+        debtors.sort((a, b) => (parseFloat(b.totalDebt) || 0) - (parseFloat(a.totalDebt) || 0));
+        const totalDebtSum = debtors.reduce((sum, c) => sum + (parseFloat(c.totalDebt) || 0), 0);
+
+        const content = `
+            <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                <div style="padding: 1.25rem 1.5rem; background: #fef2f2; border-radius: 1.25rem; border: 1.5px solid #fecaca; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                    <div>
+                        <span style="font-size: 0.8rem; font-weight: 800; color: #991b1b; text-transform: uppercase; letter-spacing: 0.5px;">Total Fiados Pendientes por Cobrar</span>
+                        <div style="font-size: 2.2rem; font-weight: 950; color: #dc2626; letter-spacing: -1px;">
+                            ${formatCLP(totalDebtSum)}
+                        </div>
+                    </div>
+                    <div style="text-align: right;">
+                        <span style="font-size: 0.8rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Clientes con Deuda</span>
+                        <div style="font-size: 1.8rem; font-weight: 900; color: #1e293b;">
+                            👥 ${debtors.length}
+                        </div>
+                    </div>
+                </div>
+
+                ${debtors.length === 0 ? `
+                    <div style="text-align: center; padding: 3rem 1rem; color: #059669;">
+                        <div style="font-size: 3rem; margin-bottom: 0.75rem;">🎉</div>
+                        <h3 style="margin: 0 0 0.5rem 0; font-weight: 900; color: #065f46;">¡Cuentas al día!</h3>
+                        <p style="margin: 0; color: #047857; font-weight: 600;">No tienes clientes con deudas o fiados pendientes.</p>
+                    </div>
+                ` : `
+                    <div style="max-height: 380px; overflow-y: auto; border: 1.5px solid #e2e8f0; border-radius: 1rem;">
+                        <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.88rem;">
+                            <thead style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0; z-index: 2;">
+                                <tr>
+                                    <th style="padding: 0.75rem 1rem; font-weight: 800; color: #475569;">Cliente</th>
+                                    <th style="padding: 0.75rem 1rem; font-weight: 800; color: #475569;">Contacto</th>
+                                    <th style="padding: 0.75rem 1rem; font-weight: 800; color: #475569; text-align: right;">Deuda Pendiente</th>
+                                    <th style="padding: 0.75rem 1rem; font-weight: 800; color: #475569; text-align: center;">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${debtors.map(c => {
+                                    const d = parseFloat(c.totalDebt) || 0;
+                                    const phone = c.phone || '';
+                                    const cleanPhone = phone.replace(/[^0-9]/g, '');
+                                    return `
+                                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                                            <td style="padding: 0.75rem 1rem;">
+                                                <div style="font-weight: 800; color: #1e293b;">${safeHTML(c.name)}</div>
+                                                ${c.rut ? `<small style="color: #64748b;">RUT: ${safeHTML(c.rut)}</small>` : ''}
+                                            </td>
+                                            <td style="padding: 0.75rem 1rem;">
+                                                ${phone ? `
+                                                    <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                                        <a href="tel:${cleanPhone}" style="color: #2563eb; font-weight: 700; text-decoration: none;">📞 ${safeHTML(phone)}</a>
+                                                        <a href="https://wa.me/${cleanPhone.startsWith('56') ? cleanPhone : '56' + cleanPhone}" target="_blank" title="Enviar WhatsApp" style="color: #16a34a; font-weight: 800; text-decoration: none; font-size: 1rem;">💬</a>
+                                                    </div>
+                                                ` : `<span style="color: #94a3b8; font-weight: 600;">Sin teléfono</span>`}
+                                            </td>
+                                            <td style="padding: 0.75rem 1rem; text-align: right;">
+                                                <span style="font-weight: 900; color: #dc2626; font-size: 1.05rem;">
+                                                    ${formatCLP(d)}
+                                                </span>
+                                            </td>
+                                            <td style="padding: 0.75rem 1rem; text-align: center;">
+                                                <button type="button" 
+                                                        onclick="closeModal(); if (typeof CustomersView !== 'undefined' && CustomersView.showAccountDetails) { CustomersView.showAccountDetails(${c.id}); } else { app.navigate('customers'); }" 
+                                                        class="btn btn-sm" 
+                                                        style="background: #f1f5f9; color: #1e293b; font-weight: 800; border-radius: 0.6rem; padding: 0.35rem 0.75rem; border: 1px solid #cbd5e1; cursor: pointer;">
+                                                    🔍 Ficha / Abonar
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+            </div>
+        `;
+
+        const footer = `
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                <button class="btn btn-primary" onclick="closeModal(); app.navigate('customers');" style="border-radius: 0.75rem; font-weight: 800; background: #10b981; border: none; display: flex; align-items: center; gap: 0.4rem;">
+                    👥 Ir al Módulo de Clientes
+                </button>
+                <button class="btn btn-secondary" onclick="closeModal()" style="border-radius: 0.75rem; font-weight: 800;">
+                    Cerrar
+                </button>
+            </div>
+        `;
+
+        showModal(content, {
+            title: '💳 Cuentas por Cobrar (Fiados Pendientes)',
+            width: '780px',
+            footer
+        });
+    },
+
+    _viewMode: 'today', // 'today' | 'session'
+
+    setViewMode(mode) {
+        this._viewMode = mode;
+        if (this._activeRegister && this._cashHistoryDataset) {
+            app.navigate('cash');
+        }
+    },
+
+    async renderCashSummary(cashRegister, history) {
+        const summary = await CashRegister.getSummary(cashRegister.id);
+        const dailyDetail = await CashController.getDailyDetail(cashRegister.id);
+        this._dailyDetail = dailyDetail;
+        this._activeSummary = summary;
+        this._activeRegister = cashRegister;
+
+        const isTodayMode = (this._viewMode === 'today');
+
+        // Límite de Efectivo Sugerido en Caja (Por defecto $150.000 CLP)
+        const maxCashLimit = parseFloat(localStorage.getItem('cashRegisterMaxCashLimit') || '150000');
+        const showCashLimitAlert = (summary.expectedCash >= maxCashLimit);
+        const suggestedWithdrawal = Math.max(0, summary.expectedCash - (parseFloat(cashRegister.initialAmount) || 50000));
+
+        // Duración y alerta de caja abierta > 24h
+        const rawOpenDate = cashRegister.openDate || cashRegister.openedAt || cashRegister.created_at;
+        const openDateObj = rawOpenDate ? new Date(rawOpenDate) : new Date();
+        const diffMinutes = Math.max(0, Math.floor((new Date() - openDateObj) / 60000));
+        const diffHours = Math.floor(diffMinutes / 60);
+        const diffDays = Math.floor(diffHours / 24);
+        const isLongSession = diffHours >= 24;
+
+        let durationDisplay = 'Turno Activo';
+        if (!isNaN(diffMinutes)) {
+            if (diffMinutes < 60) {
+                durationDisplay = `${diffMinutes} min transcurridos`;
+            } else if (diffHours < 24) {
+                durationDisplay = `${diffHours}h ${diffMinutes % 60}m transcurridos`;
+            } else {
+                durationDisplay = `${diffDays} día(s) y ${diffHours % 24}h transcurridos`;
+            }
+        }
+
+        // Datos dinámicos según el modo de vista (Hoy vs Sesión)
+        const displaySalesAmount = isTodayMode ? summary.todaySalesAmount : summary.totalSalesAmount;
+        const displaySalesCount = isTodayMode ? summary.todaySalesCount : summary.totalSales;
+        const displayBank = isTodayMode ? summary.todayBank : summary.sessionBank;
+        const displayNetProfit = isTodayMode ? summary.todayNetProfit : summary.netProfit;
+        const displayTicketAvg = isTodayMode ? summary.todayTicketAverage : summary.sessionTicketAverage;
+        const displayCreditSalesAmount = isTodayMode ? summary.todayCreditSalesAmount : summary.sessionCreditSalesAmount;
+        const displayCreditSalesCount = isTodayMode ? (summary.todayCreditSalesCount || 0) : (summary.sessionCreditSalesCount || 0);
+        const displayDebtPayments = isTodayMode ? summary.todayDebtPayments : summary.totalDebtPayments;
+        const displayDebtCount = isTodayMode ? summary.todayDebtPaymentsCount : summary.debtPayments.length;
+        const displayReturnsAmount = isTodayMode ? summary.todayReturnedAmount : summary.totalReturnedAmount;
+        const displayReturnsCount = isTodayMode ? summary.todayReturnedCount : summary.totalReturnedCount;
+
+        return `
+            <style>
+                @keyframes cxFadeUp {
+                    from { opacity: 0; transform: translateY(14px); }
+                    to   { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes cxPulse {
+                    0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+                    50%       { box-shadow: 0 0 0 7px rgba(16,185,129,0); }
+                }
+
+                .cx-header {
+                    background: #ffffff;
+                    border-radius: 1.25rem;
+                    padding: 1.25rem 1.75rem;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    flex-wrap: wrap;
+                    gap: 1rem;
+                    margin-bottom: 1.25rem;
+                    border-left: 5px solid #10b981;
+                    animation: cxFadeUp 0.3s ease both;
+                }
+
+                .cx-toggle-group {
+                    display: flex;
+                    background: #f1f5f9;
+                    border-radius: 0.75rem;
+                    padding: 0.25rem;
+                    gap: 0.25rem;
+                    border: 1px solid #e2e8f0;
+                }
+                .cx-toggle-btn {
+                    padding: 0.5rem 1rem;
+                    border-radius: 0.6rem;
+                    font-size: 0.85rem;
+                    font-weight: 800;
+                    border: none;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                    color: #64748b;
+                    background: transparent;
+                }
+                .cx-toggle-btn.active {
+                    background: #ffffff;
+                    color: #0f172a;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+                }
+
+                .cx-kpi-main {
+                    background: #ffffff;
+                    border-radius: 1.15rem;
+                    padding: 1.35rem 1.5rem;
+                    box-shadow: 0 3px 18px rgba(0,0,0,0.06);
+                    border: 1px solid #f1f5f9;
+                    border-left: 4.5px solid transparent;
+                    position: relative;
+                    overflow: hidden;
+                    transition: transform 0.2s, box-shadow 0.2s;
+                    animation: cxFadeUp 0.35s ease both;
+                }
+                .cx-kpi-main:hover {
+                    transform: translateY(-3px);
+                    box-shadow: 0 8px 24px rgba(0,0,0,0.09);
+                }
+                .cx-kpi-bg {
+                    position: absolute;
+                    right: -10px;
+                    bottom: -10px;
+                    font-size: 4rem;
+                    opacity: 0.07;
+                    pointer-events: none;
+                    user-select: none;
+                }
+                .cx-kpi-lbl {
+                    font-size: 0.75rem;
+                    font-weight: 800;
+                    text-transform: uppercase;
+                    letter-spacing: 0.8px;
+                    margin-bottom: 0.4rem;
+                }
+                .cx-kpi-val {
+                    font-size: 1.85rem;
+                    font-weight: 950;
+                    letter-spacing: -1px;
+                    line-height: 1.1;
+                }
+                .cx-kpi-sub {
+                    font-size: 0.78rem;
+                    margin-top: 0.45rem;
+                    color: #64748b;
+                    font-weight: 600;
+                }
+
+                .cx-action-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+                    gap: 1rem;
+                    margin-bottom: 1.5rem;
+                    animation: cxFadeUp 0.38s ease both;
+                }
+                .cx-action-btn {
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 0.4rem;
+                    padding: 1.15rem 1rem;
+                    border-radius: 1rem;
+                    border: none;
+                    cursor: pointer;
+                    font-weight: 800;
+                    font-size: 0.92rem;
+                    transition: all 0.2s ease;
+                    text-align: center;
+                    min-height: 85px;
+                }
+                .cx-action-btn:hover { transform: translateY(-3px); }
+                .cx-action-btn .cx-btn-icon { font-size: 1.6rem; }
+
+                .cx-sec-card {
+                    background: #ffffff;
+                    border-radius: 1rem;
+                    border: 1px solid #e2e8f0;
+                    padding: 1.1rem 1.25rem;
+                    display: flex;
+                    gap: 1rem;
+                    align-items: center;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+                    transition: all 0.2s ease;
+                }
+                .cx-sec-card:hover {
+                    border-color: #cbd5e1;
+                    box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+                }
+                .cx-sec-icon {
+                    width: 46px;
+                    height: 46px;
+                    border-radius: 0.85rem;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 1.35rem;
+                    flex-shrink: 0;
+                }
+
+                .cx-live-table-wrap {
+                    background: #ffffff;
+                    border-radius: 1.25rem;
+                    padding: 1.5rem;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+                    border: 1px solid #f1f5f9;
+                    margin-top: 1.5rem;
+                    animation: cxFadeUp 0.45s ease both;
+                }
+            </style>
+
+            <!-- ===== CABECERA PRINCIPAL ===== -->
+            <div class="cx-header">
+                <div style="display:flex; align-items:center; gap:1rem;">
+                    <div style="width:12px; height:12px; border-radius:50%; background:#10b981; animation:cxPulse 2s infinite;"></div>
+                    <div>
+                        <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                            <h1 style="margin:0; color:#0f172a; font-size:1.45rem; font-weight:900;">Control de Caja</h1>
+                            <span style="background:#dcfce7; color:#166534; border:1px solid #86efac; font-size:0.75rem; font-weight:800; padding:0.25rem 0.75rem; border-radius:99px;">
+                                Caja #${cashRegister.id} • Abierta
+                            </span>
+                            ${isLongSession ? `
+                                <span style="background:#fef3c7; color:#92400e; border:1px solid #fcd34d; font-size:0.75rem; font-weight:800; padding:0.25rem 0.75rem; border-radius:99px;">
+                                    ⏱️ Caja de Varios Días
+                                </span>
+                            ` : ''}
+                        </div>
+                        <p style="margin:0.25rem 0 0; color:#64748b; font-size:0.82rem;">
+                            Abierta el ${formatDateTime(cashRegister.openDate)} &nbsp;·&nbsp;
+                            <strong style="color:${isLongSession ? '#b45309' : '#10b981'};">${durationDisplay}</strong>
+                        </p>
+                    </div>
+                </div>
+
+                <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+                    <!-- SELECTOR HOY / TODA LA SESIÓN -->
+                    <div class="cx-toggle-group">
+                        <button type="button" class="cx-toggle-btn ${isTodayMode ? 'active' : ''}" onclick="CashView.setViewMode('today')" title="Muestra solo las ventas y dinero del día actual">
+                            📅 Ver Solo Hoy
+                        </button>
+                        <button type="button" class="cx-toggle-btn ${!isTodayMode ? 'active' : ''}" onclick="CashView.setViewMode('session')" title="Muestra todo lo acumulado desde que se abrió la caja">
+                            📦 Toda la Sesión
+                        </button>
+                    </div>
+
+                    <button onclick="CashView.showAllCashRegistersHistory()"
+                            style="background:#f8fafc; color:#475569; border:1.5px solid #e2e8f0; padding:0.55rem 1rem; border-radius:0.75rem; font-size:0.82rem; font-weight:800; cursor:pointer; transition:all 0.18s;"
+                            onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f8fafc'">
+                        📚 Historial de Cierres
+                    </button>
+                </div>
+            </div>
+
+            <!-- ===== ALERTA DE TOPE DE EFECTIVO EN CAJA ===== -->
+            ${showCashLimitAlert ? `
+                <div style="background:#fffbeb; border:2px solid #f59e0b; border-radius:1.25rem; padding:1.25rem 1.5rem; margin-bottom:1.25rem; display:flex; justify-content:space-between; align-items:center; gap:1rem; box-shadow:0 4px 15px rgba(245,158,11,0.15); animation: cxFadeUp 0.3s ease both;">
+                    <div style="display:flex; align-items:center; gap:1rem;">
+                        <span style="font-size:2.2rem;">🛡️</span>
+                        <div>
+                            <strong style="color:#92400e; font-size:1rem; display:block;">Alerta de Seguridad: Exceso de Efectivo en Cajón</strong>
+                            <span style="color:#b45309; font-size:0.85rem; font-weight:600;">
+                                Tienes <strong>${formatCLP(summary.expectedCash)}</strong> en el cajón (límite sugerido: ${formatCLP(maxCashLimit)}). Se sugiere retirar <strong>${formatCLP(suggestedWithdrawal)}</strong> a caja fuerte para mantener solo la base.
+                            </span>
+                        </div>
+                    </div>
+                    <button class="btn btn-warning" onclick="CashView.showWithdrawCashForm()" style="font-weight:900; border-radius:0.75rem; white-space:nowrap; padding:0.65rem 1.25rem; cursor:pointer;">
+                        ➖ Retirar Excedente
+                    </button>
+                </div>
+            ` : ''}
+
+            <!-- ===== 4 KPIs PRINCIPALES ===== -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:1.25rem; margin-bottom:1.25rem;">
+
+                <!-- 1. EFECTIVO FÍSICO REAL EN CAJÓN -->
+                <div class="cx-kpi-main" style="border-left-color:#10b981; cursor:pointer;" onclick="CashView.showPaymentMethods()" title="Total de dinero físico que debe haber en el cajón. Haz clic para ver desglose.">
+                    <div class="cx-kpi-bg">💵</div>
+                    <div class="cx-kpi-lbl" style="color:#059669;">Efectivo en Cajón (Físico)</div>
+                    <div class="cx-kpi-val" style="color:#059669;">${formatCLP(summary.expectedCash)}</div>
+                    <div class="cx-kpi-sub">
+                        ${isTodayMode ? `Neto hoy: <strong>+${formatCLP(summary.todayCashNet)}</strong>` : `Base inicial: <strong>${formatCLP(summary.initialAmount)}</strong>`}
+                    </div>
+                </div>
+
+                <!-- 2. DINERO A VERIFICAR EN BANCO (DIGITAL) -->
+                <div class="cx-kpi-main" style="border-left-color:#3b82f6; cursor:pointer;" onclick="CashView.showPaymentMethods()" title="Dinero que debes verificar en tu cuenta de banco antes de transferir a personal.">
+                    <div class="cx-kpi-bg">🏦</div>
+                    <div class="cx-kpi-lbl" style="color:#2563eb;">A Verificar en Banco (${isTodayMode ? 'Hoy' : 'Sesión'})</div>
+                    <div class="cx-kpi-val" style="color:#2563eb;">${formatCLP(displayBank.total)}</div>
+                    <div class="cx-kpi-sub">
+                        💳 Tarjetas: ${formatCLP(displayBank.card)} · 📱 QR/Transf: ${formatCLP(displayBank.qr + displayBank.other)}
+                    </div>
+                </div>
+
+                <!-- 3. VENTAS (HOY O SESIÓN) -->
+                <div class="cx-kpi-main" style="border-left-color:#6366f1; cursor:pointer;" onclick="CashView.showHistorialVentasSesion()" title="Monto total vendido. Haz clic para ver todos los tickets.">
+                    <div class="cx-kpi-bg">🛍️</div>
+                    <div class="cx-kpi-lbl" style="color:#4f46e5;">Ventas (${isTodayMode ? 'Hoy' : 'Sesión'})</div>
+                    <div class="cx-kpi-val" style="color:#4338ca;">${formatCLP(displaySalesAmount)}</div>
+                    <div class="cx-kpi-sub">
+                        ${displaySalesCount} tickets emitidos · click para ver
+                    </div>
+                </div>
+
+                <!-- 4. GANANCIA REAL ESTIMADA -->
+                <div class="cx-kpi-main" style="border-left-color:#8b5cf6;" title="Ganancia Neta = (Ventas sin IVA) - (Costo de compra de los productos vendidos).">
+                    <div class="cx-kpi-bg">💎</div>
+                    <div class="cx-kpi-lbl" style="color:#7c3aed;">Ganancia Real (${isTodayMode ? 'Hoy' : 'Sesión'})</div>
+                    <div class="cx-kpi-val" style="color:#6d28d9;">${formatCLP(displayNetProfit)}</div>
+                    <div class="cx-kpi-sub">
+                        Margen real para tu bolsillo
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ===== FILA DE AUDITORÍA Y TRAZABILIDAD (INSUMOS, MERMAS Y GASTOS) ===== -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:1rem; margin-bottom:1.25rem; animation: cxFadeUp 0.36s ease both;">
+                
+                <!-- CONSUMO CASA / INSUMOS -->
+                <div class="cx-sec-card" style="cursor:pointer; border-left:4px solid #10b981;" onclick="CashView.showConsumoModal()" title="Mercadería retirada para aseo, bolsas o consumo. Haz clic para ver detalles.">
+                    <div class="cx-sec-icon" style="background:#ecfdf5; color:#059669;">🧹</div>
+                    <div style="flex:1;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:0.72rem; font-weight:800; color:#047857; text-transform:uppercase;">Consumo Casa / Insumos</span>
+                            <span style="font-size:0.9rem;" title="Ver detalle">👁️</span>
+                        </div>
+                        <div style="font-size:1.15rem; font-weight:900; color:#059669; margin-top:2px;">
+                            ${formatCLP(summary.totalConsumoCost || 0)}
+                        </div>
+                        <div style="font-size:0.72rem; color:#64748b; font-weight:600;">
+                            ${(summary.consumoItems || []).length} retiro(s) · Venta: ${formatCLP(summary.totalConsumoSale || 0)}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- PÉRDIDAS Y MERMAS -->
+                <div class="cx-sec-card" style="cursor:pointer; border-left:4px solid #ef4444;" onclick="CashView.showPerdidasModal()" title="Productos vencidos o dañados. Haz clic para ver detalles.">
+                    <div class="cx-sec-icon" style="background:#fef2f2; color:#dc2626;">⚠️</div>
+                    <div style="flex:1;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:0.72rem; font-weight:800; color:#b91c1c; text-transform:uppercase;">Pérdidas y Mermas</span>
+                            <span style="font-size:0.9rem;" title="Ver detalle">👁️</span>
+                        </div>
+                        <div style="font-size:1.15rem; font-weight:900; color:#dc2626; margin-top:2px;">
+                            -${formatCLP(summary.totalPerdidasCost || 0)}
+                        </div>
+                        <div style="font-size:0.72rem; color:#64748b; font-weight:600;">
+                            ${(summary.perdidasItems || []).length} merma(s) · Costo stock perdido
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GASTOS DEL TURNO -->
+                <div class="cx-sec-card" style="cursor:pointer; border-left:4px solid #f59e0b;" onclick="CashView.showGastosModal()" title="Salidas por compras, proveedores o servicios. Haz clic para ver detalles.">
+                    <div class="cx-sec-icon" style="background:#fffbeb; color:#d97706;">💸</div>
+                    <div style="flex:1;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:0.72rem; font-weight:800; color:#b45309; text-transform:uppercase;">Gastos del Turno</span>
+                            <span style="font-size:0.9rem;" title="Ver detalle">👁️</span>
+                        </div>
+                        <div style="font-size:1.15rem; font-weight:900; color:#ef4444; margin-top:2px;">
+                            -${formatCLP(summary.totalExpenses || 0)}
+                        </div>
+                        <div style="font-size:0.72rem; color:#64748b; font-weight:600;">
+                            ${(summary.gastosItems || []).length} egreso(s) registrados en turno
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ===== 3 MÉTRICAS SECUNDARIAS COMPLEMENTARIAS ===== -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:1rem; margin-bottom:1.5rem;">
+
+                <!-- TICKET PROMEDIO Y CLIENTES -->
+                <div class="cx-sec-card">
+                    <div class="cx-sec-icon" style="background:#eff6ff; color:#3b82f6;">👥</div>
+                    <div>
+                        <div style="font-size:0.75rem; font-weight:800; color:#64748b; text-transform:uppercase;">Ticket Promedio (${isTodayMode ? 'Hoy' : 'Sesión'})</div>
+                        <div style="font-size:1.25rem; font-weight:900; color:#0f172a; margin-top:2px;">${formatCLP(displayTicketAvg)}</div>
+                        <div style="font-size:0.72rem; color:#94a3b8; font-weight:600;">${displaySalesCount} compras atendidas</div>
+                    </div>
+                </div>
+
+                <!-- DEUDAS Y PAGOS DE CLIENTES -->
+                <div class="cx-sec-card" style="cursor:pointer;" onclick="CashView.showDeudasYPagosModal()" title="Click para ver clientes que se endeudaron o pagaron">
+                    <div class="cx-sec-icon" style="background:#fffbeb; color:#d97706;">📝</div>
+                    <div style="flex: 1;">
+                        <div style="font-size:0.75rem; font-weight:800; color:#64748b; text-transform:uppercase;">Deudas y Pagos (Clientes)</div>
+                        <div style="display:flex; flex-direction:column; gap:3px; margin-top:5px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.88rem;">
+                                <span style="color:#64748b; font-weight:700;">🔴 Deudas:</span>
+                                <span style="color:#dc2626; font-weight:900;">-${formatCLP(displayCreditSalesAmount)} <small style="font-size:0.72rem; font-weight:600; color:#94a3b8;">(${displayCreditSalesCount})</small></span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; font-size:0.88rem;">
+                                <span style="color:#64748b; font-weight:700;">🟢 Pagos:</span>
+                                <span style="color:#059669; font-weight:900;">+${formatCLP(displayDebtPayments)} <small style="font-size:0.72rem; font-weight:600; color:#94a3b8;">(${displayDebtCount})</small></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DEVOLUCIONES Y ANULACIONES -->
+                <div class="cx-sec-card">
+                    <div class="cx-sec-icon" style="background:#fef2f2; color:#ef4444;">🔄</div>
+                    <div>
+                        <div style="font-size:0.75rem; font-weight:800; color:#64748b; text-transform:uppercase;">Devoluciones (${isTodayMode ? 'Hoy' : 'Sesión'})</div>
+                        <div style="font-size:1.25rem; font-weight:900; color:${displayReturnsAmount > 0 ? '#dc2626' : '#0f172a'}; margin-top:2px;">
+                            ${formatCLP(displayReturnsAmount)}
+                        </div>
+                        <div style="font-size:0.72rem; color:#94a3b8; font-weight:600;">${displayReturnsCount} devoluciones registradas</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- ===== BOTONES DE ACCIÓN RÁPIDA ===== -->
+            <div class="cx-action-grid">
+
+                <button class="cx-action-btn" onclick="CashView.showAddCashForm()"
+                        style="background:linear-gradient(135deg,#10b981,#059669); color:#fff; box-shadow:0 4px 16px rgba(16,185,129,0.25);">
+                    <span class="cx-btn-icon">➕</span>
+                    <span>Agregar Dinero</span>
+                    <small style="opacity:0.85; font-weight:600; font-size:0.75rem;">Entrada de efectivo / sencillo</small>
+                </button>
+
+                <button class="cx-action-btn" onclick="CashView.showWithdrawCashForm()"
+                        style="background:linear-gradient(135deg,#f59e0b,#d97706); color:#fff; box-shadow:0 4px 16px rgba(245,158,11,0.25);">
+                    <span class="cx-btn-icon">➖</span>
+                    <span>Retirar Dinero</span>
+                    <small style="opacity:0.85; font-weight:600; font-size:0.75rem;">Salida para bolsillo o compras</small>
+                </button>
+
+                <!-- Falla #27: Distinción formal de Corte X (en vivo) vs Corte Z (cierre final) -->
+                <button class="cx-action-btn" onclick="CashView.generateCorteX()"
+                        style="background:linear-gradient(135deg,#3b82f6,#1d4ed8); color:#fff; box-shadow:0 4px 16px rgba(59,130,246,0.25);">
+                    <span class="cx-btn-icon">📊</span>
+                    <span>Corte X (En Vivo)</span>
+                    <small style="opacity:0.85; font-weight:600; font-size:0.75rem;">Lectura parcial sin cerrar</small>
+                </button>
+
+                <button class="cx-action-btn" onclick="CashView.showCloseCashForm()"
+                        style="background:linear-gradient(135deg,#ef4444,#dc2626); color:#fff; box-shadow:0 4px 16px rgba(239,68,68,0.25);">
+                    <span class="cx-btn-icon">🔒</span>
+                    <span>Cerrar Turno (Corte Z)</span>
+                    <small style="opacity:0.85; font-weight:600; font-size:0.75rem;">Arqueo ciego y cierre final</small>
+                </button>
+
+            </div>
+
+            <!-- ===== TABLA EN VIVO DE MOVIMIENTOS DEL TURNO CON BUSCADOR ===== -->
+            <div class="cx-live-table-wrap">
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:1rem; margin-bottom:1.25rem;">
+                    <div>
+                        <h3 style="margin:0; color:#0f172a; font-size:1.15rem; font-weight:900;">
+                            📋 Movimientos y Operaciones (${isTodayMode ? 'Solo Hoy' : 'Toda la Sesión'})
+                        </h3>
+                        <p style="margin:0.2rem 0 0; color:#64748b; font-size:0.8rem;">
+                            Historial en tiempo real de ventas, abonos, retiros e ingresos
+                        </p>
+                    </div>
+
+                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <div style="position:relative;">
+                            <input type="text" 
+                                   id="cx-live-search" 
+                                   placeholder="🔍 Buscar ticket, cliente, monto..." 
+                                   oninput="CashView.filterLiveMovements(this.value)"
+                                   style="padding:0.55rem 1rem 0.55rem 2.2rem; border-radius:0.75rem; border:1.5px solid #cbd5e1; font-size:0.85rem; width:280px; outline:none; font-weight:600;">
+                            <span style="position:absolute; left:0.75rem; top:50%; transform:translateY(-50%); font-size:0.9rem; opacity:0.5;">🔍</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="cx-live-table-container">
+                    ${this.renderLiveMovementsTable(isTodayMode)}
+                </div>
+            </div>
+        `;
+    },
+
+    renderLiveMovementsTable(isTodayOnly = false, searchTerm = '') {
+        const todayDate = new Date().toLocaleDateString('es-CL');
+        const rows = [];
+
+        (this._dailyDetail || []).forEach(day => {
+            if (isTodayOnly && day.date !== todayDate) return;
+
+            (day.sales || []).forEach(s => {
+                const ticketNum = (s.saleNumber !== undefined && s.saleNumber !== null && s.saleNumber !== '') ? `#${s.saleNumber}` : `#${s.id}`;
+                const methodLabel = s.paymentMethod === 'mixed' ? '🔀 Mixto' : this.getPaymentMethodName(s.paymentMethod || 'cash');
+                const isCredit = (s.paymentMethod === 'debt' || (s.paidAmount !== undefined && parseFloat(s.paidAmount) < parseFloat(s.total)));
+                const clientName = s.customerName || (s.customer ? s.customer.name : null);
+                const pendingAmt = Math.max(0, (parseFloat(s.total) || 0) - (parseFloat(s.paidAmount) || 0));
+
+                rows.push({
+                    type: isCredit ? 'credit_sale' : 'sale',
+                    date: s.date || s.createdAt || day.date,
+                    ticketId: s.id,
+                    title: isCredit ? `📓 Fiado: ${clientName || 'Cliente Mostrador'}` : `Venta ${ticketNum}`,
+                    sub: isCredit ? `Venta ${ticketNum} • Pendiente: ${formatCLP(pendingAmt)}` : (clientName ? `${clientName} • ${methodLabel}` : methodLabel),
+                    amount: parseFloat(s.total) || 0,
+                    isPositive: !isCredit,
+                    icon: isCredit ? '📓' : '🛒',
+                    badgeBg: isCredit ? '#fef2f2' : '#eff6ff',
+                    badgeColor: isCredit ? '#dc2626' : '#2563eb'
+                });
+            });
+
+            (day.debtPayments || []).forEach(p => {
+                rows.push({
+                    type: 'debt_payment',
+                    date: p.date || p.createdAt || day.date,
+                    title: `Abono: ${p.customerName || 'Cliente'}`,
+                    sub: this.getPaymentMethodName(p.paymentMethod || 'cash'),
+                    amount: parseFloat(p.amount) || 0,
+                    isPositive: true,
+                    icon: '🤝',
+                    badgeBg: '#ecfdf5',
+                    badgeColor: '#059669'
+                });
+            });
+
+            (day.cashMovementsIn || []).forEach(m => {
+                rows.push({
+                    type: 'movement_in',
+                    id: m.id,
+                    date: m.date || day.date,
+                    title: 'Ingreso Manual',
+                    sub: m.reason || m.description || 'Sin motivo',
+                    amount: parseFloat(m.amount) || 0,
+                    isPositive: true,
+                    icon: '➕',
+                    badgeBg: '#ecfdf5',
+                    badgeColor: '#10b981',
+                    editable: true
+                });
+            });
+
+            (day.cashMovementsOut || []).forEach(m => {
+                rows.push({
+                    type: 'movement_out',
+                    id: m.id,
+                    date: m.date || day.date,
+                    title: 'Retiro de Efectivo',
+                    sub: m.reason || m.description || 'Sin motivo',
+                    amount: parseFloat(m.amount) || 0,
+                    isPositive: false,
+                    icon: '➖',
+                    badgeBg: '#fef2f2',
+                    badgeColor: '#ef4444',
+                    editable: true
+                });
+            });
+        });
+
+        // Ordenar cronológico más reciente primero
+        rows.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+
+        // Filtrado por buscador
+        const filtered = searchTerm ? rows.filter(r => {
+            const t = searchTerm.toLowerCase();
+            return (r.title && r.title.toLowerCase().includes(t)) ||
+                   (r.sub && r.sub.toLowerCase().includes(t)) ||
+                   (r.amount && r.amount.toString().includes(t));
+        }) : rows;
+
+        if (filtered.length === 0) {
+            return `
+                <div style="text-align:center; padding:3rem 1rem; color:#94a3b8;">
+                    <div style="font-size:2.5rem; margin-bottom:0.5rem;">📭</div>
+                    <div style="font-weight:700; font-size:0.95rem;">No se encontraron movimientos</div>
+                    <div style="font-size:0.8rem; margin-top:0.25rem;">${searchTerm ? 'Prueba con otro término de búsqueda' : 'Las ventas y movimientos del turno aparecerán aquí en vivo'}</div>
+                </div>
+            `;
+        }
+
+        return `
+            <div style="overflow-x:auto;">
+                <table style="width:100%; border-collapse:collapse; text-align:left;">
+                    <thead>
+                        <tr style="border-bottom:2px solid #f1f5f9; color:#64748b; font-size:0.75rem; font-weight:800; text-transform:uppercase;">
+                            <th style="padding:0.75rem 1rem;">Hora / Fecha</th>
+                            <th style="padding:0.75rem 1rem;">Tipo de Movimiento</th>
+                            <th style="padding:0.75rem 1rem;">Detalle / Concepto</th>
+                            <th style="padding:0.75rem 1rem; text-align:right;">Monto</th>
+                            <th style="padding:0.75rem 1rem; text-align:center;">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filtered.map(r => {
+                            const rawDate = r.date;
+                            const formatted = rawDate ? formatDateTime(rawDate) : '--';
+                            const parts = formatted.includes(' ') ? formatted.split(' ') : [formatted, ''];
+                            const timeStr = parts.length > 1 ? parts.slice(1).join(' ') : (parts[0] || '--');
+                            const dateStr = parts[0] || '';
+                            const subSafe = (r.sub || '').replace(/'/g, "\\'");
+
+                            return `
+                                <tr style="border-bottom:1px solid #f8fafc; transition:background 0.15s;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                                    <td style="padding:0.75rem 1rem; vertical-align:middle;">
+                                        <div style="font-weight:800; font-size:0.85rem; color:#0f172a;">${timeStr}</div>
+                                        <div style="font-size:0.72rem; color:#94a3b8; font-weight:600;">${dateStr}</div>
+                                    </td>
+                                    <td style="padding:0.75rem 1rem; vertical-align:middle;">
+                                        <span style="display:inline-flex; align-items:center; gap:0.4rem; background:${r.badgeBg}; color:${r.badgeColor}; padding:0.3rem 0.65rem; border-radius:0.5rem; font-size:0.78rem; font-weight:800;">
+                                            <span>${r.icon}</span> ${r.title}
+                                        </span>
+                                    </td>
+                                    <td style="padding:0.75rem 1rem; vertical-align:middle; color:#475569; font-size:0.85rem; font-weight:600;">
+                                        ${r.sub || '-'}
+                                    </td>
+                                    <td style="padding:0.75rem 1rem; vertical-align:middle; text-align:right;">
+                                        <span style="font-size:1.05rem; font-weight:900; color:${r.isPositive ? '#059669' : '#dc2626'};">
+                                            ${r.isPositive ? '+' : '-'}${formatCLP(r.amount)}
+                                        </span>
+                                    </td>
+                                    <td style="padding:0.75rem 1rem; vertical-align:middle; text-align:center;">
+                                        ${r.type === 'sale' ? `
+                                            <button class="btn btn-sm" onclick="CashView.showSaleDetail(${r.ticketId})" 
+                                                    style="background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; font-weight:700; padding:0.3rem 0.65rem; border-radius:0.5rem; font-size:0.75rem; cursor:pointer;"
+                                                    onmouseover="this.style.background='#e2e8f0'" onmouseout="this.style.background='#f1f5f9'">
+                                                🔍 Ticket
+                                            </button>
+                                        ` : r.editable ? `
+                                            <div style="display:inline-flex; gap:0.35rem;">
+                                                <button class="btn btn-sm" onclick="CashView.showEditMovementModal(${r.id}, ${r.amount}, '${subSafe}')" 
+                                                        title="Editar monto o motivo"
+                                                        style="background:#eff6ff; color:#2563eb; border:1px solid #bfdbfe; font-weight:700; padding:0.3rem 0.55rem; border-radius:0.5rem; font-size:0.75rem; cursor:pointer;">
+                                                    ✏️
+                                                </button>
+                                                <button class="btn btn-sm" onclick="CashView.deleteMovement(${r.id})" 
+                                                        title="Eliminar movimiento"
+                                                        style="background:#fef2f2; color:#dc2626; border:1px solid #fecaca; font-weight:700; padding:0.3rem 0.55rem; border-radius:0.5rem; font-size:0.75rem; cursor:pointer;">
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        ` : '-'}
+                                    </td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    },
+
+    filterLiveMovements(term) {
+        const container = document.getElementById('cx-live-table-container');
+        if (container) {
+            container.innerHTML = this.renderLiveMovementsTable(this._viewMode === 'today', term.trim());
+        }
+    },
+
+    showEditMovementModal(movementId, currentAmount, currentReason) {
+        const content = `
+            <form id="editMovementForm" onsubmit="event.preventDefault(); CashView.saveEditMovement(${movementId}); return false;">
+                <div class="form-group" style="margin-bottom:1.25rem;">
+                    <label style="font-weight:800; font-size:0.85rem; color:#334155;">Monto Corregido (CLP) *</label>
+                    <input type="number" 
+                           id="editMovementAmount" 
+                           class="form-control" 
+                           value="${currentAmount}" 
+                           min="1" 
+                           step="1"
+                           required 
+                           autofocus
+                           style="font-size:1.5rem; height:3.5rem; font-weight:900; text-align:center; border:2px solid #cbd5e1; border-radius:0.75rem;">
+                </div>
+                <div class="form-group">
+                    <label style="font-weight:800; font-size:0.85rem; color:#334155;">Motivo o Descripción</label>
+                    <input type="text" 
+                           id="editMovementReason" 
+                           class="form-control" 
+                           value="${(currentReason || '').replace(/"/g, '&quot;')}" 
+                           placeholder="Motivo del movimiento..."
+                           style="border-radius:0.75rem; padding:0.75rem 1rem;">
+                </div>
+            </form>
+        `;
+
+        const footer = `
+            <button type="button" class="btn btn-secondary" onclick="closeModal()" style="border-radius:0.75rem; font-weight:700;">Cancelar</button>
+            <button type="button" class="btn btn-primary" onclick="CashView.saveEditMovement(${movementId})" style="border-radius:0.75rem; font-weight:900; padding:0.6rem 1.5rem;">
+                💾 Guardar Cambios
+            </button>
+        `;
+
+        showModal(content, { title: '✏️ Editar Movimiento de Caja', footer, width: '480px' });
+    },
+
+    async saveEditMovement(movementId) {
+        const newAmount = parseFloat(document.getElementById('editMovementAmount')?.value);
+        const newReason = document.getElementById('editMovementReason')?.value.trim();
+
+        if (!newAmount || newAmount <= 0) {
+            showNotification('El monto debe ser mayor a 0', 'error');
+            return;
+        }
+
+        try {
+            await CashController.editCashMovement(movementId, newAmount, newReason);
+            closeModal();
+            await app.navigate('cash');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    },
+
+    async deleteMovement(movementId) {
+        if (!confirm('¿Estás seguro de que deseas eliminar este movimiento? El saldo esperado de la caja se recalculará automáticamente.')) {
+            return;
+        }
+
+        try {
+            await CashController.deleteCashMovement(movementId);
+            await app.navigate('cash');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    },
+
+    // --- DETALLE EN MODAL ---
+
+    showVentasHoy() {
+        const todayKey = new Date().toLocaleDateString('es-CL');
+        const day = this._dailyDetail.find(d => d.date === todayKey);
+        if (!day || day.sales.length === 0) {
+            showNotification('No hay ventas registradas hoy', 'info');
+            return;
+        }
+
+        const html = `
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr><th>Hora</th><th>Nº Venta</th><th>Total</th><th>Pago</th><th>Estado</th></tr>
+                    </thead>
+                    <tbody>
+                        ${day.sales.map(s => `
+                            <tr>
+                                <td>${formatTime(s.date)}</td>
+                                <td>#${s.saleNumber ?? s.id}</td>
+                                <td><strong>${formatCLP(s.total)}</strong></td>
+                                <td>${this.getPaymentMethodName(s.paymentMethod)}</td>
+                                <td>${this.getStatusLabel(s.status)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        showModal(html, { title: 'Ventas de Hoy', width: '700px' });
+    },
+
+    showDeudasHoy() {
+        const todayKey = new Date().toLocaleDateString('es-CL');
+        const day = this._dailyDetail.find(d => d.date === todayKey);
+        if (!day || day.creditSales.length === 0) {
+            showNotification('No hay deudas generadas hoy', 'info');
+            return;
+        }
+
+        const html = `
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr><th>Hora</th><th>Cliente</th><th>Total Venta</th><th>Abonado</th><th>Deuda Restante</th></tr>
+                    </thead>
+                    <tbody>
+                        ${day.creditSales.map(d => `
+                            <tr>
+                                <td>${formatTime(d.date)}</td>
+                                <td><strong>${d.customerName}</strong></td>
+                                <td>${formatCLP(d.total)}</td>
+                                <td>${formatCLP(d.paidAmount)}</td>
+                                <td style="color: var(--danger);"><strong>${formatCLP(d.remaining)}</strong></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        showModal(html, { title: 'Nuevas Deudas del Día (Fiados)', width: '750px' });
+    },
+
+    showHistorialVentasSesion() {
+        // Agrupar todas las ventas de la sesión
+        const allSales = (this._dailyDetail || []).flatMap(d => d.sales || []).sort((a, b) => new Date(b.date || b.created_at || 0) - new Date(a.date || a.created_at || 0));
+
+        const html = `
+            <div style="background: #0f172a; padding: 1.5rem; border-radius: 1.5rem; color: #f8fafc;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; background: rgba(30, 41, 59, 0.6); padding: 1.25rem 1.5rem; border-radius: 1rem; border: 1px solid rgba(255,255,255,0.08);">
+                    <div>
+                        <h3 style="margin: 0; color: #ffffff; font-size: 1.25rem; font-weight: 800;">🛍️ Todas las Ventas de la Sesión</h3>
+                        <p style="margin: 0.25rem 0 0 0; color: #94a3b8; font-size: 0.82rem;">Listado completo de tickets emitidos en este turno</p>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="color: #10b981; font-size: 1.5rem; font-weight: 900;">${formatCLP(this._activeSummary?.totalSalesAmount || 0)}</div>
+                        <div style="color: #64748b; font-size: 0.72rem; font-weight: 800; text-transform: uppercase;">Total Acumulado</div>
+                    </div>
+                </div>
+                
+                <div style="max-height: 60vh; overflow-y: auto; overflow-x: hidden; padding-right: 0.25rem; scrollbar-width: thin;">
+                    <table style="width: 100%; border-collapse: collapse; background: #0f172a;">
+                        <thead style="position: sticky; top: 0; background: #1e293b; z-index: 10; border-radius: 0.5rem;">
+                            <tr>
+                                <th style="padding: 0.85rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 900; text-align: left;">Fecha / Hora</th>
+                                <th style="padding: 0.85rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 900; text-align: center;">Nº Ticket</th>
+                                <th style="padding: 0.85rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 900; text-align: center;">Método</th>
+                                <th style="padding: 0.85rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 900; text-align: right;">Total</th>
+                                <th style="padding: 0.85rem 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; font-weight: 900; text-align: center;">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${allSales.map((s, idx) => {
+                                const rawDate = s.date || s.created_at;
+                                const formatted = rawDate ? formatDateTime(rawDate) : '--';
+                                const parts = formatted.includes(' ') ? formatted.split(' ') : [formatted, ''];
+                                const timeStr = parts.length > 1 ? parts.slice(1).join(' ') : (parts[0] || '--:--');
+                                const dateStr = parts[0] || '';
+                                const ticketNum = (s.saleNumber !== undefined && s.saleNumber !== null && s.saleNumber !== '') ? `#${s.saleNumber}` : `#${s.id || idx + 1}`;
+                                const isMixed = s.paymentMethod === 'mixed';
+                                const methodLabel = isMixed ? '🔀 Mixto' : this.getPaymentMethodName(s.paymentMethod || 'cash');
+
+                                return `
+                                <tr style="background: ${idx % 2 === 0 ? 'rgba(30, 41, 59, 0.5)' : 'rgba(15, 23, 42, 0.7)'}; border-bottom: 1px solid rgba(255,255,255,0.06); transition: background 0.15s;">
+                                    <td style="padding: 0.75rem 1rem; color: #f1f5f9; vertical-align: middle;">
+                                        <div style="font-weight: 800; font-size: 0.95rem; color: #f8fafc;">${timeStr}</div>
+                                        <div style="font-size: 0.72rem; color: #64748b; font-weight: 600;">${dateStr}</div>
+                                    </td>
+                                    <td style="padding: 0.75rem 1rem; text-align: center; color: #ffffff; font-weight: 900; font-size: 1rem; vertical-align: middle;">
+                                        <span style="background: rgba(255,255,255,0.08); padding: 0.25rem 0.6rem; border-radius: 0.4rem; border: 1px solid rgba(255,255,255,0.1);">${ticketNum}</span>
+                                    </td>
+                                    <td style="padding: 0.75rem 1rem; text-align: center; vertical-align: middle;">
+                                        <span style="background: ${isMixed ? 'rgba(245, 158, 11, 0.15)' : 'rgba(99, 102, 241, 0.15)'}; color: ${isMixed ? '#fbbf24' : '#a5b4fc'}; border: 1px solid ${isMixed ? 'rgba(245, 158, 11, 0.3)' : 'rgba(99, 102, 241, 0.3)'}; padding: 0.3rem 0.65rem; border-radius: 0.5rem; font-size: 0.78rem; font-weight: 800;">
+                                            ${methodLabel}
+                                        </span>
+                                    </td>
+                                    <td style="padding: 0.75rem 1rem; text-align: right; color: #10b981; font-weight: 950; font-size: 1.15rem; vertical-align: middle;">
+                                        ${formatCLP(s.total)}
+                                    </td>
+                                    <td style="padding: 0.75rem 1rem; text-align: center; vertical-align: middle;">
+                                        <button class="btn" style="background: rgba(99, 102, 241, 0.2); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.35); padding: 0.35rem 0.75rem; border-radius: 0.5rem; font-size: 0.75rem; font-weight: 800; cursor: pointer;" onclick="CashView.showSaleDetail(${s.id})">🔍 Detalle</button>
+                                    </td>
+                                </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+        showModal(html, { title: '', footer: `<button class="btn" style="background: #1e293b; color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); padding: 0.75rem 2rem; border-radius: 0.75rem; font-weight: 800; cursor: pointer;" onclick="closeModal()">Cerrar</button>`, width: '820px' });
+    },
+
+    async showDeudasYPagosModal() {
+        const allPayments = (this._dailyDetail || []).flatMap(d => d.debtPayments || [])
+            .filter(p => (p.paymentMethod || 'cash') !== 'discount')
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        const customerMap = new Map();
+        allPayments.forEach(p => {
+            const key = p.customerId || p.customerName || 'Cliente General';
+            const existing = customerMap.get(key) || {
+                name: p.customerName || 'Cliente General',
+                totalAmount: 0,
+                count: 0,
+                methods: new Set()
+            };
+            existing.totalAmount += parseFloat(p.amount) || 0;
+            existing.count += 1;
+            existing.methods.add(this.getPaymentMethodName(p.paymentMethod || 'cash'));
+            customerMap.set(key, existing);
+        });
+        const paymentsList = Array.from(customerMap.values());
+        const totalCollected = paymentsList.reduce((sum, c) => sum + c.totalAmount, 0);
+
+        // Créditos otorgados
+        const allCredits = (this._dailyDetail || []).flatMap(d => d.creditSales || [])
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+        const totalFiado = allCredits.reduce((sum, d) => sum + (parseFloat(d.remaining) || 0), 0);
+
+        const html = `
+            <div style="animation: cxFadeUp 0.3s ease;">
+                <!-- Tarjetas KPI comparativas -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+                    <div style="padding: 1rem 1.25rem; background: #ecfdf5; border-radius: 1rem; border: 1.5px solid #a7f3d0;">
+                        <span style="font-size: 0.75rem; color: #047857; font-weight: 800; text-transform: uppercase;">🟢 Pagos y Abonos Cobrados</span>
+                        <div style="font-size: 1.6rem; font-weight: 950; color: #059669; margin-top: 0.25rem;">+${formatCLP(totalCollected)}</div>
+                        <small style="color: #64748b; font-weight: 600;">${allPayments.length} pago(s) de ${paymentsList.length} cliente(s)</small>
+                    </div>
+                    <div style="padding: 1rem 1.25rem; background: #fff1f2; border-radius: 1rem; border: 1.5px solid #fecdd3;">
+                        <span style="font-size: 0.75rem; color: #be123c; font-weight: 800; text-transform: uppercase;">🔴 Nuevas Deudas (Fiados)</span>
+                        <div style="font-size: 1.6rem; font-weight: 950; color: #e11d48; margin-top: 0.25rem;">-${formatCLP(totalFiado)}</div>
+                        <small style="color: #64748b; font-weight: 600;">${allCredits.length} compra(s) a crédito otorgada(s)</small>
+                    </div>
+                </div>
+
+                <!-- Botones de Pestañas -->
+                <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 2px solid #f1f5f9; padding-bottom: 0.5rem;">
+                    <button type="button" id="tabBtnPagos" onclick="CashView.switchDeudasPagosTab('pagos')" 
+                            style="padding: 0.5rem 1.25rem; border-radius: 0.75rem; font-weight: 800; border: none; cursor: pointer; background: #10b981; color: white;">
+                        🤝 Pagos de Clientes (${paymentsList.length})
+                    </button>
+                    <button type="button" id="tabBtnDeudas" onclick="CashView.switchDeudasPagosTab('deudas')" 
+                            style="padding: 0.5rem 1.25rem; border-radius: 0.75rem; font-weight: 800; border: none; cursor: pointer; background: #f1f5f9; color: #475569;">
+                        📓 Fiados Otorgados (${allCredits.length})
+                    </button>
+                </div>
+
+                <!-- Contenido Pestaña 1: Pagos -->
+                <div id="tabContentPagos" style="display: block;">
+                    ${paymentsList.length === 0 ? `
+                        <div style="text-align: center; padding: 2.5rem 1rem; color: #94a3b8;">
+                            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🤝</div>
+                            <p style="font-weight: 700; color: #64748b; margin: 0;">No se registraron abonos ni pagos de deudas en este período.</p>
+                        </div>
+                    ` : `
+                        <div style="max-height: 380px; overflow-y: auto; border: 1.5px solid #e2e8f0; border-radius: 0.75rem;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem;">
+                                <thead style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0;">
+                                    <tr>
+                                        <th style="padding: 0.65rem 1rem; text-align: left; color: #475569;">Cliente</th>
+                                        <th style="padding: 0.65rem 1rem; text-align: center; color: #475569;">N° Abonos</th>
+                                        <th style="padding: 0.65rem 1rem; text-align: left; color: #475569;">Método(s)</th>
+                                        <th style="padding: 0.65rem 1rem; text-align: right; color: #475569;">Total Pagado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${paymentsList.map(c => `
+                                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                                            <td style="padding: 0.65rem 1rem; font-weight: 800; color: #0f172a;">${safeHTML(c.name)}</td>
+                                            <td style="padding: 0.65rem 1rem; text-align: center;"><span style="background: #ecfdf5; color: #059669; font-weight: 800; padding: 0.2rem 0.5rem; border-radius: 0.5rem; font-size: 0.78rem;">${c.count}</span></td>
+                                            <td style="padding: 0.65rem 1rem; color: #64748b; font-size: 0.82rem;">${safeHTML(Array.from(c.methods).join(', '))}</td>
+                                            <td style="padding: 0.65rem 1rem; text-align: right; font-weight: 900; color: #059669; font-size: 1rem;">+${formatCLP(c.totalAmount)}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `}
+                </div>
+
+                <!-- Contenido Pestaña 2: Deudas -->
+                <div id="tabContentDeudas" style="display: none;">
+                    ${allCredits.length === 0 ? `
+                        <div style="text-align: center; padding: 2.5rem 1rem; color: #94a3b8;">
+                            <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📓</div>
+                            <p style="font-weight: 700; color: #64748b; margin: 0;">No se registraron ventas al fiado en este período.</p>
+                        </div>
+                    ` : `
+                        <div style="max-height: 380px; overflow-y: auto; border: 1.5px solid #e2e8f0; border-radius: 0.75rem;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem;">
+                                <thead style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; position: sticky; top: 0;">
+                                    <tr>
+                                        <th style="padding: 0.65rem 1rem; text-align: left; color: #475569;">Fecha/Hora</th>
+                                        <th style="padding: 0.65rem 1rem; text-align: left; color: #475569;">Cliente</th>
+                                        <th style="padding: 0.65rem 1rem; text-align: right; color: #475569;">Total Venta</th>
+                                        <th style="padding: 0.65rem 1rem; text-align: right; color: #475569;">Quedó Debiendo</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${allCredits.map(d => `
+                                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                                            <td style="padding: 0.65rem 1rem; color: #64748b; font-size: 0.82rem;">${formatDateTime(d.date)}</td>
+                                            <td style="padding: 0.65rem 1rem; font-weight: 800; color: #0f172a;">${safeHTML(d.customerName)}</td>
+                                            <td style="padding: 0.65rem 1rem; text-align: right; font-weight: 700; color: #475569;">${formatCLP(d.total)}</td>
+                                            <td style="padding: 0.65rem 1rem; text-align: right; font-weight: 900; color: #dc2626; font-size: 1rem;">-${formatCLP(d.remaining)}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `}
+                </div>
+            </div>
+        `;
+
+        showModal(html, {
+            title: '👥 Deudas y Pagos de Clientes (Detalle del Turno)',
+            width: '760px',
+            footer: `<button class="btn btn-secondary" onclick="closeModal()" style="border-radius:0.75rem; font-weight:800;">Cerrar</button>`
+        });
+    },
+
+    switchDeudasPagosTab(tab) {
+        const tabPagos = document.getElementById('tabContentPagos');
+        const tabDeudas = document.getElementById('tabContentDeudas');
+        const btnPagos = document.getElementById('tabBtnPagos');
+        const btnDeudas = document.getElementById('tabBtnDeudas');
+        if (!tabPagos || !tabDeudas) return;
+
+        if (tab === 'pagos') {
+            tabPagos.style.display = 'block';
+            tabDeudas.style.display = 'none';
+            btnPagos.style.background = '#10b981';
+            btnPagos.style.color = '#fff';
+            btnDeudas.style.background = '#f1f5f9';
+            btnDeudas.style.color = '#475569';
+        } else {
+            tabPagos.style.display = 'none';
+            tabDeudas.style.display = 'block';
+            btnDeudas.style.background = '#e11d48';
+            btnDeudas.style.color = '#fff';
+            btnPagos.style.background = '#f1f5f9';
+            btnPagos.style.color = '#475569';
+        }
+    },
+
+    showClientesPagaron() {
+        const allPayments = this._dailyDetail.flatMap(d => d.debtPayments)
+            .filter(p => (p.paymentMethod || 'cash') !== 'discount')
+            .sort((a, b) => new Date(b.date) - new Date(a.date));
+        if (allPayments.length === 0) {
+            showNotification('No hay abonos de deuda en esta sesión', 'info');
+            return;
+        }
+
+        const customerMap = new Map();
+        allPayments.forEach(p => {
+            const key = p.customerId || p.customerName || 'Cliente General';
+            const existing = customerMap.get(key) || {
+                name: p.customerName || 'Cliente General',
+                totalAmount: 0,
+                count: 0,
+                methods: new Set()
+            };
+            existing.totalAmount += parseFloat(p.amount) || 0;
+            existing.count += 1;
+            existing.methods.add(this.getPaymentMethodName(p.paymentMethod || 'cash'));
+            customerMap.set(key, existing);
+        });
+
+        const groupedList = Array.from(customerMap.values());
+        const totalCollected = groupedList.reduce((sum, c) => sum + c.totalAmount, 0);
+
+        const html = `
+            <div style="margin-bottom: 1rem; padding: 1.25rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="font-size: 0.8rem; color: #059669; font-weight: 700; text-transform: uppercase;">Total Cobrado de Deudas</span>
+                    <div style="color: #059669; font-size: 1.6rem; font-weight: 900;">${formatCLP(totalCollected)}</div>
+                </div>
+                <div style="font-size: 0.85rem; color: var(--secondary); text-align: right;">
+                    <strong>${groupedList.length}</strong> cliente(s) pagaron o abonaron en este turno
+                </div>
+            </div>
+
+            <div class="table-container" style="max-height: 450px; overflow-y: auto;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="border-bottom: 2px solid var(--border); text-align: left; font-size: 0.8rem; color: var(--secondary); text-transform: uppercase;">
+                            <th style="padding: 0.75rem;">Cliente</th>
+                            <th style="padding: 0.75rem; text-align: center;">N° de Abonos</th>
+                            <th style="padding: 0.75rem;">Método(s) Usado(s)</th>
+                            <th style="padding: 0.75rem; text-align: right;">Total Abonado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${groupedList.map(c => `
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <td style="padding: 0.75rem; font-weight: 800; color: var(--text-main);">${c.name}</td>
+                                <td style="padding: 0.75rem; text-align: center;"><span class="badge badge-success">${c.count} abono(s)</span></td>
+                                <td style="padding: 0.75rem; font-size: 0.85rem; color: var(--secondary);">${Array.from(c.methods).join(', ')}</td>
+                                <td style="padding: 0.75rem; text-align: right; color: #10b981; font-weight: 900; font-size: 1.05rem;">+${formatCLP(c.totalAmount)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        showModal(html, { title: '🤝 Clientes que Pagaron Deuda (Resumen del Turno)', width: '720px' });
+    },
+
+    showAnotadosSesion() {
+        const allCredits = this._dailyDetail.flatMap(d => d.creditSales).sort((a, b) => new Date(b.date) - new Date(a.date));
+        if (allCredits.length === 0) {
+            showNotification('No hay ventas a crédito en esta sesión', 'info');
+            return;
+        }
+
+        const html = `
+            <div class="table-container" style="max-height: 500px; overflow-y: auto;">
+                <table>
+                    <thead>
+                        <tr><th>Fecha/Hora</th><th>Cliente</th><th>Total Venta</th><th>Anotado a Deuda</th></tr>
+                    </thead>
+                    <tbody>
+                        ${allCredits.map(d => `
+                            <tr>
+                                <td>${formatDateTime(d.date)}</td>
+                                <td><strong>${d.customerName}</strong></td>
+                                <td>${formatCLP(d.total)}</td>
+                                <td style="color: #f87171;"><strong>${formatCLP(d.remaining)}</strong></td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        showModal(html, { title: 'Historial de Ventas Fiadas (Anotados)', width: '750px' });
+    },
+
+    showMovimientosManuales() {
+        const ins = this._dailyDetail.flatMap(d => d.cashMovementsIn);
+        const outs = this._dailyDetail.flatMap(d => d.cashMovementsOut);
+
+        const html = `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div style="padding:1rem; background: rgba(52, 211, 153, 0.1); border-radius: 0.5rem; border: 1px solid rgba(52, 211, 153, 0.2);">
+                    <small>Ingresos</small>
+                    <div style="font-size: 1.5rem; font-weight: 800; color: #34d399;">+${formatCLP(this._activeSummary.totalCashIn || 0)}</div>
+                </div>
+                <div style="padding:1rem; background: rgba(248, 113, 113, 0.1); border-radius: 0.5rem; border: 1px solid rgba(248, 113, 113, 0.2);">
+                    <small>Retiros</small>
+                    <div style="font-size: 1.5rem; font-weight: 800; color: #f87171;">-${formatCLP(this._activeSummary.totalRetiros || 0)}</div>
+                </div>
+            </div>
+            
+            <h4 style="margin: 1.5rem 0 1rem 0;">Historial de Movimientos</h4>
+            <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+                <table>
+                    <thead>
+                        <tr><th>Fecha/Hora</th><th>Tipo</th><th>Monto</th><th>Motivo</th></tr>
+                    </thead>
+                    <tbody>
+                        ${[...ins, ...outs].sort((a, b) => new Date(b.date) - new Date(a.date)).map(m => {
+            const isIn = ins.includes(m);
+            return `
+                                <tr>
+                                    <td>${formatDateTime(m.date)}</td>
+                                    <td><span class="badge ${isIn ? 'badge-success' : 'badge-warning'}">${isIn ? 'Ingreso' : 'Retiro'}</span></td>
+                                    <td style="color: ${isIn ? '#34d399' : '#f87171'}; font-weight: 700;">
+                                        ${isIn ? '+' : '-'}${formatCLP(m.amount)}
+                                    </td>
+                                    <td style="font-size: 0.9rem; opacity: 0.8;">${m.description || m.reason || '-'}</td>
+                                </tr>
+                            `;
+        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        showModal(html, { title: 'Movimientos Manuales de Efectivo', width: '750px' });
+    },
+
+    async showConsumoModal() {
+        const s = this._activeSummary || (this._activeRegister ? await CashRegister.getSummary(this._activeRegister.id) : null);
+        if (!s) {
+            showNotification('No hay información de caja activa', 'warning');
+            return;
+        }
+
+        const items = s.consumoItems || [];
+        const totalCost = s.totalConsumoCost || 0;
+        const totalSale = s.totalConsumoSale || 0;
+
+        const html = `
+            <div style="animation: cxFadeUp 0.3s ease;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+                    <div style="padding: 1rem; background: #ecfdf5; border-radius: 0.75rem; border: 1.5px solid #a7f3d0; text-align: center;">
+                        <span style="font-size: 0.75rem; color: #047857; font-weight: 800; text-transform: uppercase; display: block;">Costo Empresa (Gasto Real)</span>
+                        <div style="font-size: 1.6rem; font-weight: 900; color: #059669; margin-top: 0.25rem;">${formatCLP(totalCost)}</div>
+                    </div>
+                    <div style="padding: 1rem; background: #f8fafc; border-radius: 0.75rem; border: 1.5px solid #e2e8f0; text-align: center;">
+                        <span style="font-size: 0.75rem; color: #64748b; font-weight: 800; text-transform: uppercase; display: block;">Valor Comercial de Venta</span>
+                        <div style="font-size: 1.6rem; font-weight: 900; color: #475569; margin-top: 0.25rem;">${formatCLP(totalSale)}</div>
+                    </div>
+                </div>
+
+                ${items.length === 0 ? `
+                    <div style="text-align: center; padding: 3rem 1.5rem; background: #f8fafc; border-radius: 1rem; border: 2px dashed #cbd5e1;">
+                        <div style="font-size: 3rem; margin-bottom: 0.5rem;">🧹</div>
+                        <h4 style="margin: 0; color: #1e293b;">Sin consumos registrados</h4>
+                        <p style="margin: 0.5rem 0 0; color: #64748b; font-size: 0.85rem;">
+                            No se han retirado insumos ni mercadería de la tienda para uso del negocio durante este turno.
+                        </p>
+                    </div>
+                ` : `
+                    <div class="table-container" style="max-height: 420px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 0.75rem;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem;">
+                            <thead>
+                                <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; text-align: left;">
+                                    <th style="padding: 0.75rem 1rem;">Fecha/Hora</th>
+                                    <th style="padding: 0.75rem 1rem;">Producto</th>
+                                    <th style="padding: 0.75rem 1rem; text-align: center;">Cant.</th>
+                                    <th style="padding: 0.75rem 1rem; text-align: right;">Costo Total</th>
+                                    <th style="padding: 0.75rem 1rem; text-align: right;">P. Venta</th>
+                                    <th style="padding: 0.75rem 1rem;">Motivo</th>
+                                    <th style="padding: 0.75rem 1rem;">Usuario</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map(it => `
+                                    <tr style="border-bottom: 1px solid #f1f5f9;">
+                                        <td style="padding: 0.75rem 1rem; color: #64748b; white-space: nowrap;">${formatDateTime(it.date)}</td>
+                                        <td style="padding: 0.75rem 1rem; font-weight: 700; color: #0f172a;">${it.productName}</td>
+                                        <td style="padding: 0.75rem 1rem; text-align: center; font-weight: 800; color: #059669;">${it.quantity} un.</td>
+                                        <td style="padding: 0.75rem 1rem; text-align: right; font-weight: 800; color: #059669;">${formatCLP(it.cost_value)}</td>
+                                        <td style="padding: 0.75rem 1rem; text-align: right; color: #64748b;">${formatCLP(it.sale_value)}</td>
+                                        <td style="padding: 0.75rem 1rem; color: #475569; font-size: 0.82rem;">${it.reason || '-'}</td>
+                                        <td style="padding: 0.75rem 1rem; color: #6366f1; font-weight: 600; font-size: 0.82rem; white-space: nowrap;">👤 ${it.userName || 'Admin'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+            </div>
+        `;
+        showModal(html, {
+            title: '🧹 Consumo Interno / Insumos de Tienda (Auditoría del Turno)',
+            width: '850px',
+            footer: '<button class="btn btn-secondary" onclick="closeModal()" style="border-radius: 0.75rem; padding: 0.6rem 1.75rem; font-weight: 700;">Cerrar</button>'
+        });
+    },
+
+    async showPerdidasModal() {
+        const s = this._activeSummary || (this._activeRegister ? await CashRegister.getSummary(this._activeRegister.id) : null);
+        if (!s) {
+            showNotification('No hay información de caja activa', 'warning');
+            return;
+        }
+
+        const items = s.perdidasItems || [];
+        const totalCost = s.totalPerdidasCost || 0;
+        const totalSale = s.totalPerdidasSale || 0;
+
+        const html = `
+            <div style="animation: cxFadeUp 0.3s ease;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+                    <div style="padding: 1rem; background: #fef2f2; border-radius: 0.75rem; border: 1.5px solid #fecaca; text-align: center;">
+                        <span style="font-size: 0.75rem; color: #b91c1c; font-weight: 800; text-transform: uppercase; display: block;">Costo Real de Pérdida</span>
+                        <div style="font-size: 1.6rem; font-weight: 900; color: #dc2626; margin-top: 0.25rem;">-${formatCLP(totalCost)}</div>
+                    </div>
+                    <div style="padding: 1rem; background: #f8fafc; border-radius: 0.75rem; border: 1.5px solid #e2e8f0; text-align: center;">
+                        <span style="font-size: 0.75rem; color: #64748b; font-weight: 800; text-transform: uppercase; display: block;">Valor Venta Perdido</span>
+                        <div style="font-size: 1.6rem; font-weight: 900; color: #475569; margin-top: 0.25rem;">${formatCLP(totalSale)}</div>
+                    </div>
+                </div>
+
+                ${items.length === 0 ? `
+                    <div style="text-align: center; padding: 3rem 1.5rem; background: #f8fafc; border-radius: 1rem; border: 2px dashed #cbd5e1;">
+                        <div style="font-size: 3rem; margin-bottom: 0.5rem;">✨</div>
+                        <h4 style="margin: 0; color: #1e293b;">Sin pérdidas ni mermas</h4>
+                        <p style="margin: 0.5rem 0 0; color: #64748b; font-size: 0.85rem;">
+                            No se han reportado productos rotos, vencidos o dañados durante este turno.
+                        </p>
+                    </div>
+                ` : `
+                    <div class="table-container" style="max-height: 420px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 0.75rem;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem;">
+                            <thead>
+                                <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; text-align: left;">
+                                    <th style="padding: 0.75rem 1rem;">Fecha/Hora</th>
+                                    <th style="padding: 0.75rem 1rem;">Producto</th>
+                                    <th style="padding: 0.75rem 1rem; text-align: center;">Cant.</th>
+                                    <th style="padding: 0.75rem 1rem; text-align: right;">Costo Pérdida</th>
+                                    <th style="padding: 0.75rem 1rem; text-align: right;">P. Venta</th>
+                                    <th style="padding: 0.75rem 1rem;">Causa / Motivo</th>
+                                    <th style="padding: 0.75rem 1rem;">Usuario</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map(it => `
+                                    <tr style="border-bottom: 1px solid #f1f5f9;">
+                                        <td style="padding: 0.75rem 1rem; color: #64748b; white-space: nowrap;">${formatDateTime(it.date)}</td>
+                                        <td style="padding: 0.75rem 1rem; font-weight: 700; color: #0f172a;">${it.productName}</td>
+                                        <td style="padding: 0.75rem 1rem; text-align: center; font-weight: 800; color: #dc2626;">${it.quantity} un.</td>
+                                        <td style="padding: 0.75rem 1rem; text-align: right; font-weight: 800; color: #dc2626;">-${formatCLP(it.cost_value)}</td>
+                                        <td style="padding: 0.75rem 1rem; text-align: right; color: #64748b;">${formatCLP(it.sale_value)}</td>
+                                        <td style="padding: 0.75rem 1rem; color: #475569; font-size: 0.82rem;">${it.reason || '-'}</td>
+                                        <td style="padding: 0.75rem 1rem; color: #6366f1; font-weight: 600; font-size: 0.82rem; white-space: nowrap;">👤 ${it.userName || 'Admin'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+            </div>
+        `;
+        showModal(html, {
+            title: '⚠️ Pérdidas y Mermas de Stock (Auditoría del Turno)',
+            width: '850px',
+            footer: '<button class="btn btn-secondary" onclick="closeModal()" style="border-radius: 0.75rem; padding: 0.6rem 1.75rem; font-weight: 700;">Cerrar</button>'
+        });
+    },
+
+    async showGastosModal() {
+        const s = this._activeSummary || (this._activeRegister ? await CashRegister.getSummary(this._activeRegister.id) : null);
+        if (!s) {
+            showNotification('No hay información de caja activa', 'warning');
+            return;
+        }
+
+        const items = s.gastosItems || [];
+        const totalExpenses = s.totalExpenses || 0;
+
+        const catMap = {
+            'servicios': '💡 Servicios',
+            'sueldos': '👤 Sueldos',
+            'insumos': '📦 Insumos',
+            'mantenimiento': '🔧 Mantención',
+            'arriendo': '🏠 Arriendo',
+            'transporte': '🚚 Transporte',
+            'otros': '📝 Otros'
+        };
+
+        const payMethodMap = {
+            'cash': '💵 Efectivo Caja',
+            'transfer': '🏦 Transferencia',
+            'card': '💳 Tarjeta',
+            'product_stock': '🧹 Insumo Tienda'
+        };
+
+        const html = `
+            <div style="animation: cxFadeUp 0.3s ease;">
+                <div style="padding: 1rem 1.25rem; background: #fff1f2; border-radius: 0.75rem; border: 1.5px solid #fecdd3; text-align: center; margin-bottom: 1.25rem;">
+                    <span style="font-size: 0.75rem; color: #be123c; font-weight: 800; text-transform: uppercase; display: block;">Total Gastos Operativos del Turno</span>
+                    <div style="font-size: 1.8rem; font-weight: 950; color: #e11d48; margin-top: 0.2rem;">-${formatCLP(totalExpenses)}</div>
+                </div>
+
+                ${items.length === 0 ? `
+                    <div style="text-align: center; padding: 3rem 1.5rem; background: #f8fafc; border-radius: 1rem; border: 2px dashed #cbd5e1;">
+                        <div style="font-size: 3rem; margin-bottom: 0.5rem;">💸</div>
+                        <h4 style="margin: 0; color: #1e293b;">Sin gastos registrados</h4>
+                        <p style="margin: 0.5rem 0 0; color: #64748b; font-size: 0.85rem;">
+                            No se han registrado salidas por gastos operativos en esta sesión de caja.
+                        </p>
+                    </div>
+                ` : `
+                    <div class="table-container" style="max-height: 420px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 0.75rem;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem;">
+                            <thead>
+                                <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; text-align: left;">
+                                    <th style="padding: 0.75rem 1rem;">Fecha/Hora</th>
+                                    <th style="padding: 0.75rem 1rem;">Categoría</th>
+                                    <th style="padding: 0.75rem 1rem;">Descripción</th>
+                                    <th style="padding: 0.75rem 1rem;">Medio de Pago</th>
+                                    <th style="padding: 0.75rem 1rem; text-align: right;">Monto</th>
+                                    <th style="padding: 0.75rem 1rem;">Usuario</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map(g => `
+                                    <tr style="border-bottom: 1px solid #f1f5f9;">
+                                        <td style="padding: 0.75rem 1rem; color: #64748b; white-space: nowrap;">${formatDateTime(g.date)}</td>
+                                        <td style="padding: 0.75rem 1rem; font-weight: 700; color: #475569;">
+                                            <span class="badge" style="background: #f1f5f9; color: #334155; font-size: 0.75rem;">
+                                                ${catMap[g.category] || g.category}
+                                            </span>
+                                        </td>
+                                        <td style="padding: 0.75rem 1rem; font-weight: 600; color: #0f172a;">${g.description}</td>
+                                        <td style="padding: 0.75rem 1rem; color: #64748b; font-size: 0.82rem;">${payMethodMap[g.paymentMethod] || g.paymentMethod}</td>
+                                        <td style="padding: 0.75rem 1rem; text-align: right; font-weight: 900; color: #ef4444; white-space: nowrap;">-${formatCLP(g.amount)}</td>
+                                        <td style="padding: 0.75rem 1rem; color: #6366f1; font-weight: 600; font-size: 0.82rem; white-space: nowrap;">👤 ${g.userName || 'Admin'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+            </div>
+        `;
+        showModal(html, {
+            title: '💸 Gastos Operativos de la Caja (Auditoría del Turno)',
+            width: '850px',
+            footer: '<button class="btn btn-secondary" onclick="closeModal()" style="border-radius: 0.75rem; padding: 0.6rem 1.75rem; font-weight: 700;">Cerrar</button>'
+        });
+    },
+
+    async showShiftFiadosModal() {
+        const reg = this._activeRegister || await CashRegister.getOpen();
+        if (!reg) {
+            showNotification('No hay sesión de caja abierta', 'warning');
+            return;
+        }
+
+        let sales = [];
+        try {
+            sales = await Sale.getByCashRegister(reg.id) || [];
+        } catch (_) {}
+
+        const creditSales = sales.filter(s => {
+            if (s.status === 'cancelled') return false;
+            const isCredit = (s.paymentMethod === 'debt' || s.status === 'pending' || s.status === 'partial');
+            const paid = parseFloat(s.paidAmount !== undefined ? s.paidAmount : (s.status === 'completed' ? s.total : 0)) || 0;
+            const pending = Math.max(0, (parseFloat(s.total) || 0) - paid);
+            return (isCredit || pending >= 1.0);
+        });
+
+        const totalFiado = creditSales.reduce((sum, s) => {
+            const paid = parseFloat(s.paidAmount !== undefined ? s.paidAmount : (s.status === 'completed' ? s.total : 0)) || 0;
+            return sum + Math.max(0, (parseFloat(s.total) || 0) - paid);
+        }, 0);
+
+        const html = `
+            <div style="animation: cxFadeUp 0.3s ease;">
+                <div style="padding: 1rem 1.25rem; background: #fff1f2; border-radius: 0.75rem; border: 1.5px solid #fecdd3; text-align: center; margin-bottom: 1.25rem;">
+                    <span style="font-size: 0.75rem; color: #be123c; font-weight: 800; text-transform: uppercase; display: block;">Total Fiados Otorgados en este Turno</span>
+                    <div style="font-size: 1.8rem; font-weight: 950; color: #e11d48; margin-top: 0.2rem;">-${formatCLP(totalFiado)}</div>
+                    <small style="color: #64748b; font-size: 0.78rem;">${creditSales.length} compras entregadas a crédito</small>
+                </div>
+
+                ${creditSales.length === 0 ? `
+                    <div style="text-align: center; padding: 3rem 1.5rem; background: #f8fafc; border-radius: 1rem; border: 2px dashed #cbd5e1;">
+                        <div style="font-size: 3rem; margin-bottom: 0.5rem;">📓</div>
+                        <h4 style="margin: 0; color: #1e293b;">Sin fiados en este turno</h4>
+                        <p style="margin: 0.5rem 0 0; color: #64748b; font-size: 0.85rem;">
+                            No se registraron ventas al fiado durante esta sesión de caja.
+                        </p>
+                    </div>
+                ` : `
+                    <div class="table-container" style="max-height: 420px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 0.75rem;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem;">
+                            <thead>
+                                <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; text-align: left;">
+                                    <th style="padding: 0.75rem 1rem;">Hora</th>
+                                    <th style="padding: 0.75rem 1rem;">Ticket</th>
+                                    <th style="padding: 0.75rem 1rem;">Cliente</th>
+                                    <th style="padding: 0.75rem 1rem; text-align: right;">Total Venta</th>
+                                    <th style="padding: 0.75rem 1rem; text-align: right;">Abonado</th>
+                                    <th style="padding: 0.75rem 1rem; text-align: right;">Deuda Pendiente</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${creditSales.map(s => {
+                                    const d = new Date(s.createdAt || s.date);
+                                    const timeStr = !isNaN(d.getTime()) ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
+                                    const client = s.customerName || (s.customer ? s.customer.name : (s.customerId ? `Cliente #${s.customerId}` : 'Cliente Mostrador'));
+                                    const tot = parseFloat(s.total) || 0;
+                                    const paid = parseFloat(s.paidAmount !== undefined ? s.paidAmount : (s.status === 'completed' ? tot : 0)) || 0;
+                                    const pend = Math.max(0, tot - paid);
+                                    return `
+                                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                                            <td style="padding: 0.75rem 1rem; font-weight: 750; color: #64748b;">${timeStr}</td>
+                                            <td style="padding: 0.75rem 1rem; font-weight: 850; color: #0f172a;">#${s.saleNumber || s.id}</td>
+                                            <td style="padding: 0.75rem 1rem; font-weight: 750; color: #0f172a;">${safeHTML(client)}</td>
+                                            <td style="padding: 0.75rem 1rem; text-align: right; font-weight: 750;">${formatCLP(tot)}</td>
+                                            <td style="padding: 0.75rem 1rem; text-align: right; color: #059669; font-weight: 750;">${formatCLP(paid)}</td>
+                                            <td style="padding: 0.75rem 1rem; text-align: right; font-weight: 900; color: #dc2626;">${formatCLP(pend)}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+            </div>
+        `;
+
+        showModal(html, {
+            title: '📓 Fiados Otorgados durante el Turno',
+            width: '800px',
+            footer: '<button class="btn btn-secondary" onclick="closeModal()" style="border-radius: 0.75rem; padding: 0.6rem 1.75rem; font-weight: 700;">Cerrar</button>'
+        });
+    },
+
+    async showShiftAbonosModal() {
+        const reg = this._activeRegister || await CashRegister.getOpen();
+        if (!reg) {
+            showNotification('No hay sesión de caja abierta', 'warning');
+            return;
+        }
+
+        let payments = [];
+        try {
+            payments = await Payment.getByCashRegister(reg.id) || [];
+        } catch (_) {}
+
+        const totalAbonos = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+
+        const html = `
+            <div style="animation: cxFadeUp 0.3s ease;">
+                <div style="padding: 1rem 1.25rem; background: #ecfdf5; border-radius: 0.75rem; border: 1.5px solid #a7f3d0; text-align: center; margin-bottom: 1.25rem;">
+                    <span style="font-size: 0.75rem; color: #065f46; font-weight: 800; text-transform: uppercase; display: block;">Total Abonos Cobrados en este Turno</span>
+                    <div style="font-size: 1.8rem; font-weight: 950; color: #059669; margin-top: 0.2rem;">+${formatCLP(totalAbonos)}</div>
+                    <small style="color: #64748b; font-size: 0.78rem;">${payments.length} pagos de deuda recibidos</small>
+                </div>
+
+                ${payments.length === 0 ? `
+                    <div style="text-align: center; padding: 3rem 1.5rem; background: #f8fafc; border-radius: 1rem; border: 2px dashed #cbd5e1;">
+                        <div style="font-size: 3rem; margin-bottom: 0.5rem;">🤝</div>
+                        <h4 style="margin: 0; color: #1e293b;">Sin abonos en este turno</h4>
+                        <p style="margin: 0.5rem 0 0; color: #64748b; font-size: 0.85rem;">
+                            No se recibieron pagos de deudas de clientes durante esta sesión de caja.
+                        </p>
+                    </div>
+                ` : `
+                    <div class="table-container" style="max-height: 420px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 0.75rem;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem;">
+                            <thead>
+                                <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0; text-align: left;">
+                                    <th style="padding: 0.75rem 1rem;">Hora</th>
+                                    <th style="padding: 0.75rem 1rem;">Cliente</th>
+                                    <th style="padding: 0.75rem 1rem;">Medio de Pago</th>
+                                    <th style="padding: 0.75rem 1rem; text-align: right;">Monto Recibido</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${payments.map(p => {
+                                    const d = new Date(p.createdAt || p.date);
+                                    const timeStr = !isNaN(d.getTime()) ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
+                                    const client = p.customerName || (p.customerId ? `Cliente #${p.customerId}` : 'Cliente');
+                                    const method = this.getPaymentMethodName(p.paymentMethod || 'cash');
+                                    return `
+                                        <tr style="border-bottom: 1px solid #f1f5f9;">
+                                            <td style="padding: 0.75rem 1rem; font-weight: 750; color: #64748b;">${timeStr}</td>
+                                            <td style="padding: 0.75rem 1rem; font-weight: 750; color: #0f172a;">${safeHTML(client)}</td>
+                                            <td style="padding: 0.75rem 1rem;">
+                                                <span class="badge" style="background: #f1f5f9; color: #334155; font-size: 0.75rem;">${method}</span>
+                                            </td>
+                                            <td style="padding: 0.75rem 1rem; text-align: right; font-weight: 900; color: #059669;">+${formatCLP(p.amount)}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+            </div>
+        `;
+
+        showModal(html, {
+            title: '🤝 Abonos de Clientes Cobrados en el Turno',
+            width: '750px',
+            footer: '<button class="btn btn-secondary" onclick="closeModal()" style="border-radius: 0.75rem; padding: 0.6rem 1.75rem; font-weight: 700;">Cerrar</button>'
+        });
+    },
+
+    showPaymentMethods() {
+        const s = this._activeSummary;
+        // cashDisplay es el NETO de operaciones (sin monto inicial)
+        const cashDisplay = s.cashForDisplay ?? ((s.paymentSummary?.cash || 0) + (s.totalCashIn || 0) - (s.totalRetiros || 0));
+
+        const html = `
+            <div style="text-align: center; margin-bottom: 2rem;">
+                <p style="color: var(--secondary); margin-bottom: 0.5rem;">Resumen de Efectivo Real en Caja</p>
+                <div style="font-size: 2.5rem; font-weight: 900; color: #34d399;">${formatCLP(s.expectedCash)}</div>
+                <small style="opacity: 0.7;">Efectivo total que debe haber físicamente</small>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr><th>Componente de Efectivo</th><th style="text-align: right;">Monto</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>💰 Monto de Apertura (Inicial)</td>
+                            <td style="text-align: right;"><strong>${formatCLP(s.initialAmount)}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>🛍️ Ventas y Cobros en Efectivo</td>
+                            <td style="text-align: right;"><strong>+${formatCLP(s.paymentSummary?.cash || 0)}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>📥 Ingresos Manuales de Dinero</td>
+                            <td style="text-align: right; color: #34d399;"><strong>+${formatCLP(s.totalCashIn || 0)}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>📦 Compras Pagadas desde Caja</td>
+                            <td style="text-align: right; color: #f87171;"><strong>-${formatCLP(s.totalCashPurchases || 0)}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>📤 Retiros Manuales y Gastos de Caja</td>
+                            <td style="text-align: right; color: #f87171;"><strong>-${formatCLP((s.totalRetiros || 0) - (s.totalCashPurchases || 0))}</strong></td>
+                        </tr>
+                        <tr style="border-top: 2px solid var(--border); font-size: 1.1rem; background: rgba(255,255,255,0.02);">
+                            <td><strong style="color: #6ee7b7;">SUBTOTAL OPERACIONES</strong></td>
+                            <td style="text-align: right; color: #6ee7b7;"><strong>${formatCLP(cashDisplay)}</strong></td>
+                        </tr>
+                        <tr style="border-top: 2px solid var(--primary); font-size: 1.3rem;">
+                            <td><strong>TOTAL ESPERADO</strong></td>
+                            <td style="text-align: right; color: #34d399;"><strong>${formatCLP(s.expectedCash)}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 style="margin: 2rem 0 1rem 0; opacity: 0.8;">Otros Métodos (No Efectivo)</h4>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr><th>Método</th><th style="text-align: right;">Total Recibido</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>💳 Tarjeta</td>
+                            <td style="text-align: right;"><strong>${formatCLP(s.paymentSummary?.card || 0)}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>📱 QR / Digital</td>
+                            <td style="text-align: right;"><strong>${formatCLP(s.paymentSummary?.qr || 0)}</strong></td>
+                        </tr>
+                        <tr>
+                            <td>➕ Otro / Transferencia</td>
+                            <td style="text-align: right;"><strong>${formatCLP(s.paymentSummary?.other || 0)}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <div style="margin-top: 1.5rem; padding: 1rem; background: rgba(52, 211, 153, 0.05); border: 1px dashed rgba(52, 211, 153, 0.2); border-radius: 0.5rem; font-size: 0.85rem; color: #6ee7b7;">
+                ℹ️ <strong>Cuadratura:</strong> El Efectivo Esperado Real es la suma del Monto Inicial más el neto de todas las operaciones realizadas en efectivo durante la sesión.
+            </div>
+        `;
+        showModal(html, { title: 'Desglose detallado de Caja', width: '600px' });
+    }
+    ,
+
+    getStatusLabel(status) {
+        return { completed: 'Completada', partial: 'Con abono', pending: 'Anotada' }[status] || status || '-';
+    },
+
+    renderRegistroMovimientos(dailyDetail) {
+        if (!dailyDetail || dailyDetail.length === 0) {
+            return '<div class="empty-state"><p>No hay movimientos en esta sesión</p></div>';
+        }
+        const todayDate = new Date().toLocaleDateString('es-CL');
+        const paymentMethodLabel = (m) => ({ cash: 'Efectivo', card: 'Tarjeta', qr: 'QR', other: 'Otro', pending: 'Anotado' }[m] || m || '-');
+        const salePaymentDisplay = (s) => {
+            if (s.paymentDetails && typeof s.paymentDetails === 'object' && Object.keys(s.paymentDetails).length > 0) return 'Mixto';
+            return paymentMethodLabel(s.paymentMethod);
+        };
+        const statusLabel = (s) => ({ completed: 'Completada', partial: 'Con abono', pending: 'Anotada' }[s.status] || s.status || '-');
+        return dailyDetail.map(day => {
+            const isToday = day.date === todayDate;
+            const dayStyle = isToday ? 'border-left: 4px solid var(--success);' : '';
+            const dayBadge = isToday ? ' <span class="badge badge-success" style="font-size: 0.75em;">HOY</span>' : '';
+            let html = `
+                <div style="margin-bottom: 2rem; padding: 1rem; background: var(--light); border-radius: 0.5rem; ${dayStyle}">
+                    <h4 style="margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">📅 ${day.date}${dayBadge}</h4>
+            `;
+            html += `
+                    <div style="margin-bottom: 1.5rem;">
+                        <h5 style="color: var(--success); margin-bottom: 0.5rem;">🛒 Ventas</h5>
+                        ${day.sales.length === 0 ? '<p style="color: var(--secondary); font-size: 0.9rem;">Sin ventas este día</p>' : `
+                        <div class="table-container" style="max-height: 200px; overflow-y: auto;">
+                            <table style="font-size: 0.9rem;">
+                                <thead><tr><th>Nº Venta</th><th>Total</th><th>Método de pago</th><th>Estado</th></tr></thead>
+                                <tbody>
+                                    ${day.sales.map(s => `<tr><td>#${s.saleNumber ?? s.id}</td><td>${formatCLP(s.total)}</td><td>${salePaymentDisplay(s)}</td><td>${statusLabel(s)}</td></tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        `}
+                    </div>
+                    <div style="margin-bottom: 1.5rem;">
+                        <h5 style="color: var(--primary); margin-bottom: 0.5rem;">💰 Pago de deudas</h5>
+                        ${day.debtPayments.length === 0 ? '<p style="color: var(--secondary); font-size: 0.9rem;">Sin pagos de deuda este día</p>' : `
+                        <div class="table-container" style="max-height: 200px; overflow-y: auto;">
+                            <table style="font-size: 0.9rem;">
+                                <thead><tr><th>Cliente</th><th>Monto</th><th>Método</th></tr></thead>
+                                <tbody>
+                                    ${day.debtPayments.map(p => `<tr><td>${p.customerName}</td><td>${formatCLP(p.amount)}</td><td>${paymentMethodLabel(p.paymentMethod)}</td></tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        `}
+                    </div>
+                    <div style="margin-bottom: 1.5rem;">
+                        <h5 style="color: #b45309; margin-bottom: 0.5rem;">📝 Deudas</h5>
+                        ${day.creditSales.length === 0 ? '<p style="color: var(--secondary); font-size: 0.9rem;">Sin ventas a crédito este día</p>' : `
+                        <div class="table-container" style="max-height: 200px; overflow-y: auto;">
+                            <table style="font-size: 0.9rem;">
+                                <thead><tr><th>Cliente</th><th>Total anotado</th><th>Deuda restante</th></tr></thead>
+                                <tbody>
+                                    ${day.creditSales.map(d => `<tr><td>${d.customerName}</td><td>${formatCLP(d.total)}</td><td><strong>${formatCLP(d.remaining)}</strong></td></tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        `}
+                    </div>
+                    <div style="margin-bottom: 1.5rem;">
+                        <h5 style="color: var(--warning); margin-bottom: 0.5rem;">⬇️ Retiro de dinero</h5>
+                        ${day.cashMovementsOut.length === 0 ? '<p style="color: var(--secondary); font-size: 0.9rem;">Sin retiros este día</p>' : `
+                        <div class="table-container" style="max-height: 200px; overflow-y: auto;">
+                            <table style="font-size: 0.9rem;">
+                                <thead><tr><th>Monto</th><th>Motivo</th><th>Fecha y hora</th></tr></thead>
+                                <tbody>
+                                    ${day.cashMovementsOut.map(m => `<tr><td><strong style="color: var(--warning);">-${formatCLP(m.amount)}</strong></td><td>${m.description || m.reason || '-'}</td><td>${formatDateTime(m.date)}</td></tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        `}
+                    </div>
+                    <div style="margin-bottom: 0;">
+                        <h5 style="color: var(--secondary); margin-bottom: 0.5rem;">⬆️ Ingreso de dinero</h5>
+                        ${day.cashMovementsIn.length === 0 ? '<p style="color: var(--secondary); font-size: 0.9rem;">Sin ingresos este día</p>' : `
+                        <div class="table-container" style="max-height: 200px; overflow-y: auto;">
+                            <table style="font-size: 0.9rem;">
+                                <thead><tr><th>Monto</th><th>Motivo</th><th>Fecha y hora</th></tr></thead>
+                                <tbody>
+                                    ${day.cashMovementsIn.map(m => `<tr><td><strong style="color: var(--success);">+${formatCLP(m.amount)}</strong></td><td>${m.description || m.reason || '-'}</td><td>${formatDateTime(m.date)}</td></tr>`).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                        `}
+                    </div>
+                </div>
+            `;
+            return html;
+        }).join('');
+    },
+
+    filterRegistroByDate(dateStr) {
+        const contentEl = document.getElementById('registro-movimientos-content');
+        if (!contentEl) return;
+        const detail = CashView._dailyDetail;
+        if (!detail || !Array.isArray(detail)) {
+            contentEl.innerHTML = '<div class="empty-state"><p>No hay datos de movimientos</p></div>';
+            return;
+        }
+        const dateKey = dateStr ? new Date(dateStr + 'T12:00:00').toLocaleDateString('es-CL') : new Date().toLocaleDateString('es-CL');
+        const day = detail.find(d => d.date === dateKey);
+        const emptyDay = { date: dateKey, sales: [], debtPayments: [], creditSales: [], cashMovementsOut: [], cashMovementsIn: [] };
+        const toShow = day ? [day] : [emptyDay];
+        contentEl.innerHTML = this.renderRegistroMovimientos(toShow);
+    },
+
+    renderRecentSales(sales) {
+        if (sales.length === 0) {
+            return '<div class="empty-state">No hay ventas</div>';
+        }
+
+        return `
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Hora</th>
+                        <th>Items</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sales.map(s => `
+                        <tr>
+                            <td>${s.saleNumber}</td>
+                            <td>${formatTime(s.date)}</td>
+                            <td>${s.items.length}</td>
+                            <td><strong>${formatCLP(s.total)}</strong></td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        `;
+    },
+
+    renderCashHistory(history) {
+        if (history.length === 0) return '<div class="empty-state">No hay registros de caja previos</div>';
+
+        const formatDT = (dateVal) => {
+            const formatted = formatDateTime(dateVal);
+            if (formatted.includes(',')) {
+                const parts = formatted.split(',');
+                return { date: parts[0].trim(), time: parts[1].trim() };
+            }
+            const lastSpaceIdx = formatted.lastIndexOf(' ');
+            if (lastSpaceIdx !== -1) {
+                return {
+                    date: formatted.substring(0, lastSpaceIdx).trim(),
+                    time: formatted.substring(lastSpaceIdx).trim()
+                };
+            }
+            return { date: formatted, time: '' };
+        };
+
+        return `
+            <div style="background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 1.5rem; overflow: hidden; margin-top: 1rem;">
+                <table class="table-modern" style="width: 100%; border-collapse: separate; border-spacing: 0;">
+                    <thead style="background: rgba(15, 23, 42, 0.6);">
+                        <tr>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px;">📅 Apertura (Fecha y Hora)</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px;">🔒 Cierre (Fecha y Hora)</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px;">💰 Inicial</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; text-align: center;">Ventas</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; text-align: center;">Estado</th>
+                            <th style="padding: 1.25rem 1rem; color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; font-weight: 800; letter-spacing: 1px; text-align: right;">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${history.slice(0, 10).map(c => {
+                            const totalVentas = c.paymentSummary ? Object.values(c.paymentSummary).reduce((a, b) => a + b, 0) : 0;
+                            const openInfo = formatDT(c.openDate);
+                            const closeInfo = c.closeDate ? formatDT(c.closeDate) : null;
+                            return `
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.03); transition: background 0.2s;">
+                                <td style="padding: 1.25rem 1rem; color: #f1f5f9; vertical-align: middle;">
+                                    <div style="font-size: 1.15rem; font-weight: 800; color: #ffffff;">${openInfo.date}</div>
+                                    <div style="font-size: 1rem; font-weight: 700; color: #60a5fa; margin-top: 0.15rem;">⏰ ${openInfo.time}</div>
+                                    <div style="font-size: 0.8rem; color: #94a3b8; font-weight: 600; margin-top: 0.25rem;">Turno #${c.id}</div>
+                                </td>
+                                <td style="padding: 1.25rem 1rem; color: #94a3b8; vertical-align: middle;">
+                                    ${closeInfo ? `
+                                        <div style="font-size: 1.15rem; font-weight: 800; color: #cbd5e1;">${closeInfo.date}</div>
+                                        <div style="font-size: 1rem; font-weight: 700; color: #94a3b8; margin-top: 0.15rem;">⏰ ${closeInfo.time}</div>
+                                    ` : `
+                                        <span style="background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 0.4rem 0.8rem; border-radius: 0.75rem; font-weight: 800; font-size: 0.95rem; border: 1px solid rgba(16, 185, 129, 0.3); display: inline-block;">
+                                            🔓 Abierta (En curso)
+                                        </span>
+                                    `}
+                                </td>
+                                <td style="padding: 1.25rem 1rem; color: #f1f5f9; font-weight: 700; font-size: 1.1rem; vertical-align: middle;">
+                                    ${formatCLP(c.initialAmount)}
+                                </td>
+                                <td style="padding: 1.25rem 1rem; text-align: center; vertical-align: middle;">
+                                    <div style="color: #34d399; font-weight: 800; font-size: 1.1rem;">${totalVentas > 0 ? '+' : ''}${formatCLP(totalVentas)}</div>
+                                </td>
+                                <td style="padding: 1.25rem 1rem; text-align: center; vertical-align: middle;">
+                                    <span class="badge ${c.status === 'open' ? 'badge-success' : 'badge-info'}" style="padding: 0.4rem 0.8rem; border-radius: 2rem; font-size: 0.85rem; font-weight: 800;">
+                                        ${c.status === 'open' ? 'Activa' : 'Cerrada'}
+                                    </span>
+                                </td>
+                                <td style="padding: 1.25rem 1rem; text-align: right; vertical-align: middle;">
+                                    <button class="btn btn-sm" onclick="CashView.showCashHistory('${c.id}')" style="background: rgba(99, 102, 241, 0.15); color: #a5b4fc; border: 1.5px solid rgba(99, 102, 241, 0.3); font-weight: 800; border-radius: 0.75rem; padding: 0.5rem 1rem; font-size: 0.9rem; transition: all 0.2s;" onmouseover="this.style.background='rgba(99, 102, 241, 0.3)'" onmouseout="this.style.background='rgba(99, 102, 241, 0.15)'">
+                                        📋 Historial
+                                    </button>
+                                </td>
+                            </tr>
+                        `}).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    },
+
+    async showCashHistory(cashRegisterId) {
+        const cashRegister = await CashRegister.getById(cashRegisterId);
+        if (!cashRegister) {
+            showNotification('Caja no encontrada', 'error');
+            return;
+        }
+
+        const summary = await CashRegister.getSummary(cashRegisterId);
+
+        // Obtener todos los datos relacionados con la caja
+        const sales = await Sale.getByCashRegister(cashRegisterId);
+        const payments = await Payment.getByCashRegister(cashRegisterId);
+        const cashMovements = await CashMovement.getByCashRegister(cashRegisterId);
+
+        // Crear lista de eventos cronológica
+        const events = [];
+
+        // 1. Apertura de caja
+        events.push({
+            type: 'open',
+            date: cashRegister.openDate,
+            amount: 0,
+            description: 'Apertura de caja',
+            icon: '🔓',
+            color: '#10b981'
+        });
+
+        // 2. Ventas
+        sales.forEach(sale => {
+            events.push({
+                type: 'sale',
+                date: sale.date,
+                amount: sale.total,
+                saleNumber: sale.saleNumber,
+                description: `Venta #${sale.saleNumber}`,
+                details: `${sale.items.length} items - ${this.getPaymentMethodName(sale.paymentMethod)}`,
+                icon: '💰',
+                color: '#6366f1',
+                saleId: sale.id
+            });
+        });
+
+        // 3. Pagos de deuda
+        for (const payment of payments) {
+            let customerName = 'Cliente';
+            if (payment.customerId) {
+                try {
+                    const customer = await Customer.getById(payment.customerId);
+                    customerName = customer ? customer.name : 'Cliente';
+                } catch (e) {
+                    console.error('Error obteniendo cliente:', e);
+                }
+            }
+
+            events.push({
+                type: 'payment',
+                date: payment.date,
+                amount: payment.amount,
+                description: `Pago de deuda - ${customerName}`,
+                details: `${this.getPaymentMethodName(payment.paymentMethod)}${payment.notes ? ' - ' + payment.notes : ''}`,
+                icon: '💵',
+                color: '#10b981',
+                paymentId: payment.id
+            });
+        }
+
+        // 5. Movimientos manuales
+        cashMovements.forEach(movement => {
+            if (!movement.saleId && !movement.paymentId && !movement.expenseId) {
+                events.push({
+                    type: movement.type === 'in' ? 'cash_in' : 'cash_out',
+                    date: movement.date,
+                    amount: movement.type === 'in' ? movement.amount : -movement.amount,
+                    description: movement.description || movement.reason || (movement.type === 'in' ? 'Entrada de dinero' : 'Salida de dinero'),
+                    details: movement.type === 'in' ? 'Agregado a caja' : 'Retirado de caja',
+                    icon: movement.type === 'in' ? '➕' : '➖',
+                    color: movement.type === 'in' ? '#10b981' : '#f59e0b',
+                    movementId: movement.id
+                });
+            }
+        });
+
+        // 6. Cierre
+        if (cashRegister.closeDate) {
+            events.push({
+                type: 'close',
+                date: cashRegister.closeDate,
+                amount: 0,
+                description: 'Cierre de caja',
+                details: `Esperado: ${formatCLP(cashRegister.expectedAmount)} | Diferencia: ${formatCLP(cashRegister.difference || 0)}`,
+                icon: '🔒',
+                color: '#94a3b8'
+            });
+        }
+
+        // Ordenar: Apertura -> Otros eventos por hora -> Cierre (si existe)
+        events.sort((a, b) => {
+            if (a.type === 'open') return -1;
+            if (b.type === 'open') return 1;
+            if (a.type === 'close') return 1;
+            if (b.type === 'close') return -1;
+            return new Date(a.date) - new Date(b.date);
+        });
+
+        let runningBalance = cashRegister.initialAmount;
+        events.forEach(event => {
+            event.balanceBefore = runningBalance;
+            if (event.type !== 'open' && event.type !== 'close') {
+                runningBalance += event.amount;
+            }
+            event.balanceAfter = runningBalance;
+        });
+
+        const eventsHTML = events.map((event, idx) => {
+            const styles = this.getEventStyles(event.type);
+            const isLast = idx === events.length - 1;
+            
+            let amountHTML = '';
+            if (event.amount !== 0 || event.type === 'sale') {
+                const isNegative = event.amount < 0 || event.type === 'expense' || event.type === 'cash_out';
+                const color = isNegative ? '#f87171' : '#34d399';
+                const prefix = isNegative ? '' : '+';
+                amountHTML = `<div style="font-weight: 800; color: ${color}; font-size: 1.2rem; font-family: 'JetBrains Mono', monospace;">${prefix}${formatCLP(event.amount)}</div>`;
+            }
+
+            let detailButton = '';
+            if (event.type === 'sale' && event.saleId) {
+                detailButton = `<button class="btn" onclick="CashView.showSaleDetail(${event.saleId})" style="margin-top: 0.75rem; padding: 0.5rem 1rem; font-size: 0.75rem; border-radius: 0.75rem; background: rgba(99, 102, 241, 0.1); color: #818cf8; border: 1px solid rgba(99, 102, 241, 0.2); font-weight: 700; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; transition: all 0.2s;"><span>🔍</span> Ver Detalle Venta</button>`;
+            }
+
+            return `
+                <div style="display: flex; gap: 1.5rem; position: relative; padding-bottom: ${isLast ? '0' : '2rem'};">
+                    ${!isLast ? `<div style="position: absolute; left: 24px; top: 48px; bottom: 0; width: 2px; background: rgba(255,255,255,0.05);"></div>` : ''}
+                    
+                    <div style="width: 50px; height: 50px; border-radius: 50%; background: ${styles.bgColor}; color: ${styles.color}; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; flex-shrink: 0; box-shadow: 0 0 15px ${styles.bgColor}; z-index: 1;">
+                        ${styles.icon}
+                    </div>
+
+                    <div style="flex: 1; background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 1.25rem; padding: 1.5rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;">
+                            <div>
+                                <div style="display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.25rem;">
+                                    <span style="font-weight: 800; color: #f8fafc; font-size: 1.1rem;">${event.description}</span>
+                                    ${event.saleNumber ? `<span style="background: rgba(99, 102, 241, 0.1); color: #818cf8; padding: 0.2rem 0.5rem; border-radius: 0.4rem; font-size: 0.7rem; font-weight: 800;">#${event.saleNumber}</span>` : ''}
+                                </div>
+                                <div style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.5rem;">${event.details || ''}</div>
+                                <div style="display: flex; align-items: center; gap: 1rem;">
+                                    <span style="font-size: 0.75rem; color: #64748b; font-weight: 600; background: rgba(0,0,0,0.2); padding: 0.25rem 0.6rem; border-radius: 1rem;">⏰ ${formatDateTime(event.date).split(' ')[1]}</span>
+                                    <span style="font-size: 0.75rem; color: #64748b; font-weight: 600;">Balance: <strong style="color: #94a3b8;">${formatCLP(event.balanceAfter)}</strong></span>
+                                </div>
+                                ${detailButton}
+                            </div>
+                            <div style="text-align: right;">
+                                ${amountHTML}
+                                <div style="font-size: 0.65rem; color: #64748b; margin-top: 0.4rem; text-transform: uppercase; letter-spacing: 1px; font-weight: 800; background: rgba(255,255,255,0.03); padding: 0.2rem 0.5rem; border-radius: 0.4rem; display: inline-block;">${styles.label}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+        }).join('');
+
+        const content = `
+            <div style="padding: 1rem; background: #0f172a; border-radius: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; padding: 2.5rem; background: linear-gradient(135deg, #1e293b, #0f172a); border-radius: 1.5rem; border: 1px solid rgba(255,255,255,0.05); box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                    <div>
+                        <div style="color: #6366f1; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; font-size: 0.8rem; margin-bottom: 0.5rem;">Resumen de Transacciones</div>
+                        <h2 style="margin: 0; font-size: 2.2rem; font-weight: 900; color: white;">Sesión de Caja #${cashRegister.id}</h2>
+                        <div style="display: flex; align-items: center; gap: 1.5rem; margin-top: 1rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: #94a3b8; font-size: 0.95rem;">
+                                <span style="font-size: 1.2rem;">📅</span> <span>${formatDateTime(cashRegister.openDate).split(' ')[0]}</span>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 0.5rem; color: #94a3b8; font-size: 0.95rem;">
+                                <span style="font-size: 1.2rem;">👤</span> <span>${cashRegister.username || 'Admin'}</span>
+                            </div>
+                            <span class="badge ${cashRegister.status === 'open' ? 'badge-success' : 'badge-secondary'}" style="padding: 0.5rem 1rem; border-radius: 2rem; font-weight: 800;">
+                                ${cashRegister.status === 'open' ? 'Abierta' : 'Cerrada'}
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Fila 1: Cuadratura y Caja Físico -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem; padding: 1rem; background: rgba(30, 41, 59, 0.4); border-radius: 1rem; border: 1px solid rgba(255,255,255,0.03);">
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">💵 Fondo Inicial</span>
+                        <strong style="font-size: 1.1rem; color: white; font-weight: 800;">${formatCLP(summary.initialAmount || 0)}</strong>
+                    </div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">💸 Efectivo Esperado</span>
+                        <strong style="font-size: 1.1rem; color: white; font-weight: 800;">${formatCLP(summary.expectedCash || 0)}</strong>
+                    </div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">📥 Efectivo Contado (Cierre)</span>
+                        <strong style="font-size: 1.1rem; color: white; font-weight: 800;">${formatCLP(summary.finalAmount || 0)}</strong>
+                    </div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">⚖️ Diferencia</span>
+                        <strong style="font-size: 1.1rem; color: ${(summary.difference || 0) === 0 ? '#10b981' : ((summary.difference || 0) > 0 ? '#fbbf24' : '#ef4444')}; font-weight: 800;">
+                            ${(summary.difference || 0) === 0 ? 'Cuadra Exacto' : formatCLP(summary.difference)}
+                        </strong>
+                    </div>
+                </div>
+
+                <!-- Fila 2: Ventas, Impuestos y Ganancias -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 0.75rem; margin-bottom: 2rem; padding: 1rem; background: rgba(30, 41, 59, 0.6); border-radius: 1rem; border: 1px solid rgba(255,255,255,0.05);">
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">💰 Total Vendido</span>
+                        <strong style="font-size: 1.1rem; color: #60a5fa; font-weight: 800;">${formatCLP(summary.totalSalesAmount || 0)}</strong>
+                    </div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">🔴 IVA Débito (Ventas)</span>
+                        <strong style="font-size: 1.1rem; color: #f87171; font-weight: 800;">${formatCLP(summary.ivaDebito || 0)}</strong>
+                    </div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">🟢 IVA Crédito (Compras)</span>
+                        <strong style="font-size: 1.1rem; color: #34d399; font-weight: 800;">${formatCLP(summary.ivaCredito || 0)}</strong>
+                    </div>
+                    <div style="text-align: center;">
+                        <span style="font-size: 0.65rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase;">💸 Gastos del Turno</span>
+                        <strong style="font-size: 1.1rem; color: #ef4444; font-weight: 800;">-${formatCLP(summary.totalExpenses || 0)}</strong>
+                    </div>
+                    <div style="text-align: center; border-left: 1px solid rgba(255,255,255,0.1); padding-left: 0.5rem;">
+                        <span style="font-size: 0.65rem; color: #10b981; display: block; font-weight: 800; text-transform: uppercase;">💎 Ganancia Neta</span>
+                        <strong style="font-size: 1.1rem; color: #10b981; font-weight: 900;">${formatCLP(summary.netProfit || 0)}</strong>
+                    </div>
+                </div>
+
+                <div style="padding: 0 1rem;">
+                    <h3 style="color: #64748b; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; font-weight: 800; margin-bottom: 2rem; display: flex; align-items: center; gap: 0.75rem;">
+                        <span style="height: 1px; flex: 1; background: rgba(255,255,255,0.05);"></span>
+                        Línea de Tiempo de Operaciones
+                        <span style="height: 1px; flex: 1; background: rgba(255,255,255,0.05);"></span>
+                    </h3>
+                    <div style="max-height: 60vh; overflow-y: auto; padding: 0 1rem 2rem 0; scrollbar-width: thin; scrollbar-color: rgba(99, 102, 241, 0.3) transparent;">
+                        ${eventsHTML}
+                    </div>
+                </div>
+            </div>`;
+
+        showModal(content, { title: '', footer: `<button class="btn" style="background: #1e293b; color: #94a3b8; border: 1px solid rgba(255,255,255,0.1); padding: 0.75rem 2rem; border-radius: 0.75rem; font-weight: 700;" onclick="closeModal()">Cerrar Historial</button>`, width: '900px' });
+    },
+
+    getEventStyles(type) {
+        const styles = {
+            open: { icon: '🔓', color: '#10b981', bgColor: 'rgba(16, 185, 129, 0.1)', label: 'Apertura' },
+            sale: { icon: '💰', color: '#6366f1', bgColor: 'rgba(99, 102, 241, 0.1)', label: 'Venta' },
+            payment: { icon: '💳', color: '#10b981', bgColor: 'rgba(16, 185, 129, 0.1)', label: 'Pago Deuda' },
+            expense: { icon: '💸', color: '#f43f5e', bgColor: 'rgba(244, 63, 94, 0.1)', label: 'Gasto' },
+            cash_in: { icon: '📥', color: '#10b981', bgColor: 'rgba(16, 185, 129, 0.1)', label: 'Ingreso Manual' },
+            cash_out: { icon: '📤', color: '#f59e0b', bgColor: 'rgba(245, 158, 11, 0.1)', label: 'Retiro Manual' },
+            close: { icon: '🔒', color: '#64748b', bgColor: 'rgba(100, 116, 139, 0.1)', label: 'Cierre' }
+        };
+        return styles[type] || { icon: '📝', color: '#94a3b8', bgColor: 'rgba(148, 163, 184, 0.1)', label: 'Evento' };
+    },
+
+    async showSaleDetail(saleId) {
+        try {
+            const sale = await Sale.getById(saleId);
+            if (!sale) throw new Error('Venta no encontrada');
+            let items = sale.items;
+            if (typeof items === 'string') items = JSON.parse(items);
+            const content = `
+                <div style="padding: 0.5rem; color: #f1f5f9;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem;">
+                        <div>
+                            <h2 style="margin: 0; font-weight: 900; font-size: 1.5rem;">Detalle de Venta #${sale.saleNumber || sale.id}</h2>
+                            <p style="color: #94a3b8; margin: 0.25rem 0 0 0;">${formatDateTime(sale.date)}</p>
+                        </div>
+                        <div style="text-align: right;">
+                            <span class="badge ${sale.status === 'completed' ? 'badge-success' : 'badge-warning'}" style="padding: 0.5rem 1rem; border-radius: 2rem; font-size: 0.8rem;">${sale.status === 'completed' ? 'PAGADA' : 'PENDIENTE'}</span>
+                            <div style="margin-top: 0.5rem; color: #94a3b8; font-size: 0.85rem;">Método: <strong>${this.getPaymentMethodName(sale.paymentMethod)}</strong></div>
+                        </div>
+                    </div>
+                    <div style="background: rgba(255,255,255,0.02); border-radius: 1rem; border: 1px solid rgba(255,255,255,0.05); overflow: hidden; margin-bottom: 2rem;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <thead>
+                                <tr style="background: rgba(255,255,255,0.03); text-align: left;">
+                                    <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase;">Producto</th>
+                                    <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; text-align: center;">Cant.</th>
+                                    <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; text-align: right;">Precio</th>
+                                    <th style="padding: 1rem; color: #94a3b8; font-size: 0.75rem; text-transform: uppercase; text-align: right;">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map(item => `
+                                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                        <td style="padding: 1rem;"><div style="font-weight: 700;">${item.name}</div><small style="opacity: 0.5;">SKU: ${item.sku || 'N/A'}</small></td>
+                                        <td style="padding: 1rem; text-align: center;">${item.quantity} ${item.type === 'weight' ? 'kg' : 'un'}</td>
+                                        <td style="padding: 1rem; text-align: right;">${formatCLP(item.price)}</td>
+                                        <td style="padding: 1rem; text-align: right; font-weight: 800;">${formatCLP(item.total)}</td>
+                                    </tr>`).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end;">
+                        <div style="background: rgba(99, 102, 241, 0.1); padding: 1.5rem; border-radius: 1rem; border: 1px solid rgba(99, 102, 241, 0.2); min-width: 250px;">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem; color: #94a3b8;"><span>Subtotal:</span><span>${formatCLP(sale.total)}</span></div>
+                            <div style="display: flex; justify-content: space-between; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.1);"><strong style="font-size: 1.25rem;">Total Venta:</strong><strong style="color: #6366f1; font-size: 1.5rem;">${formatCLP(sale.total)}</strong></div>
+                        </div>
+                    </div>
+                </div>`;
+            showModal(content, {
+                title: 'Detalle de Venta',
+                width: '750px',
+                footer: `<button class="btn btn-primary" onclick="closeModal()">Cerrar Detalle</button>`
+            });
+        } catch (error) {
+            console.error('Error al cargar detalle de venta:', error);
+            showNotification('Error al cargar el detalle: ' + error.message, 'error');
+        }
+    },
+
+
+    getPaymentMethodName(method) {
+        const names = {
+            cash: 'Efectivo',
+            card: 'Tarjeta',
+            qr: 'QR',
+            mixed: 'Pago Mixto',
+            other: 'Otro',
+            pending: 'Anotado',
+            debt: 'Anotado',
+            creditBalance: 'Saldo Favor'
+        };
+        return names[method] || method;
+    },
+
+    _allCashHistory: [],
+    _showOnlyDiscrepancies: false,
+    _historyFilter: {
+        year: new Date().getFullYear(),
+        month: new Date().getMonth(),
+        day: null
+    },
+    _monthNames: ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'],
+
+    async showAllCashRegistersHistory() {
+        try {
+            const allRegisters = await CashRegister.getAll();
+
+            if (allRegisters.length === 0) {
+                showModal(
+                    '<div class="empty-state"><div class="empty-state-icon">💰</div>No hay registros de caja</div>',
+                    { title: 'Historial de Cajas', width: '600px' }
+                );
+                return;
+            }
+
+            await this.enrichHistoryWithSummaries(allRegisters);
+
+            // Ordenar por fecha de apertura (más recientes primero)
+            const sortedRegisters = allRegisters.sort((a, b) => new Date(b.openDate) - new Date(a.openDate));
+            this._allCashHistory = sortedRegisters;
+
+            const openCount = allRegisters.filter(r => r.status === 'open').length;
+            const closedCount = allRegisters.filter(r => r.status === 'closed').length;
+
+            const years = Array.from(new Set(sortedRegisters.map(r => new Date(r.openDate).getFullYear())));
+            years.sort((a, b) => b - a);
+            if (years.length === 0) {
+                years.push(new Date().getFullYear());
+            }
+
+            this._historyFilter.year = this._historyFilter.year && years.includes(this._historyFilter.year)
+                ? this._historyFilter.year
+                : years[0];
+            this._historyFilter.month = typeof this._historyFilter.month === 'number'
+                ? this._historyFilter.month
+                : this._historyFilter.month = new Date().getMonth();
+            this._historyFilter.day = null;
+
+            const filterControls = this.renderCashHistoryFilterControls(years);
+
+            const content = `
+                <div class="cash-history-modal">
+                    <div class="cash-history-modal-header">
+                        <div>
+                            <h3>Historial Completo de Cajas</h3>
+                            <p>
+                                Total de registros: <strong>${allRegisters.length}</strong> |
+                                Abiertas: <strong>${openCount}</strong> |
+                                Cerradas: <strong>${closedCount}</strong>
+                            </p>
+                        </div>
+                    </div>
+                    ${filterControls}
+                    <div class="cash-history-list" id="cashHistoryList">
+                        ${this.renderCashHistoryEntries(sortedRegisters)}
+                    </div>
+                </div>
+            `;
+
+            const footer = `
+                <button class="btn btn-primary" onclick="closeModal()">Cerrar</button>
+            `;
+
+            showModal(content, {
+                title: 'Historial Completo de Todas las Cajas',
+                footer,
+                width: '900px'
+            });
+        } catch (error) {
+            console.error('Error al cargar historial de cajas:', error);
+            showNotification('Error al cargar el historial: ' + error.message, 'error');
+        }
+    },
+
+
+    filterCashHistoryByDate(dateStr) {
+        const filterString = dateStr || this.getHistoryFilterDate();
+        let filtered = !filterString ? this._allCashHistory : this._allCashHistory.filter(register => {
+            const openDate = new Date(register.openDate);
+            const target = new Date(`${filterString}T12:00:00`);
+            return openDate.getFullYear() === target.getFullYear() &&
+                openDate.getMonth() === target.getMonth() &&
+                openDate.getDate() === target.getDate();
+        });
+
+        // ponytail: filtro de descuadres solo aplica en cajas cerradas con diferencia != 0
+        if (this._showOnlyDiscrepancies) {
+            filtered = filtered.filter(r => r.status === 'closed' && (r.difference || 0) !== 0);
+        }
+
+        const listEl = document.getElementById('cashHistoryList');
+        if (listEl) {
+            listEl.innerHTML = filtered.length > 0
+                ? this.renderCashHistoryEntries(filtered)
+                : `<div class="empty-state" style="padding:2rem; text-align:center; color:#94a3b8;"><div style="font-size:2rem;margin-bottom:0.5rem;">✅</div><p>No hay cajas con descuadres en este período.</p></div>`;
+        }
+    },
+
+    toggleDiscrepancyFilter() {
+        this._showOnlyDiscrepancies = !this._showOnlyDiscrepancies;
+        const btn = document.getElementById('btnToggleDescuadre');
+        if (btn) {
+            if (this._showOnlyDiscrepancies) {
+                btn.style.background = '#ef4444';
+                btn.style.color = '#fff';
+                btn.style.borderColor = '#ef4444';
+                btn.textContent = '🔴 Solo Descuadres (ACTIVO)';
+            } else {
+                btn.style.background = 'transparent';
+                btn.style.color = '#94a3b8';
+                btn.style.borderColor = 'rgba(255,255,255,0.1)';
+                btn.textContent = '⚪ Ver Solo Descuadres';
+            }
+        }
+        this.filterCashHistoryByDate();
+    },
+
+    renderCashHistoryFilterControls(years) {
+        const selectedYear = this._historyFilter.year;
+        const selectedMonth = this._historyFilter.month;
+        const isDescuadreActive = this._showOnlyDiscrepancies;
+        return `
+            <div class="cash-history-filter">
+                <div class="cash-history-filter-selects" style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap;">
+                    <label>Mes
+                        <select onchange="CashView.setHistoryFilterMonth(this.value)" class="form-control">
+                            ${this._monthNames.map((name, index) => `
+                                <option value="${index}" ${index === selectedMonth ? 'selected' : ''}>${name}</option>
+                            `).join('')}
+                        </select>
+                    </label>
+                    <label>Año
+                        <select onchange="CashView.setHistoryFilterYear(this.value)" class="form-control">
+                            ${years.map(year => `
+                                <option value="${year}" ${year === selectedYear ? 'selected' : ''}>${year}</option>
+                            `).join('')}
+                        </select>
+                    </label>
+                    <button id="btnToggleDescuadre" onclick="CashView.toggleDiscrepancyFilter()"
+                            style="padding:0.5rem 1rem; border-radius:0.75rem; font-weight:800; font-size:0.82rem; cursor:pointer; transition:all 0.2s; border:1.5px solid ${isDescuadreActive ? '#ef4444' : 'rgba(255,255,255,0.1)'}; background:${isDescuadreActive ? '#ef4444' : 'transparent'}; color:${isDescuadreActive ? '#fff' : '#94a3b8'}; white-space:nowrap;">
+                        ${isDescuadreActive ? '🔴 Solo Descuadres (ACTIVO)' : '⚪ Ver Solo Descuadres'}
+                    </button>
+                </div>
+                <div class="cash-history-filter-grid" id="cashHistoryDayGrid">
+                    ${this.renderHistoryDayGrid(selectedYear, selectedMonth)}
+                </div>
+            </div>
+        `;
+    },
+
+    renderHistoryDayGrid(year, month) {
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        const monthName = this._monthNames[month] || '';
+        const selectedDay = this._historyFilter.day;
+
+        let grid = `
+            <div class="cash-history-day-grid-title">
+                ${monthName} ${year}
+            </div>
+            <div class="cash-history-day-grid-body">
+        `;
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const isActive = selectedDay === day;
+            grid += `
+                <button type="button"
+                        class="cash-history-day ${isActive ? 'active' : ''}"
+                        onclick="CashView.setHistoryFilterDay(${day})">
+                    <span>${day}</span>
+                    <small>${monthName.slice(0, 3)}</small>
+                </button>
+            `;
+        }
+
+        grid += '</div>';
+        return grid;
+    },
+
+    setHistoryFilterMonth(monthIndex) {
+        this._historyFilter.month = parseInt(monthIndex, 10);
+        this._historyFilter.day = null;
+        this.refreshHistoryDayGrid();
+        this.filterCashHistoryByDate();
+    },
+
+    setHistoryFilterYear(year) {
+        this._historyFilter.year = parseInt(year, 10);
+        this._historyFilter.day = null;
+        this.refreshHistoryDayGrid();
+        this.filterCashHistoryByDate();
+    },
+
+    setHistoryFilterDay(day) {
+        this._historyFilter.day = parseInt(day, 10);
+        this.refreshHistoryDayGrid();
+        this.filterCashHistoryByDate();
+    },
+
+    refreshHistoryDayGrid() {
+        const gridEl = document.getElementById('cashHistoryDayGrid');
+        if (gridEl && this._historyFilter.year !== undefined && this._historyFilter.month !== undefined) {
+            gridEl.innerHTML = this.renderHistoryDayGrid(this._historyFilter.year, this._historyFilter.month);
+        }
+    },
+
+    getHistoryFilterDate() {
+        const { year, month, day } = this._historyFilter;
+        if (!year || month === undefined || !day) return null;
+        const paddedMonth = String(month + 1).padStart(2, '0');
+        const paddedDay = String(day).padStart(2, '0');
+        return `${year}-${paddedMonth}-${paddedDay}`;
+    },
+
+    renderCashHistoryEntries(registers) {
+        if (!registers || registers.length === 0) {
+            return `
+                <div class="empty-state" style="padding: 2rem; text-align: center;">
+                    <div class="empty-state-icon">📦</div>
+                    <p>No hay cajas que coincidan con la fecha seleccionada.</p>
+                </div>
+            `;
+        }
+
+        return registers.map(register => {
+            const openDate = new Date(register.openDate);
+            const closeDate = register.closeDate ? new Date(register.closeDate) : null;
+            let duration = '-';
+            if (closeDate && !isNaN(openDate.getTime()) && !isNaN(closeDate.getTime())) {
+                const diffMs = closeDate - openDate;
+                const hrs = Math.floor(diffMs / (1000 * 60 * 60));
+                const mins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+                duration = hrs > 0 ? `${hrs}h ${mins}m` : `${mins}m`;
+            }
+
+            const totalVentas = register.paymentSummary ? Object.values(register.paymentSummary).reduce((a, b) => a + b, 0) : 0;
+            const diff = register.difference || 0;
+            const diffColor = diff === 0 ? '#10b981' : (diff > 0 ? '#f59e0b' : '#ef4444');
+
+            return `
+                <div class="cash-history-entry" style="background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 1.25rem; padding: 1.5rem; margin-bottom: 1rem; display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr 1.2fr; align-items: center; gap: 1.5rem; transition: transform 0.2s, background 0.2s;">
+                    <div style="display: flex; gap: 1rem; align-items: center;">
+                        <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(99, 102, 241, 0.1); color: #818cf8; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; font-weight: 900;">
+                            #${register.id}
+                        </div>
+                        <div>
+                            <div style="color: #f1f5f9; font-weight: 700; font-size: 1rem;">
+                                ${formatDateTime(register.openDate).split(' ')[0] || 'Sin fecha'}
+                            </div>
+                            <div style="color: #64748b; font-size: 0.8rem; margin-top: 0.15rem;">
+                                ${formatDateTime(register.openDate).split(' ')[1] || ''} - 
+                                ${register.closeDate ? (formatDateTime(register.closeDate).split(' ')[1] || 'Sin hora') : 'En curso'}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div style="font-size: 0.7rem; color: #64748b; text-transform: uppercase; font-weight: 800; margin-bottom: 0.4rem;">Ventas Session</div>
+                        <div style="font-weight: 800; color: #10b981; font-size: 1.1rem;">${formatCLP(totalVentas)}</div>
+                    </div>
+
+                    <div>
+                        <div style="font-size: 0.7rem; color: #64748b; text-transform: uppercase; font-weight: 800; margin-bottom: 0.4rem;">Final / Esperado</div>
+                        <div style="color: #e2e8f0; font-weight: 600; font-size: 0.95rem;">
+                            ${register.finalAmount ? formatCLP(register.finalAmount) : 'En curso'} 
+                            <span style="color: #475569; font-size: 0.8rem;">/ ${formatCLP(register.expectedAmount || 0)}</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div style="font-size: 0.7rem; color: #64748b; text-transform: uppercase; font-weight: 800; margin-bottom: 0.4rem;">Cuadratura</div>
+                        <div style="color: ${diffColor}; font-weight: 800; display: flex; align-items: center; gap: 0.4rem; font-size: 1rem;">
+                            ${register.status === 'open' ? '<span style="color: #6366f1;">En proceso</span>' : (diff === 0 ? '✅ Cuadró' : `${diff > 0 ? '📈 +' : '📉 '}${formatCLP(diff)}`)}
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                        <button class="btn" style="background: rgba(99, 102, 241, 0.1); color: #818cf8; padding: 0.6rem 1rem; border-radius: 0.75rem; font-size: 0.85rem; font-weight: 700; border: 1px solid rgba(99, 102, 241, 0.1);" onclick="CashView.showCashHistory(${register.id})">
+                            📋 Ver Detalle
+                        </button>
+                        ${register.status === 'closed' ? `
+                            <button class="btn" style="background: transparent; color: #64748b; padding: 0.6rem 0.8rem; border-radius: 0.75rem;" onclick="CashView.editClosedCash(${register.id})" title="Editar Cierre">
+                                ⚙️
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }).join('');
+    },
+
+    async openCash(event) {
+        event.preventDefault();
+        const amount = parseFloat(document.getElementById('quickAmount')?.value) || 0;
+
+        if (amount < 0) {
+            return showNotification('El monto inicial no puede ser negativo', 'error');
+        }
+
+        try {
+            await CashController.openCash(amount, null);
+            showNotification('Caja abierta exitosamente', 'success');
+            app.navigate('cash');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    },
+
+    /**
+     * Genera y muestra el Corte X (Lectura parcial provisional sin cerrar el turno)
+     */
+    async generateCorteX() {
+        try {
+            const openCash = await CashRegister.getOpen();
+            if (!openCash) {
+                showNotification('⚠️ No hay una caja abierta actualmente para emitir Corte X', 'warning');
+                return;
+            }
+            const summary = await CashRegister.getSummary(openCash.id);
+            const userStr = (typeof AuthManager !== 'undefined' && AuthManager.getCurrentUserName)
+                ? AuthManager.getCurrentUserName()
+                : (localStorage.getItem('USER_NAME') || 'Cajero');
+
+            const now = new Date();
+            const nowStr = typeof formatDateTime === 'function' ? formatDateTime(now) : now.toLocaleString('es-CL');
+            const openDateStr = openCash.openDate ? (typeof formatDateTime === 'function' ? formatDateTime(openCash.openDate) : openCash.openDate) : 'N/A';
+
+            const initialAmount = summary?.initialAmount || openCash?.initialAmount || 0;
+            const expectedCash = summary?.expectedCash || 0;
+            const cashSales = summary?.paymentSummary?.cash || 0;
+            const cardSales = summary?.paymentSummary?.card || 0;
+            const qrSales = summary?.paymentSummary?.qr || 0;
+            const otherSales = summary?.paymentSummary?.other || 0;
+            const totalSales = summary?.totalSalesAmount || (cashSales + cardSales + qrSales + otherSales);
+            const totalCashIn = summary?.totalCashIn || 0;
+            const totalRetiros = summary?.totalRetiros || 0;
+
+            const content = `
+                <div style="font-family: 'Outfit', -apple-system, sans-serif;">
+                    <div style="background: linear-gradient(135deg, #1e40af, #3b82f6); color: #fff; padding: 1.25rem 1.5rem; border-radius: 1rem; margin-bottom: 1.5rem; box-shadow: 0 4px 15px rgba(59,130,246,0.3);">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:0.5rem;">
+                            <div>
+                                <span style="font-size:0.75rem; text-transform:uppercase; letter-spacing:1.5px; opacity:0.85; font-weight:800;">Lectura Parcial En Vivo</span>
+                                <h3 style="margin:0.2rem 0 0; font-size:1.5rem; font-weight:900;">📊 CORTE X (Turno #${openCash.id})</h3>
+                            </div>
+                            <span style="background:rgba(255,255,255,0.2); padding:0.4rem 0.8rem; border-radius:2rem; font-size:0.8rem; font-weight:800;">🟢 CAJA ABIERTA</span>
+                        </div>
+                        <div style="margin-top:0.75rem; font-size:0.85rem; opacity:0.9; display:flex; gap:1.5rem; flex-wrap:wrap;">
+                            <span>👤 <strong>Responsable:</strong> ${userStr}</span>
+                            <span>⏱️ <strong>Apertura:</strong> ${openDateStr}</span>
+                            <span>📅 <strong>Corte a las:</strong> ${nowStr}</span>
+                        </div>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+                        <div style="background:#f8fafc; border:1.5px solid #e2e8f0; border-radius:0.85rem; padding:1rem; text-align:center;">
+                            <span style="font-size:0.75rem; font-weight:800; color:#64748b; text-transform:uppercase;">Fondo Inicial</span>
+                            <div style="font-size:1.4rem; font-weight:950; color:#0f172a; margin-top:0.25rem;">${formatCLP(initialAmount)}</div>
+                        </div>
+                        <div style="background:#ecfdf5; border:1.5px solid #a7f3d0; border-radius:0.85rem; padding:1rem; text-align:center;">
+                            <span style="font-size:0.75rem; font-weight:800; color:#059669; text-transform:uppercase;">Total Ventas Turno</span>
+                            <div style="font-size:1.4rem; font-weight:950; color:#059669; margin-top:0.25rem;">${formatCLP(totalSales)}</div>
+                        </div>
+                        <div style="background:#eff6ff; border:2px solid #3b82f6; border-radius:0.85rem; padding:1rem; text-align:center; box-shadow:0 4px 12px rgba(59,130,246,0.15);">
+                            <span style="font-size:0.75rem; font-weight:900; color:#1d4ed8; text-transform:uppercase;">💵 Efectivo Esperado en Gaveta</span>
+                            <div style="font-size:1.6rem; font-weight:950; color:#1d4ed8; margin-top:0.25rem;">${formatCLP(expectedCash)}</div>
+                        </div>
+                    </div>
+
+                    <div style="background:#ffffff; border:1.5px solid #e2e8f0; border-radius:1rem; padding:1.25rem; margin-bottom:1.5rem;">
+                        <h4 style="margin:0 0 1rem; font-size:0.95rem; font-weight:900; color:#334155; text-transform:uppercase; letter-spacing:0.5px;">
+                            💳 Desglose por Formas de Pago
+                        </h4>
+                        <div style="display:flex; flex-direction:column; gap:0.6rem;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0.75rem; background:#f8fafc; border-radius:0.6rem;">
+                                <span style="font-weight:700; color:#475569;">💵 Ventas en Efectivo:</span>
+                                <strong style="color:#0f172a; font-size:1.05rem;">${formatCLP(cashSales)}</strong>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0.75rem; background:#f8fafc; border-radius:0.6rem;">
+                                <span style="font-weight:700; color:#475569;">💳 Ventas con Tarjeta (Transbank/Banco):</span>
+                                <strong style="color:#0f172a; font-size:1.05rem;">${formatCLP(cardSales)}</strong>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0.75rem; background:#f8fafc; border-radius:0.6rem;">
+                                <span style="font-weight:700; color:#475569;">📱 Ventas QR:</span>
+                                <strong style="color:#0f172a; font-size:1.05rem;">${formatCLP(qrSales)}</strong>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0.75rem; background:#f8fafc; border-radius:0.6rem;">
+                                <span style="font-weight:700; color:#475569;">🏦 Transferencias / Otros:</span>
+                                <strong style="color:#0f172a; font-size:1.05rem;">${formatCLP(otherSales)}</strong>
+                            </div>
+                            ${(totalCashIn > 0 || totalRetiros > 0) ? `
+                            <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0.75rem; background:#fffbeb; border-radius:0.6rem; border:1px solid #fef3c7;">
+                                <span style="font-weight:700; color:#b45309;">➕ Ingresos (+${formatCLP(totalCashIn)}) / ➖ Retiros (-${formatCLP(totalRetiros)}):</span>
+                                <strong style="color:#b45309; font-size:1.05rem;">${formatCLP(totalCashIn - totalRetiros)}</strong>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+
+                    <p style="margin:0; font-size:0.8rem; color:#64748b; font-style:italic; text-align:center;">
+                        ℹ️ Este reporte es exclusivamente informativo. La caja continúa abierta y operando con normalidad.
+                    </p>
+                </div>
+            `;
+
+            const footer = `
+                <div style="display:flex; justify-content:space-between; width:100%; gap:1rem; flex-wrap:wrap;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()" style="border-radius:0.75rem; font-weight:800; padding:0.6rem 1.25rem;">
+                        ✕ Volver al Turno
+                    </button>
+                    <button type="button" class="btn btn-primary" onclick="CashView.downloadCorteXPDF(${openCash.id})" style="border-radius:0.75rem; font-weight:900; background:linear-gradient(135deg,#3b82f6,#1d4ed8); border:none; padding:0.6rem 1.5rem; display:flex; align-items:center; gap:0.5rem;">
+                        📄 Descargar PDF Corte X
+                    </button>
+                </div>
+            `;
+
+            showModal(content, { title: '📊 Resumen en Vivo — Corte X', footer, width: '560px' });
+        } catch (err) {
+            console.error('Error generando Corte X:', err);
+            showNotification(err.message || 'Error al generar Corte X', 'error');
+        }
+    },
+
+    async downloadCorteXPDF(cashRegisterId) {
+        try {
+            const openCash = cashRegisterId ? await CashRegister.getById(cashRegisterId) : await CashRegister.getOpen();
+            if (!openCash) {
+                showNotification('No se encontró la caja para emitir el PDF', 'error');
+                return;
+            }
+            const summary = await CashRegister.getSummary(openCash.id);
+            const userStr = (typeof AuthManager !== 'undefined' && AuthManager.getCurrentUserName)
+                ? AuthManager.getCurrentUserName()
+                : (localStorage.getItem('USER_NAME') || 'Cajero');
+
+            if (typeof CashReportPDF !== 'undefined' && CashReportPDF.generateReportX) {
+                await CashReportPDF.generateReportX(summary, openCash, userStr);
+                showNotification('📄 Corte X guardado exitosamente en PDF', 'success');
+            } else {
+                showNotification('Módulo PDF no disponible', 'warning');
+            }
+        } catch (e) {
+            console.error('Error al descargar PDF Corte X:', e);
+            showNotification(e.message || 'Error al generar PDF', 'error');
+        }
+    },
+
+    async showCloseCashForm() {
+        const openCash = await CashRegister.getOpen();
+        const summary = await CashRegister.getSummary(openCash.id);
+        const dailyBreakdown = await CashController.getDailySales(openCash.id);
+
+        // ponytail: Arqueo ciego estricto SOLO para cajeros. El Dueño (owner), socios y administradores tienen visibilidad total de los montos esperados
+        const userRole = (typeof AuthManager !== 'undefined' && AuthManager.getCurrentUserRole) 
+            ? AuthManager.getCurrentUserRole() 
+            : (localStorage.getItem('USER_ROLE') || 'cashier');
+        const isOwnerOrAdmin = ['owner', 'admin', 'partner'].includes(userRole);
+        const isBlindClose = !isOwnerOrAdmin && (userRole === 'cashier' || ((typeof PermissionService !== 'undefined') && PermissionService.roleHasPermission(userRole, 'cash.blind_close')));
+
+        // Desglose de 4 métodos de pago solicitados
+        const paymentMethods = ['cash', 'card', 'qr', 'other'];
+        const methodLabels = {
+            cash: 'Efectivo contado físico',
+            card: 'Depositos Tarjetas (Banco)',
+            qr: 'Pagos QR (Banco)',
+            other: 'Transferencias / Otros'
+        };
+
+        const expectedPayments = {
+            cash: summary.expectedCash || 0,
+            card: summary.paymentSummary?.card || 0,
+            qr: summary.paymentSummary?.qr || 0,
+            other: summary.paymentSummary?.other || 0
+        };
+
+        const expectedTotal = Object.values(expectedPayments).reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
+        const totalSalesAmount = summary.totalSalesAmount ?? dailyBreakdown.reduce((sum, day) => sum + (day.sales.total || 0), 0);
+
+        const methodRows = paymentMethods.map((method, index) => {
+            const nextMethod = index < paymentMethods.length - 1 ? paymentMethods[index + 1] : null;
+            const focusTarget = nextMethod ? `closeMethod-${nextMethod}` : 'btn-close-cash-final';
+            
+            return `
+                <div class="close-cash-method-card" id="card-${method}">
+                    <div class="method-info">
+                        <span class="method-label">${methodLabels[method]}</span>
+                        <div class="method-expected-box">
+                            <span class="label-mini">${isBlindClose ? 'CONTEO FÍSICO' : 'ESPERADO EN SISTEMA'}</span>
+                            <span class="value-expected" id="closeExpected-${method}">
+                                ${isBlindClose ? '<span style="color: #94a3b8; font-size: 0.85rem; font-style: italic;">🔒 Arqueo Ciego</span>' : formatCLP(expectedPayments[method])}
+                            </span>
+                        </div>
+                    </div>
+                    <div class="method-input-area">
+                        <div style="display: flex; gap: 0.4rem; align-items: stretch;">
+                            <input type="number"
+                                   id="closeMethod-${method}"
+                                   class="form-control close-cash-method-input"
+                                   min="0"
+                                   step="1"
+                                   placeholder="0"
+                                   required
+                                   onkeydown="if(event.key === 'Enter') { 
+                                       event.preventDefault(); 
+                                       const target = document.getElementById('${focusTarget}'); 
+                                       if(target) target.focus(); 
+                                   }"
+                                   style="flex: 1; font-size: 1.5rem; height: 3.5rem; text-align: center; border: 2px solid #cbd5e1; border-radius: 0.75rem; font-weight: 800;">
+                            <button type="button" class="btn" onclick="TouchNumpad.open(document.getElementById('closeMethod-${method}'), { title: 'Arqueo: ${methodLabels[method] || method}', mode: 'currency' })" title="Teclado Táctil" style="font-size: 1.35rem; padding: 0 0.9rem; border-radius: 0.75rem; border: 2px solid #cbd5e1; background: #f8fafc; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;">
+                                🔢
+                            </button>
+                            ${method === 'cash' ? `
+                            <button type="button" class="btn" onclick="CashView.openCalculatorModal('closeMethod-${method}')" title="Abrir Calculadora" style="font-size: 1.35rem; padding: 0 0.9rem; border-radius: 0.75rem; border: 2px solid #cbd5e1; background: #f1f5f9; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#e2e8f0';" onmouseout="this.style.background='#f1f5f9';">
+                                🧮
+                            </button>
+                            ` : ''}
+                        </div>
+                        <div class="method-diff-status" id="closeDifference-${method}">Ingresa monto</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const dailyList = dailyBreakdown.length > 0
+            ? dailyBreakdown.map(day => `
+                <div class="close-cash-day-row">
+                    <span>${day.date}</span>
+                    <strong style="color: #6366f1;">${formatCLP(day.sales.total)}</strong>
+                </div>
+            `).join('')
+            : '<div class="empty-state" style="padding:1rem;">No hay ventas registradas aún.</div>';
+
+        const content = `
+            <style>
+                .close-cash-modal-container { display: flex; gap: 1.5rem; background: #f8fafc; border-radius: 1.5rem; overflow: hidden; }
+                .close-cash-sidebar { flex: 1.1; background: #1e293b; color: white; padding: 1.5rem; border-radius: 1.5rem; display: flex; flex-direction: column; }
+                .close-cash-body { flex: 2; padding: 1.25rem; display: flex; flex-direction: column; gap: 1rem; }
+                
+                .close-cash-day-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 0.5rem; margin: 1rem 0; padding-right: 0.5rem; max-height: 200px; }
+                .close-cash-day-row { display: flex; justify-content: space-between; padding: 0.6rem 0.85rem; background: rgba(255,255,255,0.05); border-radius: 0.75rem; font-size: 0.9rem; }
+                .close-cash-day-total { padding: 1rem; background: #334155; border-radius: 1rem; display: flex; justify-content: space-between; align-items: center; border-left: 5px solid #6366f1; }
+                
+                .close-cash-method-card { background: white; border: 1.5px solid #e2e8f0; border-radius: 1rem; padding: 1rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; align-items: center; transition: all 0.2s; }
+                .close-cash-method-card:focus-within { border-color: #6366f1; box-shadow: 0 4px 20px rgba(99, 102, 241, 0.1); transform: scale(1.01); }
+                .method-label { display: block; font-weight: 800; color: #1e293b; margin-bottom: 0.35rem; }
+                .method-expected-box { background: #f1f5f9; padding: 0.4rem 0.75rem; border-radius: 0.5rem; }
+                .label-mini { display: block; font-size: 0.65rem; color: #64748b; font-weight: 900; letter-spacing: 0.5px; }
+                .value-expected { font-size: 1.1rem; font-weight: 800; color: #334155; }
+                
+                .method-diff-status { font-size: 0.82rem; font-weight: 700; text-align: center; margin-top: 0.35rem; padding: 3px; border-radius: 6px; }
+                .diff-cuadra { color: #059669; background: #ecfdf5; }
+                .diff-falta { color: #dc2626; background: #fef2f2; }
+                .diff-sobra { color: #2563eb; background: #eff6ff; }
+                
+                .close-cash-final-summary { background: #ffffff; border: 2.5px solid #1e293b; border-radius: 1rem; padding: 1rem 1.25rem; margin-top: 0.5rem; }
+                .total-main-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; padding-bottom: 0.75rem; border-bottom: 2px dashed #e2e8f0; }
+                .total-main-label { font-size: 0.95rem; font-weight: 900; color: #1e293b; }
+                .total-main-val { font-size: 1.8rem; font-weight: 950; color: #1e293b; }
+                
+                .final-status-banner { padding: 0.75rem; border-radius: 0.75rem; text-align: center; font-weight: 900; font-size: 1rem; }
+                .status-ok { background: #dcfce7; color: #166534; border: 2px solid #22c55e; }
+                .status-warning { background: #fee2e2; color: #991b1b; border: 2px solid #ef4444; }
+                .status-info { background: #dbeafe; color: #1e40af; border: 2px solid #3b82f6; }
+            </style>
+
+            <div class="close-cash-modal-container">
+                ${isBlindClose ? `
+                <div class="close-cash-sidebar">
+                    <h3 style="color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem;">Cierre de Turno</h3>
+                    <h2 style="font-size: 1.5rem; font-weight: 900; margin-bottom: 1rem;">Arqueo Ciego</h2>
+                    <div style="background: rgba(255,255,255,0.05); padding: 1.25rem; border-radius: 1rem; font-size: 0.85rem; line-height: 1.5; color: #cbd5e1; margin-bottom: 1.5rem;">
+                        <div style="font-size: 2.2rem; margin-bottom: 0.5rem; text-align: center;">🔒</div>
+                        <strong style="color: #ffffff; display: block; margin-bottom: 0.35rem; font-size: 0.95rem; text-align: center;">Arqueo Ciego Activo</strong>
+                        <p style="margin: 0; color: #94a3b8; font-size: 0.82rem; text-align: center;">
+                            Cuenta físicamente el efectivo y comprobantes de cada medio de pago e ingresa las cantidades exactas.
+                        </p>
+                    </div>
+                    <div style="margin-top: auto; font-size: 0.78rem; color: #94a3b8; text-align: center; line-height: 1.4;">
+                        🛡️ Los totales esperados y diferencias serán auditados automáticamente por el sistema al confirmar el cierre.
+                    </div>
+                </div>
+                ` : `
+                <div class="close-cash-sidebar">
+                    <h3 style="color: #94a3b8; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 1rem;">Cierre de Turno</h3>
+                    <h2 style="font-size: 1.5rem; font-weight: 900; margin-bottom: 1rem;">Resumen de Ventas Netas</h2>
+                    <div class="close-cash-day-list">
+                        ${dailyList}
+                    </div>
+                    <div class="close-cash-day-total" style="margin-bottom: 0.6rem;">
+                        <div>
+                            <span style="display:block; font-size: 0.75rem; opacity: 0.8; font-weight: 700;">TOTAL ACUMULADO</span>
+                            <strong>Ticket Total</strong>
+                        </div>
+                        <span style="font-size: 1.5rem; font-weight: 950;">${formatCLP(totalSalesAmount)}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0.75rem; background:rgba(239,68,68,0.15); border-radius:0.65rem; font-size:0.82rem; margin-bottom:0.4rem; cursor:pointer;" onclick="CashView.showShiftFiadosModal()" title="Ver detalle de clientes y compras al fiado">
+                        <span style="color:#fca5a5; font-weight:700;">📓 Fiados Otorgados 👁️</span>
+                        <strong style="color:#ef4444;">-${formatCLP(summary.sessionCreditSalesAmount || 0)}</strong>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; padding:0.5rem 0.75rem; background:rgba(16,185,129,0.15); border-radius:0.65rem; font-size:0.82rem; cursor:pointer;" onclick="CashView.showShiftAbonosModal()" title="Ver detalle de abonos recibidos de clientes">
+                        <span style="color:#86efac; font-weight:700;">🤝 Abonos Cobrados 👁️</span>
+                        <strong style="color:#10b981;">+${formatCLP(summary.totalDebtPayments || 0)}</strong>
+                    </div>
+                </div>
+                `}
+
+                <div class="close-cash-body">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <h2 style="margin:0; font-weight: 900; color: #1e293b; font-size: 1.3rem;">Cuadratura de Caja</h2>
+                        <span style="font-size: 0.8rem; color: #64748b; font-weight: 700;">PASO FINAL</span>
+                    </div>
+                    <p style="color: #64748b; margin-bottom: 0.5rem; font-size: 0.85rem; font-weight: 600;">
+                        ${isBlindClose ? 'Ingresa el conteo físico de dinero y comprobantes en tu gaveta.' : 'Compara los montos reales recibidos con lo reportado por el sistema.'}
+                    </p>
+
+                    ${isBlindClose ? `
+                    <div style="background: #1e293b; color: white; padding: 0.85rem 1.15rem; border-radius: 0.85rem; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.75rem; border-left: 4px solid #f59e0b;">
+                        <span style="font-size: 1.5rem;">🔒</span>
+                        <div>
+                            <strong style="font-size: 0.88rem; color: #f8fafc; display: block;">Modo Arqueo Ciego Activo</strong>
+                            <span style="font-size: 0.78rem; color: #94a3b8;">Por política de control de caja, ingresa los montos contados físicamente. Las diferencias se calcularán al guardar.</span>
+                        </div>
+                    </div>
+                    ` : `
+                    <div style="background: #1e293b; color: white; padding: 1rem; border-radius: 0.85rem; margin-bottom: 0.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                            <h4 style="margin: 0; font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 800;">📈 Rendimiento y Auditoría de este Turno</h4>
+                            <span style="font-size: 0.7rem; color: #cbd5e1;">Toca un botón con 👁️ para auditar</span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 0.5rem; text-align: center;">
+                            <div style="background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 0.5rem;">
+                                <span style="font-size: 0.62rem; color: #94a3b8; display: block; font-weight: 700; text-transform: uppercase; margin-bottom: 0.2rem;">Ventas Netas</span>
+                                <strong style="font-size: 0.92rem; color: #3b82f6; font-weight: 900;">${formatCLP(summary.totalSalesAmount - (summary.ivaDebito || 0))}</strong>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 0.5rem; cursor: pointer; transition: background 0.15s;" onclick="CashView.showShiftFiadosModal()" title="Ver fiados otorgados en el turno">
+                                <span style="font-size: 0.62rem; color: #fca5a5; display: block; font-weight: 700; text-transform: uppercase; margin-bottom: 0.2rem;">Fiados 👁️</span>
+                                <strong style="font-size: 0.92rem; color: #ef4444; font-weight: 900;">-${formatCLP(summary.sessionCreditSalesAmount || 0)}</strong>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 0.5rem; cursor: pointer; transition: background 0.15s;" onclick="CashView.showShiftAbonosModal()" title="Ver abonos cobrados en el turno">
+                                <span style="font-size: 0.62rem; color: #86efac; display: block; font-weight: 700; text-transform: uppercase; margin-bottom: 0.2rem;">Abonos 👁️</span>
+                                <strong style="font-size: 0.92rem; color: #10b981; font-weight: 900;">+${formatCLP(summary.totalDebtPayments || 0)}</strong>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 0.5rem; cursor: pointer; transition: background 0.15s;" onclick="CashView.showGastosModal()" title="Ver desglose de gastos">
+                                <span style="font-size: 0.62rem; color: #fca5a5; display: block; font-weight: 700; text-transform: uppercase; margin-bottom: 0.2rem;">Gastos 👁️</span>
+                                <strong style="font-size: 0.92rem; color: #ef4444; font-weight: 900;">-${formatCLP(summary.totalExpenses || 0)}</strong>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 0.5rem; cursor: pointer; transition: background 0.15s;" onclick="CashView.showConsumoModal()" title="Ver consumo casa">
+                                <span style="font-size: 0.62rem; color: #86efac; display: block; font-weight: 700; text-transform: uppercase; margin-bottom: 0.2rem;">Consumo 👁️</span>
+                                <strong style="font-size: 0.92rem; color: #10b981; font-weight: 900;">${formatCLP(summary.totalConsumoCost || 0)}</strong>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 0.5rem; cursor: pointer; transition: background 0.15s;" onclick="CashView.showPerdidasModal()" title="Ver mermas y pérdidas">
+                                <span style="font-size: 0.62rem; color: #fca5a5; display: block; font-weight: 700; text-transform: uppercase; margin-bottom: 0.2rem;">Pérdidas 👁️</span>
+                                <strong style="font-size: 0.92rem; color: #f87171; font-weight: 900;">-${formatCLP(summary.totalPerdidasCost || 0)}</strong>
+                            </div>
+                            <div style="background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 0.5rem; border: 1px solid rgba(16, 185, 129, 0.2);">
+                                <span style="font-size: 0.62rem; color: #10b981; display: block; font-weight: 800; text-transform: uppercase; margin-bottom: 0.2rem;">Ganancia Neta</span>
+                                <strong style="font-size: 0.92rem; color: #10b981; font-weight: 900;">${formatCLP(summary.netProfit || 0)}</strong>
+                            </div>
+                        </div>
+                    </div>
+                    `}
+                    
+                    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                        ${methodRows}
+                    </div>
+
+                    <div class="close-cash-final-summary">
+                        <div class="total-main-info">
+                            <div>
+                                <span class="total-main-label">EFECTIVO CONTADO REAL</span>
+                                <p style="margin:0; font-size: 0.75rem; color: #64748b; font-weight: 700;">Suma de todos los montos ingresados arriba</p>
+                            </div>
+                            <span class="total-main-val" id="closeCountedTotal">$0</span>
+                        </div>
+                        <div id="closeStatusBanner" class="final-status-banner status-info">Ingresa todos los montos para calcular</div>
+                    </div>
+                </div>
+            </div>
+
+            <form id="closeCashForm" onsubmit="event.preventDefault(); return false;">
+                <input type="hidden" id="finalAmount" name="finalAmount" value="0">
+            </form>
+        `;
+
+        const footer = `
+            <button type="button" class="btn btn-secondary" onclick="closeModal()" style="border-radius: 0.75rem; padding: 0.6rem 1.5rem; font-weight: 700;">Omitir por ahora</button>
+            <button type="button" id="btn-close-cash-final" class="btn btn-danger" onclick="CashView.confirmCloseCash(${openCash.id})" style="border-radius: 0.75rem; padding: 0.6rem 2.5rem; font-weight: 900; box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);">
+                FINALIZAR Y CERRAR CAJA 🔒
+            </button>
+        `;
+
+        showModal(content, { title: isBlindClose ? 'Cierre Definitivo de Caja (Arqueo Ciego)' : 'Cierre Definitivo de Caja', footer, width: '1080px' });
+
+        // Lógica de actualización de diferencias
+        setTimeout(() => {
+            const updateDifferences = () => {
+                const bannerEl = document.getElementById('closeStatusBanner');
+                const totalCountedEl = document.getElementById('closeCountedTotal');
+                const finalInput = document.getElementById('finalAmount');
+                const btnSubmit = document.getElementById('btn-close-cash-final');
+
+                let allFilled = true;
+                const countedTotals = paymentMethods.reduce((acc, method) => {
+                    const input = document.getElementById(`closeMethod-${method}`);
+                    if (input.value === "") allFilled = false;
+                    const value = parseFloat(input?.value) || 0;
+                    acc[method] = value;
+                    return acc;
+                }, {});
+
+                const countedTotal = paymentMethods.reduce((sum, method) => sum + countedTotals[method], 0);
+                const totalDifference = paymentMethods.reduce((sum, method) => {
+                    return sum + (countedTotals[method] - (expectedPayments[method] || 0));
+                }, 0);
+
+                if (finalInput) finalInput.value = countedTotals['cash']; // El efectivo físico es lo que va al DB
+                if (totalCountedEl) totalCountedEl.textContent = formatCLP(countedTotal);
+
+                paymentMethods.forEach(method => {
+                    const diffEl = document.getElementById(`closeDifference-${method}`);
+                    const val = document.getElementById(`closeMethod-${method}`).value;
+                    if (val === "") {
+                        diffEl.textContent = "Pendiente...";
+                        diffEl.className = "method-diff-status";
+                        return;
+                    }
+
+                    if (isBlindClose) {
+                        diffEl.textContent = "✓ Conteo ingresado";
+                        diffEl.className = "method-diff-status diff-cuadra";
+                        return;
+                    }
+
+                    const diff = countedTotals[method] - (expectedPayments[method] || 0);
+                    if (diff === 0) {
+                        diffEl.textContent = "✅ CUADRA EXACTO";
+                        diffEl.className = "method-diff-status diff-cuadra";
+                    } else if (diff > 0) {
+                        diffEl.textContent = `📈 SOBRANTE: ${formatCLP(diff)}`;
+                        diffEl.className = "method-diff-status diff-sobra";
+                    } else {
+                        diffEl.textContent = `📉 FALTANTE: ${formatCLP(Math.abs(diff))}`;
+                        diffEl.className = "method-diff-status diff-falta";
+                    }
+                });
+
+                if (!allFilled) {
+                    bannerEl.textContent = "⚠️ COMPLETA TODOS LOS CAMPOS PARA CERRAR";
+                    bannerEl.className = "final-status-banner status-warning";
+                    btnSubmit.disabled = true;
+                    btnSubmit.style.opacity = "0.5";
+                } else {
+                    btnSubmit.disabled = false;
+                    btnSubmit.style.opacity = "1";
+                    if (isBlindClose) {
+                        bannerEl.textContent = "🔒 CONTEO LISTO PARA CONFIRMAR CIERRE";
+                        bannerEl.className = "final-status-banner status-info";
+                    } else if (totalDifference === 0) {
+                        bannerEl.textContent = "🏁 TODO CUADRA PERFECTO. ¡BUEN TRABAJO!";
+                        bannerEl.className = "final-status-banner status-ok";
+                    } else if (totalDifference > 0) {
+                        bannerEl.textContent = `💰 TIENES UN SOBRANTE TOTAL DE ${formatCLP(totalDifference)}`;
+                        bannerEl.className = "final-status-banner status-info";
+                    } else {
+                        bannerEl.textContent = `🚨 TIENES UN FALTANTE TOTAL DE ${formatCLP(Math.abs(totalDifference))}`;
+                        bannerEl.className = "final-status-banner status-warning";
+                    }
+                }
+            };
+
+            paymentMethods.forEach(method => {
+                const input = document.getElementById(`closeMethod-${method}`);
+                input?.addEventListener('input', updateDifferences);
+            });
+
+            // Foco inicial
+            document.getElementById('closeMethod-cash').focus();
+            updateDifferences();
+        }, 100);
+    },
+
+    async confirmCloseCash(id) {
+        const btn = document.getElementById('btn-close-cash-final');
+        if (btn) {
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            btn.innerText = 'CERRANDO...';
+        }
+
+        const finalAmount = parseFloat(document.getElementById('finalAmount').value);
+
+        // ponytail: guardamos el conteo de los 4 métodos para que el reporte pueda
+        // comparar esperado vs contado; antes solo se persistía el efectivo.
+        const countedByMethod = ['cash', 'card', 'qr', 'other'].reduce((acc, method) => {
+            acc[method] = parseFloat(document.getElementById(`closeMethod-${method}`)?.value) || 0;
+            return acc;
+        }, {});
+        
+        // Validación de confirmación explícita solicitada
+        const result = await showConfirm(
+            'Una vez cerrada, no podrás registrar más ventas en este turno sin abrir una nueva caja.',
+            '¿Confirmas el cierre de caja?',
+            'Sí, Cerrar Caja Definitivamente',
+            'No, Seguir Revisando'
+        );
+
+        if (result) {
+            try {
+                const summary = await CashController.closeCash(id, finalAmount, countedByMethod);
+
+                // Generación y guardado automático de Reporte Z PDF en Escritorio
+                try {
+                    const closedReg = await CashRegister.getById(id);
+                    const userStr = await this.getCashierName(closedReg);
+                    const pdfRes = await CashReportPDF.generateAndSave(summary, closedReg, userStr);
+                    if (pdfRes && pdfRes.success && pdfRes.isNative) {
+                        showNotification(`📄 Reporte Z guardado en Escritorio (${pdfRes.path})`, 'success');
+                    }
+                } catch (pdfErr) {
+                    console.warn("No se pudo guardar el PDF de cierre en Escritorio:", pdfErr);
+                }
+
+                // Cerrar el modal de resumen de cierre
+                closeModal();
+
+                showNotification('¡Caja cerrada exitosamente!', 'success');
+
+                // Respaldo automático en Supabase tras Cierre Z si el plan lo permite (PC PRO o FULL PRO)
+                if (typeof SyncService !== 'undefined' && typeof LicenseService !== 'undefined' && LicenseService.canBackup()) {
+                    SyncService.triggerShiftChangeBackup('Cierre de Caja / Corte Z').catch(() => {});
+                }
+
+                // ponytail: la caja ya está cerrada en la BD; refrescamos la vista antes de
+                // cualquier paso opcional para que la pantalla nunca quede mostrando caja abierta.
+                await app.navigate('cash');
+
+                try {
+                    await CashView.showShareReportModal(id, summary);
+                } catch (shareError) {
+                    console.error('Error al mostrar el reporte de cierre:', shareError);
+                    showNotification('Caja cerrada, pero no se pudo abrir el reporte para compartir.', 'warning');
+                }
+            } catch (error) {
+                // Si la caja ya está cerrada, significa que el proceso terminó con éxito previamente
+                if (error.message.includes('ya está cerrada')) {
+                    closeModal();
+                    showNotification('La caja ya se encontraba cerrada.', 'info');
+                    app.navigate('cash');
+                } else {
+                    showNotification(error.message, 'error');
+                    // Restaurar botón si hay un error real (ej: red, bd)
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.style.opacity = '1';
+                        btn.innerText = 'FINALIZAR Y CERRAR CAJA 🔒';
+                    }
+                }
+            }
+        } else {
+            // El usuario canceló la confirmación, restauramos el botón
+            if (btn) {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.innerText = 'FINALIZAR Y CERRAR CAJA 🔒';
+            }
+        }
+    },
+
+    async showShareReportModal(registerId, summary) {
+        const register = await db.get('cashRegisters', registerId) || {};
+
+        // ponytail: guardamos el resumen en memoria en vez de serializarlo dentro de
+        // atributos onclick (el JSON incrustado rompía el HTML del modal).
+        this._lastCloseSummary = summary;
+        
+        const phoneKey = 'share_report_whatsapp_phone';
+        const tgTokenKey = 'share_report_telegram_token';
+        const tgChatIdKey = 'share_report_telegram_chat_id';
+        
+        const savedPhone = localStorage.getItem(phoneKey) || '';
+        const savedToken = localStorage.getItem(tgTokenKey) || '';
+        const savedChatId = localStorage.getItem(tgChatIdKey) || '';
+        
+        const content = `
+            <div style="padding: 1rem 0;">
+                <p style="margin-bottom: 1.25rem; font-size: 1rem; color: #475569; line-height: 1.5; font-weight: 500;">
+                    La caja ha sido cerrada con éxito. Elige una de las siguientes opciones para compartir el reporte de cierre diario con el administrador o dueño del negocio:
+                </p>
+                
+                <!-- SECCIÓN WHATSAPP -->
+                <div style="background: rgba(34, 197, 94, 0.03); border: 1.5px solid #22c55e; border-radius: 1rem; padding: 1.25rem; margin-bottom: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                    <h4 style="margin: 0; color: #166534; display: flex; align-items: center; gap: 0.5rem; font-size: 1.05rem; font-weight: 800;">
+                        <span>📱</span> Compartir por WhatsApp Web
+                    </h4>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <input type="text" id="sharePhone" class="form-control" placeholder="Ej: 56912345678" value="${savedPhone}" style="flex: 1;" />
+                        <button class="btn btn-success" onclick="CashView.shareWhatsApp(${registerId})" style="border-radius: 0.75rem; font-weight: 700; white-space: nowrap; display: flex; align-items: center; gap: 0.35rem;">
+                            <span>🚀</span> Enviar WhatsApp
+                        </button>
+                    </div>
+                    <button class="btn" onclick="CashView.copyReportToClipboard(${registerId})" style="background: #f1f5f9; color: #334155; border: 1.5px solid #cbd5e1; border-radius: 0.75rem; font-weight: 700; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.5rem 0;">
+                        <span>📋</span> Copiar Reporte al Portapapeles (Pegar donde quieras)
+                    </button>
+                    <small style="color: #166534; opacity: 0.8; margin-top: -0.25rem; font-size: 0.75rem; font-weight: 500;">Ingresa el número con código de país (ej: 569 para Chile, sin el signo +).</small>
+                </div>
+                
+                <!-- SECCIÓN REPORTE PDF "Z" -->
+                <div style="background: rgba(139, 92, 246, 0.04); border: 1.5px solid #8b5cf6; border-radius: 1rem; padding: 1.25rem; margin-bottom: 0.5rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                    <h4 style="margin: 0; color: #6d28d9; display: flex; align-items: center; gap: 0.5rem; font-size: 1.05rem; font-weight: 800;">
+                        <span>📄</span> Reporte Z en PDF (Escritorio)
+                    </h4>
+                    <p style="margin: 0; font-size: 0.85rem; color: #4c1d95; font-weight: 600;">
+                        Guarda o vuelve a descargar el reporte oficial del turno en PDF dentro de tu carpeta <strong>Escritorio/registros e historial de arqueo de cajas</strong>.
+                    </p>
+                    <button class="btn" style="background: #7c3aed; color: white; border-radius: 0.75rem; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 0.35rem; padding: 0.6rem 0;" onclick="CashView.downloadPdfReport(${registerId})">
+                        <span>📥</span> Descargar / Guardar PDF del Cierre Z
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        const footer = `
+            <button class="btn btn-secondary" onclick="closeModal(); app.navigate('cash');" style="border-radius: 0.75rem; padding: 0.75rem 2rem; font-weight: 700; width: 100%;">
+                🏁 Finalizar y Salir
+            </button>
+        `;
+        
+        showModal(content, { title: 'Compartir Reporte Diario', footer, width: '550px' });
+    },
+
+    async getCashierName(register) {
+        const userId = register.userId || register.openedBy;
+        if (!userId) return 'Cajero';
+        try {
+            const user = await User.getById(userId);
+            return (user && user.username) ? user.username : 'Cajero';
+        } catch (e) {
+            return 'Cajero';
+        }
+    },
+
+    async getShareReportMessage(summary, register) {
+        // ponytail: Telegram usa Markdown; quitamos los caracteres que rompen el envío
+        // en vez de mantener dos plantillas distintas.
+        const clean = (text) => String(text || '').replace(/[*_`\[\]]/g, '');
+
+        const businessName = clean(localStorage.getItem('business_name') || 'Mi Almacén');
+        const username = clean(await this.getCashierName(register));
+        const fmtDate = (value) => value ? new Date(value).toLocaleString('es-CL') : '-';
+
+        const methods = ['cash', 'card', 'qr', 'other'];
+        const labels = {
+            cash: 'Efectivo',
+            card: 'Tarjetas',
+            qr: 'Pagos QR',
+            other: 'Transferencias/Otros'
+        };
+        const paymentSummary = summary.paymentSummary || {};
+        // El efectivo esperado incluye el fondo inicial, los otros métodos no
+        const expected = {
+            cash: summary.expectedCash || 0,
+            card: paymentSummary.card || 0,
+            qr: paymentSummary.qr || 0,
+            other: paymentSummary.other || 0
+        };
+        const counted = summary.countedByMethod || register.countedByMethod || { cash: summary.finalAmount || 0 };
+
+        const diffLabel = (value) => value === 0
+            ? '✅ cuadra'
+            : (value > 0 ? `📈 sobra ${formatCLP(value)}` : `📉 falta ${formatCLP(Math.abs(value))}`);
+
+        let totalExpected = 0;
+        let totalCounted = 0;
+        const methodLines = methods.map(method => {
+            const exp = parseFloat(expected[method]) || 0;
+            const cnt = parseFloat(counted[method]) || 0;
+            totalExpected += exp;
+            totalCounted += cnt;
+            return `🔹 ${labels[method]}\n` +
+                   `   Sistema: ${formatCLP(exp)} | Contado: ${formatCLP(cnt)}\n` +
+                   `   ${diffLabel(cnt - exp)}`;
+        }).join('\n');
+
+        const totalDiff = totalCounted - totalExpected;
+        const cashDiff = summary.difference !== undefined
+            ? summary.difference
+            : ((parseFloat(counted.cash) || 0) - (expected.cash || 0));
+
+        return `📊 *CIERRE DE CAJA N° ${register.id || summary.id || '-'}*\n` +
+               `🏪 ${businessName}\n` +
+               `👤 Cajero: ${username}\n` +
+               `🕒 Apertura: ${fmtDate(register.openDate || summary.openDate)}\n` +
+               `🕒 Cierre: ${fmtDate(register.closeDate || summary.closeDate)}\n` +
+               `----------------------------------\n` +
+               `*MOVIMIENTO DEL TURNO*\n` +
+               `💵 Fondo inicial: ${formatCLP(summary.initialAmount || 0)}\n` +
+               `🧾 Ventas (${summary.totalSales || 0}): ${formatCLP(summary.totalSalesAmount || 0)}\n` +
+               `🤝 Pagos de deudas: ${formatCLP(summary.totalDebtPayments || 0)}\n` +
+               `➕ Ingresos a caja: ${formatCLP(summary.totalCashIn || 0)}\n` +
+               `➖ Retiros de caja: ${formatCLP(summary.totalRetiros || 0)}\n` +
+               `----------------------------------\n` +
+               `*CUADRATURA POR MÉTODO*\n${methodLines}\n` +
+               `----------------------------------\n` +
+               `💰 Total sistema: ${formatCLP(totalExpected)}\n` +
+               `📥 Total contado: ${formatCLP(totalCounted)}\n` +
+               `📢 *Diferencia total: ${diffLabel(totalDiff)}*\n` +
+               `💵 Solo efectivo: ${diffLabel(cashDiff)}\n` +
+               `----------------------------------\n` +
+               `*RESULTADO*\n` +
+               `📈 Ganancia bruta: ${formatCLP(summary.grossProfit || 0)}\n` +
+               `💸 Gastos del turno: ${formatCLP(summary.totalExpenses || 0)}\n` +
+               `💎 Ganancia neta: ${formatCLP(summary.netProfit || 0)}\n` +
+               `----------------------------------\n` +
+               `⚡ CajaFácil POS`;
+    },
+
+    async shareWhatsApp(registerId, summary = this._lastCloseSummary || {}) {
+        const phone = document.getElementById('sharePhone').value.trim().replace(/\+/g, '');
+        if (!phone) {
+            showNotification('Ingresa un número de celular de destino', 'warning');
+            return;
+        }
+        
+        localStorage.setItem('share_report_whatsapp_phone', phone);
+        
+        const register = await db.get('cashRegisters', registerId) || {};
+        const message = await this.getShareReportMessage(summary, register);
+        const encodedText = encodeURIComponent(message);
+        
+        // Redirigir directamente a la versión Web de WhatsApp en el navegador (no requiere app instalada)
+        const url = `https://web.whatsapp.com/send?phone=${phone}&text=${encodedText}`;
+        window.open(url, '_blank');
+        showNotification('Abriendo WhatsApp Web en tu navegador...', 'success');
+    },
+
+    async copyReportToClipboard(registerId, summary = this._lastCloseSummary || {}) {
+        try {
+            const register = await db.get('cashRegisters', registerId) || {};
+            const message = await this.getShareReportMessage(summary, register);
+            
+            await navigator.clipboard.writeText(message);
+            showNotification('Reporte copiado al portapapeles. ¡Ya puedes pegarlo donde quieras!', 'success');
+        } catch (err) {
+            console.error('Error al copiar reporte:', err);
+            showNotification('No se pudo copiar el reporte. Inténtalo de nuevo.', 'error');
+        }
+    },
+    
+    async shareTelegram(registerId, summary = this._lastCloseSummary || {}) {
+        const token = document.getElementById('shareTgToken').value.trim();
+        const chatId = document.getElementById('shareTgChatId').value.trim();
+        
+        if (!token || !chatId) {
+            showNotification('Token y Chat ID son requeridos para Telegram', 'warning');
+            return;
+        }
+        
+        localStorage.setItem('share_report_telegram_token', token);
+        localStorage.setItem('share_report_telegram_chat_id', chatId);
+        
+        const register = await db.get('cashRegisters', registerId) || {};
+        const message = await this.getShareReportMessage(summary, register);
+        
+        try {
+            const url = `https://api.telegram.org/bot${token}/sendMessage`;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    text: message,
+                    parse_mode: 'Markdown'
+                })
+            });
+            
+            const data = await response.json();
+            if (data.ok) {
+                showNotification('¡Reporte enviado exitosamente a Telegram! ✈️', 'success');
+            } else {
+                throw new Error(data.description || 'Error desconocido del servidor de Telegram');
+            }
+        } catch (error) {
+            console.error('Telegram share error:', error);
+            showNotification('Error al enviar a Telegram: ' + error.message, 'error');
+        }
+    },
+
+    setPresetAmount(inputId, val) {
+        const el = document.getElementById(inputId);
+        if (el) {
+            el.value = val;
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.focus();
+        }
+    },
+
+    async showAddCashForm() {
+        const content = `
+            <form id="addCashForm" onsubmit="event.preventDefault(); CashView.addCash(); return false;">
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label style="font-weight: 800; font-size: 0.85rem; color: #334155;">Monto a Agregar (CLP) *</label>
+                    <div style="display: flex; gap: 0.5rem; align-items: stretch;">
+                        <input type="number" 
+                               id="addAmount" 
+                               class="form-control" 
+                               placeholder="0" 
+                               min="1" 
+                               step="1"
+                               required 
+                               autofocus
+                               style="font-size: 1.6rem; height: 3.8rem; font-weight: 950; text-align: center; border: 2px solid #cbd5e1; border-radius: 0.75rem; flex: 1;">
+                        <button type="button" class="btn" onclick="TouchNumpad.open(document.getElementById('addAmount'), { title: 'Monto a Agregar', mode: 'currency' })" title="Teclado numérico táctil" style="font-size: 1.35rem; padding: 0 1rem; border-radius: 0.75rem; border: 2px solid #cbd5e1; background: #f8fafc; cursor: pointer;">🔢</button>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 1.25rem;">
+                    <span style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Botones Rápidos de Efectivo:</span>
+                    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.4rem;">
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('addAmount', 2000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">+$2.000</button>
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('addAmount', 5000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">+$5.000</button>
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('addAmount', 10000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">+$10.000</button>
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('addAmount', 20000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">+$20.000</button>
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('addAmount', 50000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">+$50.000</button>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label style="font-weight: 800; font-size: 0.85rem; color: #334155;">Motivo o Concepto</label>
+                    <textarea id="addReason" 
+                              class="form-control" 
+                              rows="2" 
+                              placeholder="Ej: Reposición de sencillo, monedas para dar vuelto, etc."></textarea>
+                </div>
+            </form>
+        `;
+
+        const footer = `
+            <button type="button" class="btn btn-secondary" onclick="closeModal()" style="border-radius:0.75rem; font-weight:700;">Cancelar</button>
+            <button type="button" class="btn btn-success" onclick="CashView.addCash()" style="border-radius:0.75rem; font-weight:900; padding:0.6rem 1.5rem;">
+                ➕ Agregar Dinero a Caja
+            </button>
+        `;
+
+        showModal(content, { title: '➕ Ingreso de Dinero a la Caja', footer, width: '500px' });
+    },
+
+    async showWithdrawCashForm() {
+        const openCash = await CashRegister.getOpen();
+        const summary = await CashRegister.getSummary(openCash.id);
+
+        const content = `
+            <div style="margin-bottom: 1.25rem; padding: 1rem 1.25rem; background: #ecfdf5; border: 1.5px solid #a7f3d0; border-radius: 0.85rem; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <span style="font-size: 0.75rem; font-weight: 800; color: #059669; text-transform: uppercase;">Efectivo Físico Disponible</span>
+                    <div style="font-size: 1.5rem; font-weight: 950; color: #059669;">${formatCLP(summary.expectedCash)}</div>
+                </div>
+                <span style="font-size: 2rem;">💵</span>
+            </div>
+            
+            <form id="withdrawCashForm" onsubmit="event.preventDefault(); CashView.withdrawCash(); return false;">
+                <div class="form-group" style="margin-bottom: 1.25rem;">
+                    <label style="font-weight: 800; font-size: 0.85rem; color: #334155;">Monto a Retirar (CLP) *</label>
+                    <div style="display: flex; gap: 0.5rem; align-items: stretch;">
+                        <input type="number" 
+                               id="withdrawAmount" 
+                               class="form-control" 
+                               placeholder="0" 
+                               min="1" 
+                               step="1" 
+                               max="${summary.expectedCash}"
+                               required 
+                               autofocus
+                               style="font-size: 1.6rem; height: 3.8rem; font-weight: 950; text-align: center; border: 2px solid #cbd5e1; border-radius: 0.75rem; flex: 1;">
+                        <button type="button" class="btn" onclick="TouchNumpad.open(document.getElementById('withdrawAmount'), { title: 'Monto a Retirar', mode: 'currency' })" title="Teclado numérico táctil" style="font-size: 1.35rem; padding: 0 1rem; border-radius: 0.75rem; border: 2px solid #cbd5e1; background: #f8fafc; cursor: pointer;">🔢</button>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 1.25rem;">
+                    <span style="font-size: 0.75rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Montos Sugeridos:</span>
+                    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.4rem;">
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('withdrawAmount', 10000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">$10.000</button>
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('withdrawAmount', 20000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">$20.000</button>
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('withdrawAmount', 50000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">$50.000</button>
+                        <button type="button" class="btn btn-sm" onclick="CashView.setPresetAmount('withdrawAmount', 100000)" style="background:#f1f5f9; font-weight:800; border:1px solid #cbd5e1;">$100.000</button>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label style="font-weight: 800; font-size: 0.85rem; color: #334155;">Motivo o Destino del Dinero</label>
+                    <textarea id="withdrawReason" 
+                              class="form-control" 
+                              rows="2" 
+                              placeholder="Ej: Retiro personal, compra urgente de insumos, etc."></textarea>
+                </div>
+            </form>
+        `;
+
+        const footer = `
+            <button type="button" class="btn btn-secondary" onclick="closeModal()" style="border-radius:0.75rem; font-weight:700;">Cancelar</button>
+            <button type="button" class="btn btn-warning" onclick="CashView.withdrawCash()" style="border-radius:0.75rem; font-weight:900; padding:0.6rem 1.5rem;">
+                ➖ Confirmar Retiro
+            </button>
+        `;
+
+        showModal(content, { title: '➖ Retiro de Dinero de la Caja', footer, width: '500px' });
+    },
+
+    async addCash() {
+        const amount = parseFloat(document.getElementById('addAmount').value);
+        const reason = document.getElementById('addReason').value.trim();
+
+        if (!amount || amount <= 0) {
+            showNotification('El monto debe ser mayor a 0', 'error');
+            return;
+        }
+
+        try {
+            await CashController.addCash(amount, reason);
+            closeModal();
+            await app.navigate('cash');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    },
+
+    async withdrawCash() {
+        const amount = parseFloat(document.getElementById('withdrawAmount').value);
+        const reason = document.getElementById('withdrawReason').value.trim();
+
+        if (!amount || amount <= 0) {
+            showNotification('El monto debe ser mayor a 0', 'error');
+            return;
+        }
+
+        try {
+            await CashController.withdrawCash(amount, reason);
+            closeModal();
+            await app.navigate('cash');
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    },
+
+    async editClosedCash(id) {
+        try {
+            const register = await CashRegister.getById(id);
+            if (!register) throw new Error('Caja no encontrada');
+            const summary = await CashRegister.getSummary(id);
+            const dailyBreakdown = await CashController.getDailySales(id);
+
+            const paymentMethods = ['cash', 'card_qr', 'other'];
+            const methodLabels = {
+                cash: 'Efectivo esperado',
+                card_qr: 'Tarjetas y QR esperados',
+                other: 'Transferencia / Otro esperado'
+            };
+
+            const expectedPayments = {
+                cash: summary.expectedCash || 0,
+                card_qr: (summary.paymentSummary?.card || 0) + (summary.paymentSummary?.qr || 0),
+                other: summary.paymentSummary?.other || 0
+            };
+
+            const expectedTotal = Object.values(expectedPayments).reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
+            
+            // Reconstruir montos contados anteriormente si es posible
+            // Si no tenemos el desglose, el finalAmount original es lo que pusimos en Cash
+            const lastCounted = {
+                cash: register.finalAmount || 0,
+                card_qr: expectedPayments.card_qr, // Asumimos que cuadraba si no tenemos el dato
+                other: expectedPayments.other
+            };
+
+            const methodRows = paymentMethods.map((method, index) => {
+                const isLast = index === paymentMethods.length - 1;
+                const nextMethod = isLast ? null : paymentMethods[index + 1];
+                
+                return `
+                    <div class="close-cash-method-row">
+                        <span class="close-cash-method-label">${methodLabels[method]}</span>
+                        <span class="close-cash-method-expected" id="editExpected-${method}">${formatCLP(expectedPayments[method])}</span>
+                        <input type="number"
+                               id="editMethod-${method}"
+                               class="form-control close-cash-method-input"
+                               min="0"
+                               step="1"
+                               placeholder="0"
+                               value="${lastCounted[method] || 0}"
+                               onkeydown="if(event.key === 'Enter') { 
+                                   event.preventDefault(); 
+                                   event.stopPropagation();
+                                   const next = document.getElementById('editMethod-${nextMethod}'); 
+                                   if(next) next.focus(); 
+                                   else document.querySelector('.btn-save-edit-final').focus();
+                               }"
+                               title="Ingrese el monto real contado para ${methodLabels[method]}">
+                        <span class="close-cash-method-diff" id="editDifference-${method}"></span>
+                    </div>
+                `;
+            }).join('');
+
+            const content = `
+                <div class="close-cash-grid">
+                    <div class="close-cash-reconcile" style="width: 100%;">
+                        <h4>Editar Cuadratura - Caja #${id}</h4>
+                        <p class="close-cash-reconcile-hint">Modifique los montos contados para corregir errores de ingreso.</p>
+                        ${methodRows}
+                        <div class="close-cash-method-row close-cash-total-row">
+                            <span class="close-cash-method-label"><strong>Total</strong></span>
+                            <span class="close-cash-method-expected" id="editExpectedTotal"><strong>${formatCLP(expectedTotal)}</strong></span>
+                            <span class="close-cash-method-total-counted" id="editCountedTotal" style="font-weight: bold; text-align: right; padding-right: 1.5rem;">${formatCLP(Object.values(lastCounted).reduce((a, b) => a + b, 0))}</span>
+                            <span class="close-cash-method-diff" id="editDifferenceTotal"></span>
+                        </div>
+                        <div class="close-cash-difference-summary" id="editCashDifferenceSummary"></div>
+                    </div>
+                </div>
+                <input type="hidden" id="editFinalAmount" value="${lastCounted.cash}">
+            `;
+
+            const footer = `
+                <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+                <button type="button" class="btn btn-warning btn-save-edit-final" onclick="CashView.updateClosedCash(${id})">Guardar Cambios</button>
+            `;
+
+            showModal(content, { title: 'Editar Cierre de Caja', footer, width: '600px' });
+
+            setTimeout(() => {
+                const updateEditDifferences = () => {
+                    const listEl = document.getElementById('editCashDifferenceSummary');
+                    const totalDiffEl = document.getElementById('editDifferenceTotal');
+                    const finalInput = document.getElementById('editFinalAmount');
+                    
+                    const countedTotals = paymentMethods.reduce((acc, method) => {
+                        const input = document.getElementById(`editMethod-${method}`);
+                        acc[method] = parseFloat(input?.value) || 0;
+                        return acc;
+                    }, {});
+
+                    const countedTotal = paymentMethods.reduce((sum, method) => sum + countedTotals[method], 0);
+                    const totalDifference = paymentMethods.reduce((sum, method) => sum + (countedTotals[method] - (expectedPayments[method] || 0)), 0);
+                    
+                    if (finalInput) finalInput.value = countedTotals['cash'];
+                    const countedTotalEl = document.getElementById('editCountedTotal');
+                    if (countedTotalEl) countedTotalEl.textContent = formatCLP(countedTotal);
+
+                    paymentMethods.forEach(method => {
+                        const diffEl = document.getElementById(`editDifference-${method}`);
+                        const diff = countedTotals[method] - (expectedPayments[method] || 0);
+                        if (diffEl) {
+                            if (diff === 0) {
+                                diffEl.textContent = 'Cuadra';
+                                diffEl.classList.remove('text-success', 'text-danger');
+                            } else {
+                                const label = diff > 0 ? 'Sobrante' : 'Faltante';
+                                diffEl.textContent = `${label} ${formatCLP(Math.abs(diff))}`;
+                                diffEl.classList.toggle('text-success', diff > 0);
+                                diffEl.classList.toggle('text-danger', diff < 0);
+                            }
+                        }
+                    });
+
+                    if (totalDiffEl) {
+                        const label = totalDifference === 0 ? 'Cuadra perfecto' : (totalDifference > 0 ? 'Sobrante' : 'Faltante');
+                        totalDiffEl.textContent = totalDifference === 0 ? label : `${label}: ${formatCLP(Math.abs(totalDifference))}`;
+                        totalDiffEl.classList.toggle('text-success', totalDifference > 0);
+                        totalDiffEl.classList.toggle('text-danger', totalDifference < 0);
+                    }
+
+                    if (listEl) {
+                        listEl.innerHTML = totalDifference === 0 
+                            ? `<div class="close-cash-difference-success">Cuadra perfecto • Total contado: ${formatCLP(countedTotal)}</div>`
+                            : `<div class="close-cash-difference-alert"><strong>${totalDifference > 0 ? 'Sobrante' : 'Faltante'} total: ${formatCLP(Math.abs(totalDifference))}</strong></div>`;
+                    }
+                };
+
+                paymentMethods.forEach(method => {
+                    document.getElementById(`editMethod-${method}`)?.addEventListener('input', updateEditDifferences);
+                });
+                updateEditDifferences();
+            }, 0);
+
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    },
+
+    async updateClosedCash(id) {
+        const finalAmount = parseFloat(document.getElementById('editFinalAmount').value);
+        
+        try {
+            const register = await CashRegister.getById(id);
+            const summary = await CashRegister.getSummary(id);
+            
+            // Recalcular diferencia
+            const difference = finalAmount - summary.expectedCash;
+            
+            const updated = {
+                ...register,
+                finalAmount: finalAmount,
+                difference: difference,
+                updatedAt: new Date().toISOString()
+            };
+            
+            await CashRegister._repository.replace(updated);
+            showNotification('Registro de caja actualizado correctamente', 'success');
+            closeModal();
+            // Recargar el historial si el modal de historial está abierto
+            if (document.querySelector('.cash-history-modal')) {
+                this.showAllCashRegistersHistory();
+            } else {
+                app.navigate('cash');
+            }
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
+    },
+
+    showExpenseForm() {
+        const content = `
+            <div style="padding: 1.5rem;">
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Descripción del Gasto</label>
+                    <input type="text" id="expenseDescription" class="form-control" placeholder="Ej: Luz, Agua, Suministros..." style="font-size: 1rem; padding: 0.75rem;">
+                </div>
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Monto</label>
+                    <div style="display: flex; gap: 0.5rem; align-items: stretch;">
+                        <input type="number" id="expenseAmount" class="form-control" placeholder="0" min="0" style="font-size: 1.1rem; padding: 0.75rem; flex: 1;">
+                        <button type="button" class="btn" onclick="TouchNumpad.open(document.getElementById('expenseAmount'), { title: 'Monto del Gasto', mode: 'currency' })" title="Teclado numérico táctil" style="font-size: 1.25rem; padding: 0 1rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1; background: #f8fafc; cursor: pointer;">🔢</button>
+                    </div>
+                </div>
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Categoría</label>
+                    <select id="expenseCategory" class="form-control" style="font-size: 1rem; padding: 0.75rem;">
+                        <option value="servicios">Servicios (Luz, Agua, Internet)</option>
+                        <option value="suministros">Suministros</option>
+                        <option value="mantenimiento">Mantenimiento</option>
+                        <option value="transporte">Transporte</option>
+                        <option value="otros">Otros</option>
+                    </select>
+                </div>
+                <div style="margin-bottom: 1.5rem;">
+                    <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Notas (opcional)</label>
+                    <textarea id="expenseNotes" class="form-control" placeholder="Notas adicionales..." rows="3" style="font-size: 1rem; padding: 0.75rem;"></textarea>
+                </div>
+            </div>
+        `;
+
+        const footer = `
+            <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="CashView.saveExpense()">💰 Registrar Gasto</button>
+        `;
+
+        showModal(content, { title: '💰 Registrar Gasto Operativo', footer, width: '500px' });
+
+        // Enfocar en descripción
+        setTimeout(() => {
+            const input = document.getElementById('expenseDescription');
+            if (input) input.focus();
+        }, 100);
+    },
+
+    async saveExpense() {
+        const description = document.getElementById('expenseDescription').value.trim();
+        const amount = parseFloat(document.getElementById('expenseAmount').value) || 0;
+        const category = document.getElementById('expenseCategory').value;
+        const notes = document.getElementById('expenseNotes').value.trim();
+
+        if (!description) {
+            showNotification('Ingresa una descripción', 'error');
+            return;
+        }
+
+        if (amount <= 0) {
+            showNotification('Ingresa un monto válido', 'error');
+            return;
+        }
+
+        try {
+            const openCash = await CashRegister.getOpen();
+            if (!openCash) {
+                showNotification('No hay caja abierta', 'error');
+                return;
+            }
+
+            // Registrar el gasto como movimiento de salida de caja
+            await CashMovement.create({
+                cashRegisterId: openCash.id,
+                type: 'out',
+                amount: amount,
+                description: `Gasto: ${description} (${category})`,
+                category: category,
+                notes: notes,
+                date: new Date().toISOString()
+            });
+
+            showNotification('Gasto registrado correctamente', 'success');
+            closeModal();
+            app.navigate('cash');
+
+        } catch (error) {
+            console.error('[Cash] Error registrando gasto:', error);
+            showNotification('Error al registrar gasto', 'error');
+        }
+    },
+
+    showDenominationCalculator(targetInputId) {
+        const denominations = [20000, 10000, 5000, 2000, 1000, 500, 100, 50, 10];
+        
+        const content = `
+            <div style="padding:0.5rem 0;">
+                <p style="font-size:0.88rem; color:#475569; font-weight:600; margin-bottom:1.25rem; line-height:1.4;">
+                    Ingresa el monto total contado para cada denominación de billete o moneda. El total se actualizará en vivo.
+                </p>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.75rem; max-height:360px; overflow-y:auto; padding-right:0.25rem;">
+                    ${denominations.map(denom => `
+                        <div style="background:#f8fafc; border:1.5px solid #cbd5e1; border-radius:0.75rem; padding:0.75rem; display:flex; flex-direction:column; gap:0.25rem;">
+                            <label style="font-size:0.75rem; font-weight:900; color:#1e293b;">
+                                ${denom >= 1000 ? `💵 Billetes / Monedas de $${denom.toLocaleString('es-CL')}` : `🪙 Monedas de $${denom.toLocaleString('es-CL')}`}
+                            </label>
+                            <div style="position:relative;">
+                                <span style="position:absolute; left:0.6rem; top:50%; transform:translateY(-50%); font-weight:800; color:#64748b;">$</span>
+                                <input type="number" min="0" class="form-control denom-calc-input" data-denom="${denom}" placeholder="0" oninput="CashView.updateDenominationTotal()" style="padding-left:1.5rem; font-weight:900; font-size:1.1rem; text-align:right; border-radius:0.5rem;">
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+                <div style="margin-top:1.25rem; padding:1.25rem; background:#0f172a; color:white; border-radius:1rem; display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:0.85rem; font-weight:800; text-transform:uppercase; letter-spacing:1px;">TOTAL SUMADO EN CAJA</span>
+                    <strong id="denomCalcGrandTotal" style="font-size:1.8rem; color:#10b981; font-weight:950;">$0</strong>
+                </div>
+            </div>
+        `;
+
+        const footer = `
+            <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+            <button class="btn btn-success" onclick="CashView.applyDenominationTotal('${targetInputId}')" style="font-weight:900; border-radius:0.75rem;">
+                ✅ Aplicar Total a la Caja
+            </button>
+        `;
+
+        showModal(content, { title: '🧮 Calculadora por Denominación (CLP)', footer, width: '560px' });
+    },
+
+    updateDenominationTotal() {
+        let total = 0;
+        document.querySelectorAll('.denom-calc-input').forEach(input => {
+            const val = parseFloat(input.value) || 0;
+            total += val;
+        });
+        const grandEl = document.getElementById('denomCalcGrandTotal');
+        if (grandEl) grandEl.textContent = '$' + Math.round(total).toLocaleString('es-CL');
+        this._currentDenomTotal = total;
+    },
+
+    applyDenominationTotal(targetInputId) {
+        const total = this._currentDenomTotal || 0;
+        const input = document.getElementById(targetInputId);
+        if (input) {
+            input.value = Math.round(total);
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        closeModal();
+        showNotification(`Monto total $${Math.round(total).toLocaleString('es-CL')} aplicado correctamente`, 'success');
+    },
+
+    async downloadPdfReport(registerId) {
+        try {
+            const reg = await CashRegister.getById(registerId);
+            if (!reg) { showNotification('Registro de caja no encontrado', 'error'); return; }
+            const summary = await CashRegister.getSummary(registerId);
+            const userStr = await this.getCashierName(reg);
+            const res = await CashReportPDF.generateAndSave(summary, reg, userStr);
+            if (res && res.success) {
+                if (res.isNative) {
+                    showNotification(`📄 Reporte Z guardado en Escritorio: ${res.path}`, 'success');
+                } else {
+                    showNotification('📄 Reporte Z descargado en PDF correctamente', 'success');
+                }
+            } else {
+                showNotification(res.error || 'Error al generar PDF', 'error');
+            }
+        } catch (e) {
+            showNotification(e.message, 'error');
+        }
+    },
+
+    _partialSums: [],
+    showPartialSumsCalculator(targetInputId) {
+        this._partialSums = [];
+        const renderSumsList = () => {
+            const listEl = document.getElementById('partialSumsList');
+            const totalEl = document.getElementById('partialSumsTotal');
+            if (!listEl || !totalEl) return;
+            const total = this._partialSums.reduce((a, b) => a + b, 0);
+            totalEl.innerText = formatCLP(total);
+            if (this._partialSums.length === 0) {
+                listEl.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:1.5rem; font-weight:600;">No has agregado montos aún. Ingresa un valor abajo y haz clic en ➕ Agregar.</div>';
+                return;
+            }
+            listEl.innerHTML = this._partialSums.map((amt, idx) => `
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; border:1.5px solid #e2e8f0; padding:0.6rem 1rem; border-radius:0.75rem; margin-bottom:0.5rem;">
+                    <span style="font-weight:800; color:#1e293b; font-size:1.1rem;">#${idx + 1} &nbsp; ${formatCLP(amt)}</span>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="CashView.removePartialSum(${idx})" style="font-weight:900; font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:0.5rem;">✕ Borrar</button>
+                </div>
+            `).join('');
+        };
+
+        const content = `
+            <div style="background:#0f172a; padding:1.25rem; border-radius:1rem; color:#fff; text-align:center; margin-bottom:1.25rem;">
+                <span style="color:#94a3b8; font-size:0.75rem; font-weight:900; text-transform:uppercase; letter-spacing:1px; display:block; margin-bottom:0.25rem;">Suma Total Acumulada</span>
+                <div id="partialSumsTotal" style="font-size:2.4rem; font-weight:950; color:#10b981; letter-spacing:-1px;">$0</div>
+            </div>
+
+            <div style="margin-bottom:1rem;">
+                <label style="font-weight:800; color:#475569; font-size:0.8rem; text-transform:uppercase; display:block; margin-bottom:0.4rem;">💡 Ingresa un Monto Contado (ej: 50000):</label>
+                <div style="display:flex; gap:0.5rem;">
+                    <input type="number" id="partialInput" class="form-control" placeholder="Monto parcial..." style="height:50px; font-size:1.4rem; font-weight:900; border-radius:0.75rem; border:2px solid #cbd5e1; flex:1;" onkeydown="if(event.key==='Enter'){ event.preventDefault(); CashView.addPartialSum();}">
+                    <button type="button" class="btn btn-primary" onclick="CashView.addPartialSum()" style="height:50px; font-weight:900; padding:0 1.25rem; border-radius:0.75rem;">➕ Agregar</button>
+                </div>
+            </div>
+
+            <div style="font-weight:800; color:#64748b; font-size:0.8rem; text-transform:uppercase; margin-bottom:0.5rem;">📋 Lista de Montos Agregados:</div>
+            <div id="partialSumsList" style="max-height:200px; overflow-y:auto; padding-right:0.25rem;"></div>
+        `;
+
+        const footer = `
+            <div style="display:flex; justify-content:space-between; gap:1rem; width:100%;">
+                <button class="btn btn-secondary" onclick="closeModal()" style="font-weight:800; border-radius:0.75rem;">Cancelar</button>
+                <button class="btn btn-success" onclick="CashView.applyPartialSumsTotal('${targetInputId}')" style="font-weight:900; font-size:1rem; padding:0.6rem 1.5rem; border-radius:0.75rem;">
+                    ✅ Usar Cifra Total en Caja
+                </button>
+            </div>
+        `;
+
+        showModal(content, { title: '🧮 Calculadora de Sumas Parciales', footer, width: '480px' });
+        setTimeout(() => {
+            renderSumsList();
+            const input = document.getElementById('partialInput');
+            if (input) input.focus();
+        }, 100);
+    },
+
+    addPartialSum() {
+        const input = document.getElementById('partialInput');
+        if (!input) return;
+        const val = parseFloat(input.value) || 0;
+        if (val > 0) {
+            this._partialSums.push(val);
+            input.value = '';
+            input.focus();
+            const listEl = document.getElementById('partialSumsList');
+            const totalEl = document.getElementById('partialSumsTotal');
+            if (listEl && totalEl) {
+                const total = this._partialSums.reduce((a, b) => a + b, 0);
+                totalEl.innerText = formatCLP(total);
+                listEl.innerHTML = this._partialSums.map((amt, idx) => `
+                    <div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; border:1.5px solid #e2e8f0; padding:0.6rem 1rem; border-radius:0.75rem; margin-bottom:0.5rem;">
+                        <span style="font-weight:800; color:#1e293b; font-size:1.1rem;">#${idx + 1} &nbsp; ${formatCLP(amt)}</span>
+                        <button type="button" class="btn btn-sm btn-danger" onclick="CashView.removePartialSum(${idx})" style="font-weight:900; font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:0.5rem;">✕ Borrar</button>
+                    </div>
+                `).join('');
+            }
+        }
+    },
+
+    removePartialSum(idx) {
+        this._partialSums.splice(idx, 1);
+        const listEl = document.getElementById('partialSumsList');
+        const totalEl = document.getElementById('partialSumsTotal');
+        if (listEl && totalEl) {
+            const total = this._partialSums.reduce((a, b) => a + b, 0);
+            totalEl.innerText = formatCLP(total);
+            if (this._partialSums.length === 0) {
+                listEl.innerHTML = '<div style="text-align:center; color:#94a3b8; padding:1.5rem; font-weight:600;">No has agregado montos aún. Ingresa un valor abajo y haz clic en ➕ Agregar.</div>';
+                return;
+            }
+            listEl.innerHTML = this._partialSums.map((amt, idx) => `
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; border:1.5px solid #e2e8f0; padding:0.6rem 1rem; border-radius:0.75rem; margin-bottom:0.5rem;">
+                    <span style="font-weight:800; color:#1e293b; font-size:1.1rem;">#${idx + 1} &nbsp; ${formatCLP(amt)}</span>
+                    <button type="button" class="btn btn-sm btn-danger" onclick="CashView.removePartialSum(${idx})" style="font-weight:900; font-size:0.75rem; padding:0.25rem 0.6rem; border-radius:0.5rem;">✕ Borrar</button>
+                </div>
+            `).join('');
+        }
+    },
+
+    applyPartialSumsTotal(targetInputId) {
+        const total = this._partialSums.reduce((a, b) => a + b, 0);
+        const input = document.getElementById(targetInputId);
+        if (input) {
+            input.value = total;
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            input.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+        closeModal();
+    }
+};
