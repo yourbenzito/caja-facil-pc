@@ -98,6 +98,7 @@ CREATE OR REPLACE FUNCTION public.get_public_promo_stats()
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
     v_consumed INT;
@@ -133,6 +134,7 @@ CREATE OR REPLACE FUNCTION public.reserve_promo_slot(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
     v_slot INT;
@@ -238,6 +240,7 @@ CREATE OR REPLACE FUNCTION public.consume_promo_slot(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
     v_slot INT;
@@ -339,6 +342,7 @@ CREATE OR REPLACE FUNCTION public.revoke_promo_slot(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
     v_user_id UUID;
@@ -374,6 +378,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.check_user_fraud_status()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
     v_high_flags INT;
@@ -405,7 +410,9 @@ FOR EACH ROW EXECUTE FUNCTION public.check_user_fraud_status();
 -- =========================================================================================
 -- 6. VISTA DASHBOARD EN VIVO PARA EL ADMINISTRADOR / DUEÑO
 -- =========================================================================================
-CREATE OR REPLACE VIEW public.vw_launch_promo_dashboard AS
+CREATE OR REPLACE VIEW public.vw_launch_promo_dashboard
+WITH (security_invoker = true)
+AS
 SELECT 
     r.slot_number AS "Plaza",
     r.email AS "Correo",
@@ -417,3 +424,21 @@ SELECT
     r.payment_id AS "ID Pago MP"
 FROM public.promo_redemptions r
 ORDER BY r.slot_number ASC;
+
+-- =========================================================================================
+-- 7. RESTRICCIÓN DE PERMISOS DE EJECUCIÓN (BLINDAJE RPC SUPABASE)
+-- =========================================================================================
+-- Regla de Oro: Solo el backend administrativo seguro (service_role) puede ejecutar
+-- la reserva, consumo, conteo y revocación de plazas. Ningún usuario anónimo o cliente puede invocarlas.
+REVOKE EXECUTE ON FUNCTION public.consume_promo_slot(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.consume_promo_slot(UUID, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT) TO service_role;
+
+REVOKE EXECUTE ON FUNCTION public.revoke_promo_slot(TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.revoke_promo_slot(TEXT, TEXT) TO service_role;
+
+REVOKE EXECUTE ON FUNCTION public.reserve_promo_slot(UUID, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.reserve_promo_slot(UUID, TEXT, TEXT, TEXT) TO service_role;
+
+REVOKE EXECUTE ON FUNCTION public.get_public_promo_stats() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_public_promo_stats() TO service_role;
+
