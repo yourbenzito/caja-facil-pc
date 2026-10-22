@@ -49,33 +49,33 @@ const ExpensesView = {
                     from { width: 0; }
                 }
 
-                /* ── Tarjetas KPI ── */
+                /* ── Tarjetas KPI Compactas ── */
                 .exp-kpi {
                     background: #fff;
-                    border-radius: 1rem;
-                    padding: 1.25rem 1.5rem;
-                    box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+                    border-radius: 0.75rem;
+                    padding: 0.65rem 1rem;
+                    box-shadow: 0 2px 12px rgba(0,0,0,0.05);
                     border-left: 4px solid transparent;
                     display: flex;
                     align-items: center;
-                    gap: 1rem;
-                    animation: expFadeUp 0.4s ease both;
+                    gap: 0.75rem;
+                    animation: expFadeUp 0.3s ease both;
                     transition: transform 0.2s, box-shadow 0.2s;
                 }
-                .exp-kpi:hover { transform: translateY(-3px); box-shadow: 0 8px 32px rgba(0,0,0,0.12); }
+                .exp-kpi:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
                 .exp-kpi-icon {
-                    width: 52px; height: 52px; border-radius: 0.75rem;
+                    width: 38px; height: 38px; border-radius: 0.55rem;
                     display: flex; align-items: center; justify-content: center;
-                    font-size: 1.5rem; flex-shrink: 0;
+                    font-size: 1.25rem; flex-shrink: 0;
                 }
-                .exp-kpi-num { font-size: 1.5rem; font-weight: 800; line-height: 1; }
-                .exp-kpi-lbl { font-size: 0.78rem; color: #64748b; margin-top: 0.2rem; }
+                .exp-kpi-num { font-size: 1.2rem; font-weight: 900; line-height: 1; }
+                .exp-kpi-lbl { font-size: 0.72rem; color: #64748b; margin-top: 0.15rem; font-weight: 600; }
 
-                /* ── Tabs ── */
-                .exp-tabs { display: flex; gap: 0.5rem; border-bottom: 2px solid #e2e8f0; margin-bottom: 1.5rem; flex-wrap: wrap; }
+                /* ── Tabs Compactas ── */
+                .exp-tabs { display: flex; gap: 0.4rem; border-bottom: 2px solid #e2e8f0; margin-bottom: 0.75rem; flex-wrap: wrap; }
                 .exp-tab {
-                    padding: 0.65rem 1.25rem; border-radius: 0.5rem 0.5rem 0 0;
-                    font-weight: 600; font-size: 0.9rem; cursor: pointer;
+                    padding: 0.5rem 1rem; border-radius: 0.5rem 0.5rem 0 0;
+                    font-weight: 700; font-size: 0.85rem; cursor: pointer;
                     border: none; background: transparent; color: #64748b;
                     border-bottom: 3px solid transparent; margin-bottom: -2px;
                     transition: color 0.2s, border-color 0.2s, background 0.2s;
@@ -83,28 +83,39 @@ const ExpensesView = {
                 .exp-tab:hover { background: #f1f5f9; color: #0f172a; }
                 .exp-tab.active { color: #4f46e5; border-bottom-color: #4f46e5; background: #eff6ff; }
 
-                /* ── Selector visual de categoría ── */
-                .exp-cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.75rem; margin-bottom: 1.5rem; }
+                /* ── Selector visual de categoría compacto ── */
+                .exp-cat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.45rem; }
                 .exp-cat-btn {
-                    padding: 0.9rem 0.75rem; border-radius: 0.75rem; text-align: center;
-                    cursor: pointer; border: 2px solid #e2e8f0; background: #fff;
-                    transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 0.35rem;
+                    padding: 0.5rem 0.6rem; border-radius: 0.65rem; text-align: left;
+                    cursor: pointer; border: 1.5px solid #e2e8f0; background: #fff;
+                    transition: all 0.15s; display: flex; align-items: center; gap: 0.45rem;
                 }
-                .exp-cat-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-                .exp-cat-btn.selected { border-color: var(--cat-color); background: var(--cat-bg); box-shadow: 0 4px 16px var(--cat-shadow); }
-                .exp-cat-btn .cat-icon { font-size: 1.6rem; }
-                .exp-cat-btn .cat-name { font-size: 0.72rem; font-weight: 700; color: #374151; }
+                .exp-cat-btn:hover { transform: translateY(-1.5px); box-shadow: 0 3px 8px rgba(0,0,0,0.06); }
+                .exp-cat-btn.selected { border-color: var(--cat-color); background: var(--cat-bg); box-shadow: 0 2px 10px var(--cat-shadow); font-weight: 800; }
+                .exp-cat-btn .cat-icon { font-size: 1.25rem; flex-shrink: 0; }
+                .exp-cat-btn .cat-name { font-size: 0.74rem; font-weight: 700; color: #334155; line-height: 1.15; }
+
+                /* ── Chips de monto rápido en registro de gasto ── */
+                .btn-quick-exp {
+                    flex: 1; min-width: 44px; padding: 0.35rem 0.25rem; background: rgba(255,255,255,0.14);
+                    border: 1px solid rgba(255,255,255,0.22); border-radius: 0.45rem; color: #e0e7ff;
+                    font-size: 0.72rem; font-weight: 800; cursor: pointer; transition: all 0.15s; text-align: center;
+                }
+                .btn-quick-exp:hover {
+                    background: rgba(255,255,255,0.28); transform: translateY(-1px); color: #ffffff;
+                }
 
                 /* ── Historial tabla ── */
                 .exp-hist-row {
                     display: grid; grid-template-columns: 2.5rem 1fr auto auto;
-                    align-items: center; gap: 0.75rem; padding: 0.75rem 1rem;
+                    align-items: center; gap: 0.75rem; padding: 0.65rem 0.9rem;
                     border-radius: 0.625rem; background: #fff;
-                    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-                    animation: expFadeUp 0.3s ease both;
+                    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+                    border: 1px solid #f1f5f9;
+                    animation: expFadeUp 0.25s ease both;
                     transition: box-shadow 0.2s;
                 }
-                .exp-hist-row:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.1); }
+                .exp-hist-row:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
 
                 /* ── Barra de presupuesto ── */
                 .exp-budget-bar-wrap { height: 10px; background: #e2e8f0; border-radius: 99px; overflow: hidden; }
@@ -112,11 +123,12 @@ const ExpensesView = {
 
                 /* ── Input numérico grande ── */
                 .exp-amount-input {
-                    font-size: 2.5rem; font-weight: 800; text-align: center;
-                    border: none; border-bottom: 3px solid #4f46e5; width: 100%;
-                    padding: 0.5rem; color: #0f172a; background: transparent;
-                    outline: none; letter-spacing: -1px;
+                    font-size: 2.2rem; font-weight: 900; text-align: center;
+                    border: 2px solid #e2e8f0; border-radius: 0.75rem; width: 100%;
+                    padding: 0.4rem 0.6rem; color: #0f172a; background: #ffffff;
+                    outline: none; letter-spacing: -0.5px; transition: all 0.2s;
                 }
+                .exp-amount-input:focus { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79,70,229,0.15); }
                 .exp-amount-input::placeholder { color: #cbd5e1; }
 
                 /* ── Badge categoría ── */
@@ -126,17 +138,17 @@ const ExpensesView = {
                 }
             </style>
 
-            <div class="view-header" style="animation: expFadeUp 0.3s ease;">
+            <div class="view-header" style="animation: expFadeUp 0.3s ease; margin-bottom: 0.65rem;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
-                        <h1 style="color: #0f172a;">💸 Gastos Operativos</h1>
-                        <p style="color: #64748b;">Control total de egresos de tu negocio</p>
+                        <h1 style="color: #0f172a; font-size: 1.6rem; margin: 0; font-weight: 900;">💸 Gastos Operativos</h1>
+                        <p style="color: #64748b; font-size: 0.82rem; margin: 0.15rem 0 0 0;">Control total de egresos de tu negocio</p>
                     </div>
                 </div>
             </div>
 
-            <!-- KPIs del mes -->
-            <div id="exp-kpis" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+            <!-- KPIs del mes compactos -->
+            <div id="exp-kpis" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.65rem; margin-bottom: 0.75rem;">
                 <div class="exp-kpi" style="border-left-color:#ef4444; animation-delay:0s;">
                     <div class="exp-kpi-icon" style="background:#fef2f2;">📅</div>
                     <div>
@@ -144,25 +156,25 @@ const ExpensesView = {
                         <div class="exp-kpi-lbl">Gastos este mes</div>
                     </div>
                 </div>
-                <div class="exp-kpi" style="border-left-color:#f59e0b; animation-delay:0.08s;">
+                <div class="exp-kpi" style="border-left-color:#f59e0b; animation-delay:0.06s;">
                     <div class="exp-kpi-icon" style="background:#fffbeb;">📆</div>
                     <div>
                         <div class="exp-kpi-num" id="kpi-week" style="color:#f59e0b;">$0</div>
                         <div class="exp-kpi-lbl">Gastos esta semana</div>
                     </div>
                 </div>
-                <div class="exp-kpi" style="border-left-color:#3b82f6; animation-delay:0.12s;">
+                <div class="exp-kpi" style="border-left-color:#3b82f6; animation-delay:0.1s;">
                     <div class="exp-kpi-icon" style="background:#eff6ff;">📊</div>
                     <div>
                         <div class="exp-kpi-num" id="kpi-count" style="color:#3b82f6;">0</div>
                         <div class="exp-kpi-lbl">Registros este mes</div>
                     </div>
                 </div>
-                <div class="exp-kpi" style="border-left-color:#10b981; animation-delay:0.16s;">
+                <div class="exp-kpi" style="border-left-color:#10b981; animation-delay:0.14s;">
                     <div class="exp-kpi-icon" style="background:#ecfdf5;">🏆</div>
                     <div>
-                        <div class="exp-kpi-num" id="kpi-top-cat" style="color:#10b981; font-size:1rem;">—</div>
-                        <div class="exp-kpi-lbl">Mayor categoría del mes</div>
+                        <div class="exp-kpi-num" id="kpi-top-cat" style="color:#10b981; font-size:0.95rem;">—</div>
+                        <div class="exp-kpi-lbl">Mayor categoría</div>
                     </div>
                 </div>
             </div>
@@ -246,204 +258,233 @@ const ExpensesView = {
     renderRegisterPanel(suppliers = []) {
         const today = new Date().toISOString().slice(0, 10);
         return `
-            <div style="max-width: 700px; margin: 0 auto; animation: expFadeUp 0.3s ease;">
-                <div class="card" style="padding: 2rem; background: #fff; border-radius: 1.25rem; box-shadow: 0 4px 24px rgba(0,0,0,0.07);">
+            <div style="max-width: 1040px; margin: 0 auto; animation: expFadeUp 0.3s ease;">
+                <div class="card" style="padding: 1.15rem 1.35rem; background: #fff; border-radius: 1.15rem; box-shadow: 0 4px 20px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;">
 
                     <!-- CONMUTADOR DE MODO: DINERO VS INSUMO TIENDA -->
-                    <div style="display: flex; gap: 0.5rem; margin-bottom: 1.75rem; background: #f1f5f9; padding: 0.35rem; border-radius: 0.85rem; border: 1px solid #e2e8f0;">
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem; background: #f1f5f9; padding: 0.25rem; border-radius: 0.75rem; border: 1px solid #e2e8f0;">
                         <button type="button" id="btn-mode-money" onclick="ExpensesView.setRegisterMode('money')"
-                                style="flex: 1; padding: 0.75rem 1rem; border: none; border-radius: 0.65rem; font-weight: 800; font-size: 0.92rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: all 0.2s; background: #ffffff; color: #4f46e5; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+                                style="flex: 1; padding: 0.55rem 0.85rem; border: none; border-radius: 0.55rem; font-weight: 800; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.45rem; transition: all 0.2s; background: #ffffff; color: #4f46e5; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">
                             💵 Gasto Dinero / Factura
                         </button>
                         <button type="button" id="btn-mode-insumo" onclick="ExpensesView.setRegisterMode('insumo')"
-                                style="flex: 1; padding: 0.75rem 1rem; border: none; border-radius: 0.65rem; font-weight: 800; font-size: 0.92rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: all 0.2s; background: transparent; color: #64748b;">
+                                style="flex: 1; padding: 0.55rem 0.85rem; border: none; border-radius: 0.55rem; font-weight: 800; font-size: 0.88rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.45rem; transition: all 0.2s; background: transparent; color: #64748b;">
                             🧹 Insumo Tienda / Consumo Interno
                         </button>
                     </div>
 
-                    <!-- MODO A: GASTO EN DINERO / FACTURA -->
-                    <div id="form-mode-money">
+                    <!-- MODO A: GASTO EN DINERO / FACTURA (2 COLUMNAS CERO SCROLL) -->
+                    <div id="form-mode-money" style="display: grid; grid-template-columns: 360px 1fr; gap: 1.25rem; align-items: start;">
 
-                    <!-- Monto grande -->
-                    <div style="text-align: center; margin-bottom: 2rem;">
-                        <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Monto del Gasto</div>
-                        <input type="number" id="exp-amount" class="exp-amount-input" placeholder="$0" min="0" autofocus
-                               onkeypress="if(event.key==='Enter') document.getElementById('exp-desc').focus()">
-                    </div>
-
-                    <!-- Selector de Categoría -->
-                    <div style="margin-bottom: 1.5rem;">
-                        <div style="font-size: 0.85rem; color: #64748b; margin-bottom: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Categoría</div>
-                        <div class="exp-cat-grid" id="cat-selector">
-                            ${this.CATEGORIES.map(c => `
-                                <div class="exp-cat-btn" data-cat="${c.key}" style="--cat-color: ${c.color}; --cat-bg: ${c.color}18; --cat-shadow: ${c.color}33;"
-                                     onclick="ExpensesView.selectCategory('${c.key}')">
-                                    <span class="cat-icon">${c.icon}</span>
-                                    <span class="cat-name">${c.label}</span>
+                        <!-- COLUMNA IZQUIERDA: MONTO HERO + SELECTOR DE CATEGORÍA -->
+                        <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 1rem; padding: 1.1rem; display: flex; flex-direction: column; gap: 1rem; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+                            
+                            <!-- Tarjeta Hero Monto del Gasto -->
+                            <div style="background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); border-radius: 0.85rem; padding: 1rem 1.15rem; color: #ffffff; box-shadow: 0 8px 20px -4px rgba(49, 46, 129, 0.35); border: 1px solid rgba(255,255,255,0.1);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                    <span style="font-size: 0.72rem; font-weight: 800; color: #c7d2fe; text-transform: uppercase; letter-spacing: 0.6px;">Monto del Gasto</span>
+                                    <span style="font-size: 0.68rem; font-weight: 800; background: rgba(255,255,255,0.15); color: #e0e7ff; padding: 0.15rem 0.6rem; border-radius: 99px;">CLP</span>
                                 </div>
-                            `).join('')}
-                        </div>
-                    </div>
+                                <div style="position: relative; display: flex; align-items: center;">
+                                    <span style="position: absolute; left: 0.85rem; font-size: 1.75rem; font-weight: 900; color: #818cf8; pointer-events: none;">$</span>
+                                    <input type="number" id="exp-amount" placeholder="0" min="0" autofocus
+                                           style="font-size: 2.15rem; font-weight: 950; text-align: left; padding-left: 2.35rem; width: 100%; border: 2px solid rgba(255,255,255,0.18); border-radius: 0.75rem; background: rgba(0,0,0,0.25); color: #ffffff; outline: none; transition: all 0.2s; height: 54px;"
+                                           onfocus="this.style.borderColor='#818cf8'; this.style.boxShadow='0 0 0 3px rgba(129,140,248,0.25)';"
+                                           onblur="this.style.borderColor='rgba(255,255,255,0.18)'; this.style.boxShadow='none';"
+                                           onkeypress="if(event.key==='Enter') document.getElementById('exp-desc').focus()">
+                                </div>
+                                <!-- Chips de Valores Rápidos -->
+                                <div style="display: flex; gap: 0.35rem; margin-top: 0.65rem; flex-wrap: wrap;">
+                                    <button type="button" class="btn-quick-exp" onclick="ExpensesView.addQuickAmount(1000)">+1.000</button>
+                                    <button type="button" class="btn-quick-exp" onclick="ExpensesView.addQuickAmount(5000)">+5.000</button>
+                                    <button type="button" class="btn-quick-exp" onclick="ExpensesView.addQuickAmount(10000)">+10.000</button>
+                                    <button type="button" class="btn-quick-exp" onclick="ExpensesView.addQuickAmount(20000)">+20.000</button>
+                                    <button type="button" class="btn-quick-exp" onclick="ExpensesView.addQuickAmount(50000)">+50.000</button>
+                                    <button type="button" class="btn-quick-exp" style="background: rgba(239, 68, 68, 0.25); border-color: rgba(239, 68, 68, 0.4); color: #fca5a5;" onclick="ExpensesView.setQuickAmount(0)">Borrar</button>
+                                </div>
+                            </div>
 
-                    <!-- Descripción -->
-                    <div style="margin-bottom: 1.25rem;">
-                        <label style="display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Descripción</label>
-                        <input type="text" id="exp-desc" class="form-control" placeholder="Ej: Factura de luz mes de junio"
-                               style="font-size: 1rem; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px solid #e2e8f0;"
-                               onkeypress="if(event.key==='Enter') document.getElementById('exp-document-number').focus()">
-                    </div>
-
-                    <!-- Fila 1: Medio de Pago & Tipo de Documento -->
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
-                        <div>
-                            <label style="display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Medio de Pago</label>
-                            <select id="exp-payment-method" class="form-control" style="font-size: 1rem; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px solid #e2e8f0; height: auto;"
-                                    onchange="document.getElementById('affects-cash-container').style.display = this.value === 'cash' ? 'flex' : 'none';">
-                                <option value="cash">💵 Efectivo Caja</option>
-                                <option value="transfer">🏦 Transferencia Bancaria</option>
-                                <option value="card">💳 Tarjeta Crédito/Débito</option>
-                            </select>
-                            <div id="affects-cash-container" style="margin-top: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
-                                <input type="checkbox" id="exp-affects-cash" checked style="width: 1.1rem; height: 1.15rem; cursor: pointer;">
-                                <label for="exp-affects-cash" style="font-size: 0.75rem; color: #475569; font-weight: 600; cursor: pointer; margin: 0; user-select: none;">¿Descontar de la caja activa?</label>
+                            <!-- Selector de Categoría Compacto -->
+                            <div>
+                                <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 0.45rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
+                                    Categoría del Gasto
+                                </div>
+                                <div class="exp-cat-grid" id="cat-selector">
+                                    ${this.CATEGORIES.map(c => `
+                                        <div class="exp-cat-btn" data-cat="${c.key}" style="--cat-color: ${c.color}; --cat-bg: ${c.color}15; --cat-shadow: ${c.color}25;"
+                                             onclick="ExpensesView.selectCategory('${c.key}')">
+                                            <span class="cat-icon">${c.icon}</span>
+                                            <span class="cat-name">${c.label}</span>
+                                        </div>
+                                    `).join('')}
+                                </div>
                             </div>
                         </div>
-                        <div>
-                            <label style="display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Tipo de Documento</label>
-                            <select id="exp-document-type" class="form-control" style="font-size: 1rem; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px solid #e2e8f0; height: auto;">
-                                <option value="comprobante_interno">📝 Comprobante Interno</option>
-                                <option value="boleta">🧾 Boleta</option>
-                                <option value="factura">📄 Factura</option>
-                                <option value="honorarios">🧑‍💻 Boleta Honorarios</option>
-                            </select>
-                        </div>
-                    </div>
 
-                    <!-- Fila 2: N° Documento & Proveedor -->
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.25rem;">
-                        <div>
-                            <label style="display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">N° de Documento / Folio</label>
-                            <input type="text" id="exp-document-number" class="form-control" placeholder="Ej: 10423"
-                                   style="font-size: 1rem; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px solid #e2e8f0;">
-                        </div>
-                        <div>
-                            <label style="display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Proveedor</label>
-                            <select id="exp-supplier" class="form-control" style="font-size: 1rem; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px solid #e2e8f0; height: auto;">
-                                <option value="">👤 Gasto General / Sin Proveedor</option>
-                                ${suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
-                            </select>
-                        </div>
-                    </div>
+                        <!-- COLUMNA DERECHA: CAMPOS DE DETALLE Y GUARDAR -->
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                            <!-- Descripción -->
+                            <div>
+                                <label style="display: block; font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Descripción del Gasto</label>
+                                <input type="text" id="exp-desc" class="form-control" placeholder="Ej: Factura de luz mes de junio"
+                                       style="font-size: 0.92rem; padding: 0.6rem 0.85rem; border-radius: 0.65rem; border: 1.5px solid #cbd5e1; height: 42px;"
+                                       onkeypress="if(event.key==='Enter') document.getElementById('exp-document-number').focus()">
+                            </div>
 
-                    <!-- Fila 3: Fecha & Adjuntar Recibo -->
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; align-items: end;">
-                        <div>
-                            <label style="display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Fecha</label>
-                            <input type="date" id="exp-date" class="form-control" value="${today}"
-                                   style="font-size: 1rem; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px solid #e2e8f0;">
-                        </div>
-                        <div>
-                            <input type="file" id="exp-attachment" accept="image/*,application/pdf" style="display:none;" onchange="ExpensesView.handleAttachment(this)">
-                            <button type="button" onclick="document.getElementById('exp-attachment').click()"
-                                    style="width: 100%; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px dashed #cbd5e1; background: #f8fafc; font-weight: 600; color: #64748b; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; font-size: 0.9rem;"
-                                    onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#f8fafc'">
-                                📎 <span id="attachment-label">Adjuntar Recibo</span>
+                            <!-- Fila 1: Medio de Pago & Tipo de Documento -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                <div>
+                                    <label style="display: block; font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Medio de Pago</label>
+                                    <select id="exp-payment-method" class="form-control" style="font-size: 0.88rem; padding: 0.5rem 0.75rem; border-radius: 0.65rem; border: 1.5px solid #cbd5e1; height: 40px;"
+                                            onchange="document.getElementById('affects-cash-container').style.display = this.value === 'cash' ? 'flex' : 'none';">
+                                        <option value="cash">💵 Efectivo Caja</option>
+                                        <option value="transfer">🏦 Transferencia Bancaria</option>
+                                        <option value="card">💳 Tarjeta Crédito/Débito</option>
+                                    </select>
+                                    <div id="affects-cash-container" style="margin-top: 0.35rem; display: flex; align-items: center; gap: 0.4rem;">
+                                        <input type="checkbox" id="exp-affects-cash" checked style="width: 1rem; height: 1rem; cursor: pointer;">
+                                        <label for="exp-affects-cash" style="font-size: 0.72rem; color: #475569; font-weight: 600; cursor: pointer; margin: 0; user-select: none;">¿Descontar de la caja activa?</label>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label style="display: block; font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Tipo de Documento</label>
+                                    <select id="exp-document-type" class="form-control" style="font-size: 0.88rem; padding: 0.5rem 0.75rem; border-radius: 0.65rem; border: 1.5px solid #cbd5e1; height: 40px;">
+                                        <option value="comprobante_interno">📝 Comprobante Interno</option>
+                                        <option value="boleta">🧾 Boleta</option>
+                                        <option value="factura">📄 Factura</option>
+                                        <option value="honorarios">🧑‍💻 Boleta Honorarios</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Fila 2: N° Documento & Proveedor -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                                <div>
+                                    <label style="display: block; font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">N° de Documento / Folio</label>
+                                    <input type="text" id="exp-document-number" class="form-control" placeholder="Ej: 10423"
+                                           style="font-size: 0.88rem; padding: 0.5rem 0.75rem; border-radius: 0.65rem; border: 1.5px solid #cbd5e1; height: 40px;">
+                                </div>
+                                <div>
+                                    <label style="display: block; font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Proveedor</label>
+                                    <select id="exp-supplier" class="form-control" style="font-size: 0.88rem; padding: 0.5rem 0.75rem; border-radius: 0.65rem; border: 1.5px solid #cbd5e1; height: 40px;">
+                                        <option value="">👤 Gasto General / Sin Proveedor</option>
+                                        ${suppliers.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Fila 3: Fecha & Adjuntar Recibo -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; align-items: end;">
+                                <div>
+                                    <label style="display: block; font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">Fecha</label>
+                                    <input type="date" id="exp-date" class="form-control" value="${today}"
+                                           style="font-size: 0.88rem; padding: 0.5rem 0.75rem; border-radius: 0.65rem; border: 1.5px solid #cbd5e1; height: 40px;">
+                                </div>
+                                <div>
+                                    <input type="file" id="exp-attachment" accept="image/*,application/pdf" style="display:none;" onchange="ExpensesView.handleAttachment(this)">
+                                    <button type="button" onclick="document.getElementById('exp-attachment').click()"
+                                            style="width: 100%; height: 40px; padding: 0.4rem 0.75rem; border-radius: 0.65rem; border: 1.5px dashed #cbd5e1; background: #f8fafc; font-weight: 700; color: #64748b; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.4rem; font-size: 0.82rem;"
+                                            onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='#f8fafc'">
+                                        📎 <span id="attachment-label">Adjuntar Recibo</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Botón guardar -->
+                            <button onclick="ExpensesView.saveExpense()"
+                                    style="width: 100%; height: 44px; margin-top: 0.25rem; background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #fff;
+                                           border: none; border-radius: 0.75rem; font-size: 0.95rem; font-weight: 800; cursor: pointer;
+                                           box-shadow: 0 4px 14px rgba(79,70,229,0.3); transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 0.4rem;"
+                                    onmouseover="this.style.transform='translateY(-1.5px)'; this.style.boxShadow='0 6px 18px rgba(79,70,229,0.4)'"
+                                    onmouseout="this.style.transform=''; this.style.boxShadow='0 4px 14px rgba(79,70,229,0.3)'">
+                                <span>💸</span>
+                                <span>Guardar Gasto</span>
                             </button>
-                        </div>
-                    </div>
 
-                    <!-- Botón guardar -->
-                    <button onclick="ExpensesView.saveExpense()"
-                            style="width: 100%; padding: 1rem; background: linear-gradient(135deg, #4f46e5, #7c3aed); color: #fff;
-                                   border: none; border-radius: 0.875rem; font-size: 1.05rem; font-weight: 700; cursor: pointer;
-                                   box-shadow: 0 4px 16px rgba(79,70,229,0.35); transition: all 0.2s;"
-                            onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 8px 24px rgba(79,70,229,0.4)'"
-                            onmouseout="this.style.transform=''; this.style.boxShadow='0 4px 16px rgba(79,70,229,0.35)'">
-                        💸 Guardar Gasto
-                    </button>
+                            <input type="hidden" id="exp-category" value="">
+                        </div> <!-- /columna derecha -->
 
-                    <input type="hidden" id="exp-category" value="">
                     </div> <!-- /#form-mode-money -->
 
-                    <!-- MODO B: INSUMO DE TIENDA / CONSUMO INTERNO -->
+                    <!-- MODO B: INSUMO DE TIENDA / CONSUMO INTERNO (COMPACTO) -->
                     <div id="form-mode-insumo" style="display: none; animation: expFadeUp 0.3s ease;">
-                        <div style="background: #ecfdf5; border: 1.5px solid #a7f3d0; border-radius: 0.85rem; padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: flex-start; gap: 0.75rem;">
-                            <span style="font-size: 1.8rem; line-height: 1;">🧹</span>
+                        <div style="background: #ecfdf5; border: 1.5px solid #a7f3d0; border-radius: 0.75rem; padding: 0.75rem 1rem; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem;">
+                            <span style="font-size: 1.5rem; line-height: 1;">🧹</span>
                             <div>
-                                <strong style="color: #065f46; font-size: 0.95rem; display: block;">Retiro de Mercadería para Uso del Negocio</strong>
-                                <span style="color: #047857; font-size: 0.8rem; font-weight: 500;">
-                                    Artículos de aseo, bolsas, café o mercadería que usas en tu tienda. Descuenta las unidades de stock y registra el gasto contable a precio de costo, <strong>sin descontar dinero físico de tu cajón de caja</strong>.
+                                <strong style="color: #065f46; font-size: 0.88rem; display: block;">Retiro de Mercadería para Uso del Negocio</strong>
+                                <span style="color: #047857; font-size: 0.78rem; font-weight: 500;">
+                                    Artículos de aseo, bolsas o insumos de tu tienda. Descuenta unidades y registra el gasto a costo, <strong>sin descontar dinero de caja</strong>.
                                 </span>
                             </div>
                         </div>
 
                         <!-- Buscador de productos -->
-                        <div style="margin-bottom: 1.25rem; position: relative;">
-                            <label style="display: block; font-size: 0.85rem; color: #64748b; margin-bottom: 0.5rem; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">
+                        <div style="margin-bottom: 0.85rem; position: relative;">
+                            <label style="display: block; font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;">
                                 Buscar Producto en Stock
                             </label>
                             <input type="text" id="insumo-prod-search" class="form-control"
                                    placeholder="🔍 Escribe nombre o código de barra..."
-                                   style="font-size: 1rem; padding: 0.875rem 1rem; border-radius: 0.75rem; border: 2px solid #e2e8f0; width: 100%;"
+                                   style="font-size: 0.92rem; padding: 0.6rem 0.85rem; border-radius: 0.65rem; border: 1.5px solid #cbd5e1; height: 42px; width: 100%;"
                                    oninput="ExpensesView.searchInsumoProducts(this.value)">
                             
                             <!-- Resultados desplegables -->
                             <div id="insumo-prod-results"
-                                 style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 50; background: #ffffff; border-radius: 0.75rem; border: 1.5px solid #cbd5e1; box-shadow: 0 10px 25px rgba(0,0,0,0.15); max-height: 250px; overflow-y: auto; margin-top: 4px;">
+                                 style="display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 50; background: #ffffff; border-radius: 0.65rem; border: 1.5px solid #cbd5e1; box-shadow: 0 10px 25px rgba(0,0,0,0.15); max-height: 220px; overflow-y: auto; margin-top: 4px;">
                             </div>
                         </div>
 
                         <!-- Panel de configuración del producto seleccionado -->
-                        <div id="insumo-config-panel" style="display: none; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 1rem; padding: 1.25rem; margin-bottom: 1.5rem;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid #e2e8f0;">
+                        <div id="insumo-config-panel" style="display: none; background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 0.85rem; padding: 1rem; margin-bottom: 1rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; padding-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0;">
                                 <div>
-                                    <strong id="insumo-selected-name" style="font-size: 1.1rem; color: #0f172a; display: block;">Producto</strong>
-                                    <span id="insumo-selected-stock" style="font-size: 0.8rem; color: #059669; font-weight: 700;">Stock: 0 un.</span>
+                                    <strong id="insumo-selected-name" style="font-size: 1rem; color: #0f172a; display: block;">Producto</strong>
+                                    <span id="insumo-selected-stock" style="font-size: 0.78rem; color: #059669; font-weight: 700;">Stock: 0 un.</span>
                                 </div>
                                 <div style="text-align: right;">
-                                    <span style="font-size: 0.72rem; color: #64748b; display: block; font-weight: 700; text-transform: uppercase;">Costo Unitario</span>
-                                    <span id="insumo-unit-cost" style="font-size: 1.05rem; font-weight: 900; color: #4f46e5;">$0</span>
-                                    <span style="font-size: 0.7rem; color: #94a3b8; display: block;">Venta: <span id="insumo-unit-price">$0</span></span>
+                                    <span style="font-size: 0.7rem; color: #64748b; display: block; font-weight: 700; text-transform: uppercase;">Costo Unitario</span>
+                                    <span id="insumo-unit-cost" style="font-size: 0.98rem; font-weight: 900; color: #4f46e5;">$0</span>
+                                    <span style="font-size: 0.68rem; color: #94a3b8; display: block;">Venta: <span id="insumo-unit-price">$0</span></span>
                                 </div>
                             </div>
 
-                            <div style="display: grid; grid-template-columns: 140px 1fr; gap: 1rem; margin-bottom: 1.25rem;">
+                            <div style="display: grid; grid-template-columns: 130px 1fr; gap: 0.75rem; margin-bottom: 0.85rem;">
                                 <div>
-                                    <label style="display: block; font-size: 0.82rem; color: #64748b; margin-bottom: 0.4rem; font-weight: 600;">Cantidad a Retirar</label>
+                                    <label style="display: block; font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem; font-weight: 700;">Cantidad a Retirar</label>
                                     <input type="number" id="insumo-qty" class="form-control" value="1" min="0.01" step="any"
-                                           style="font-size: 1.1rem; font-weight: 800; padding: 0.75rem 1rem; border-radius: 0.75rem; border: 2px solid #cbd5e1; text-align: center;"
+                                           style="font-size: 1rem; font-weight: 800; padding: 0.5rem 0.75rem; border-radius: 0.65rem; border: 1.5px solid #cbd5e1; text-align: center; height: 40px;"
                                            oninput="ExpensesView.recalcInsumoValues()">
                                 </div>
                                 <div>
-                                    <label style="display: block; font-size: 0.82rem; color: #64748b; margin-bottom: 0.4rem; font-weight: 600;">Motivo / Destino de Uso</label>
+                                    <label style="display: block; font-size: 0.75rem; color: #64748b; margin-bottom: 0.25rem; font-weight: 700;">Motivo / Destino de Uso</label>
                                     <input type="text" id="insumo-reason" class="form-control" placeholder="Ej: Limpieza de estantes y baños"
                                            value="Uso operativo en tienda"
-                                           style="font-size: 0.95rem; padding: 0.75rem 1rem; border-radius: 0.75rem; border: 2px solid #cbd5e1;">
+                                           style="font-size: 0.88rem; padding: 0.5rem 0.75rem; border-radius: 0.65rem; border: 1.5px solid #cbd5e1; height: 40px;">
                                 </div>
                             </div>
 
                             <!-- Resumen de doble valorización -->
-                            <div style="background: #ffffff; border-radius: 0.75rem; padding: 0.85rem 1.15rem; border: 1px solid #e2e8f0; display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; text-align: center;">
+                            <div style="background: #ffffff; border-radius: 0.65rem; padding: 0.65rem 0.9rem; border: 1px solid #e2e8f0; display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; text-align: center;">
                                 <div>
-                                    <span style="font-size: 0.72rem; color: #059669; font-weight: 800; text-transform: uppercase; display: block;">Costo Empresa (Gasto Real)</span>
-                                    <strong id="insumo-calc-cost" style="font-size: 1.25rem; color: #059669; font-weight: 950;">$0</strong>
+                                    <span style="font-size: 0.68rem; color: #059669; font-weight: 800; text-transform: uppercase; display: block;">Costo Empresa (Gasto Real)</span>
+                                    <strong id="insumo-calc-cost" style="font-size: 1.15rem; color: #059669; font-weight: 950;">$0</strong>
                                 </div>
                                 <div>
-                                    <span style="font-size: 0.72rem; color: #64748b; font-weight: 800; text-transform: uppercase; display: block;">Valor Comercial Equivalente</span>
-                                    <strong id="insumo-calc-sale" style="font-size: 1.25rem; color: #64748b; font-weight: 950;">$0</strong>
+                                    <span style="font-size: 0.68rem; color: #64748b; font-weight: 800; text-transform: uppercase; display: block;">Valor Comercial Equivalente</span>
+                                    <strong id="insumo-calc-sale" style="font-size: 1.15rem; color: #64748b; font-weight: 950;">$0</strong>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Botón guardar insumo -->
                         <button onclick="ExpensesView.saveInsumoExpense()"
-                                style="width: 100%; padding: 1rem; background: linear-gradient(135deg, #059669, #10b981); color: #fff;
-                                       border: none; border-radius: 0.875rem; font-size: 1.05rem; font-weight: 800; cursor: pointer;
-                                       box-shadow: 0 4px 16px rgba(16,185,129,0.35); transition: all 0.2s;"
-                                onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 8px 24px rgba(16,185,129,0.45)'"
-                                onmouseout="this.style.transform=''; this.style.boxShadow='0 4px 16px rgba(16,185,129,0.35)'">
-                            🧹 Registrar Insumo y Descontar Stock
-                        </button>
+                                style="width: 100%; height: 44px; background: linear-gradient(135deg, #059669, #10b981); color: #fff;
+                                       border: none; border-radius: 0.75rem; font-size: 0.95rem; font-weight: 800; cursor: pointer;
+                                       box-shadow: 0 4px 14px rgba(16,185,129,0.3); transition: all 0.2s; display: flex; align-items: center; justify-content: center; gap: 0.4rem;"
+                                       onmouseover="this.style.transform='translateY(-1.5px)'; this.style.boxShadow='0 6px 18px rgba(16,185,129,0.4)'"
+                                       onmouseout="this.style.transform=''; this.style.boxShadow='0 4px 14px rgba(16,185,129,0.3)'">
+                            <span>🧹</span>
+                            <span>Registrar Insumo y Descontar Stock</span>
                     </div> <!-- /#form-mode-insumo -->
 
                 </div>
@@ -707,7 +748,7 @@ const ExpensesView = {
         }
     },
 
-        setupCategorySelection() {
+    setupCategorySelection() {
         this.selectCategory('servicios');
     },
 
@@ -718,6 +759,21 @@ const ExpensesView = {
         document.querySelectorAll('.exp-cat-btn').forEach(btn => {
             btn.classList.toggle('selected', btn.dataset.cat === key);
         });
+    },
+
+    addQuickAmount(n) {
+        const el = document.getElementById('exp-amount');
+        if (!el) return;
+        const current = parseFloat(el.value) || 0;
+        el.value = current + n;
+        el.focus();
+    },
+
+    setQuickAmount(n) {
+        const el = document.getElementById('exp-amount');
+        if (!el) return;
+        el.value = n === 0 ? '' : n;
+        el.focus();
     },
 
     async saveExpense() {
@@ -852,30 +908,38 @@ const ExpensesView = {
         const currentMonth = new Date().toISOString().slice(0, 7);
         return `
             <div style="animation: expFadeUp 0.3s ease;">
-                <!-- Filtros -->
-                <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1.25rem; padding: 1rem; background: #fff; border-radius: 1rem; box-shadow: 0 2px 12px rgba(0,0,0,0.06);">
+                <!-- Filtros Compactos -->
+                <div style="display: flex; gap: 0.65rem; flex-wrap: wrap; margin-bottom: 0.75rem; padding: 0.65rem 0.85rem; background: #fff; border-radius: 0.75rem; border: 1px solid #e2e8f0; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
                     <input type="month" id="hist-month" value="${currentMonth}" class="form-control"
-                           style="flex: 1; min-width: 150px; border-radius: 0.625rem; border: 2px solid #e2e8f0; padding: 0.625rem 0.875rem;"
+                           style="flex: 1; min-width: 140px; height: 38px; border-radius: 0.55rem; border: 1.5px solid #cbd5e1; padding: 0.4rem 0.65rem; font-size: 0.88rem;"
                            onchange="ExpensesView.loadHistory()">
                     <select id="hist-cat" class="form-control"
-                           style="flex: 1; min-width: 160px; border-radius: 0.625rem; border: 2px solid #e2e8f0; padding: 0.625rem 0.875rem;"
+                           style="flex: 1; min-width: 160px; height: 38px; border-radius: 0.55rem; border: 1.5px solid #cbd5e1; padding: 0.4rem 0.65rem; font-size: 0.88rem;"
                            onchange="ExpensesView.loadHistory()">
                         <option value="all">Todas las categorías</option>
                         ${this.CATEGORIES.map(c => `<option value="${c.key}">${c.icon} ${c.label}</option>`).join('')}
                     </select>
-                    <input type="text" id="hist-search" class="form-control" placeholder="🔍 Buscar..."
-                           style="flex: 2; min-width: 180px; border-radius: 0.625rem; border: 2px solid #e2e8f0; padding: 0.625rem 0.875rem;"
+                    <input type="text" id="hist-search" class="form-control" placeholder="🔍 Buscar gasto..."
+                           style="flex: 2; min-width: 180px; height: 38px; border-radius: 0.55rem; border: 1.5px solid #cbd5e1; padding: 0.4rem 0.65rem; font-size: 0.88rem;"
                            oninput="ExpensesView.loadHistory()">
                 </div>
 
-                <!-- Total filtrado -->
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.875rem;">
-                    <span id="hist-summary" style="font-size: 0.85rem; color: #64748b;"></span>
-                    <span id="hist-total" style="font-size: 1.1rem; font-weight: 800; color: #ef4444;"></span>
+                <!-- Total filtrado y Exportaciones -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.65rem; padding: 0 0.25rem; flex-wrap: wrap; gap: 0.5rem;">
+                    <span id="hist-summary" style="font-size: 0.82rem; color: #64748b; font-weight: 700;"></span>
+                    <div style="display: flex; gap: 0.4rem; align-items: center;">
+                        <button type="button" class="btn btn-sm" onclick="ExpensesView.exportExpensesPDF()" style="font-weight: 800; border-radius: 6px; padding: 0.35rem 0.65rem; font-size: 0.78rem; display: flex; align-items: center; gap: 0.3rem; background: #fef2f2; border: 1.5px solid #fecaca; color: #dc2626; cursor: pointer;" title="Descargar informe de gastos en PDF">
+                            <span>📄</span> <span>Informe PDF</span>
+                        </button>
+                        <button type="button" class="btn btn-sm" onclick="ExpensesView.exportExpensesExcel()" style="font-weight: 800; border-radius: 6px; padding: 0.35rem 0.65rem; font-size: 0.78rem; display: flex; align-items: center; gap: 0.3rem; background: #ecfdf5; border: 1.5px solid #a7f3d0; color: #047857; cursor: pointer;" title="Descargar planilla Excel de gastos">
+                            <span>📊</span> <span>Excel</span>
+                        </button>
+                        <span id="hist-total" style="font-size: 1.05rem; font-weight: 900; color: #ef4444; margin-left: 0.5rem;"></span>
+                    </div>
                 </div>
 
-                <!-- Lista -->
-                <div id="hist-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <!-- Lista con Scroll Interno Cero Scroll -->
+                <div id="hist-list" style="display: flex; flex-direction: column; gap: 0.45rem; max-height: calc(100vh - 250px); overflow-y: auto; padding-right: 4px;">
                     <div style="text-align:center; padding: 3rem; color: #94a3b8;">Cargando...</div>
                 </div>
             </div>
@@ -989,9 +1053,11 @@ const ExpensesView = {
                         ${isInsumoStock && exp.cost_value ? `<div style="font-size:0.7rem; color:#64748b;">Costo: ${formatCLP(exp.cost_value)} · Venta: ${formatCLP(exp.sale_value || 0)}</div>` : ''}
                     </div>
                     <span class="exp-badge" style="background:${catInfo.color}18; color:${catInfo.color}; justify-self: start;">${catInfo.icon} ${catInfo.label}</span>
-                    <div style="display: flex; align-items: center; gap: 0.5rem; justify-self: end;">
+                    <div style="display: flex; align-items: center; gap: 0.35rem; justify-self: end;">
                         ${attachmentBtn}
-                        <div style="font-weight: 800; color: #ef4444; font-size: 0.95rem; white-space: nowrap;">${formatCLP(exp.amount)}</div>
+                        <button type="button" onclick="ExpensesView.printExpenseTicket(${exp.id})" style="border: 1.5px solid #cbd5e1; background: #f8fafc; color: #334155; border-radius: 6px; padding: 0.25rem 0.45rem; cursor: pointer; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center;" title="Imprimir Comprobante / Vale de Gasto">🖨️</button>
+                        <button type="button" onclick="ExpensesView.cancelExpense(${exp.id})" style="border: 1.5px solid #fecaca; background: #fef2f2; color: #dc2626; border-radius: 6px; padding: 0.25rem 0.45rem; cursor: pointer; font-size: 0.82rem; display: inline-flex; align-items: center; justify-content: center;" title="Anular / Reintegrar Gasto">🗑️</button>
+                        <div style="font-weight: 800; color: #ef4444; font-size: 0.95rem; white-space: nowrap; margin-left: 0.25rem;">${formatCLP(exp.amount)}</div>
                     </div>
                 </div>
             `;
@@ -1351,6 +1417,349 @@ const ExpensesView = {
             });
         }
         return months;
+    },
+
+    async exportExpensesPDF() {
+        try {
+            const jsPDF = window.jspdf ? window.jspdf.jsPDF : null;
+            if (!jsPDF) {
+                showNotification('Módulo PDF no disponible', 'warning');
+                return;
+            }
+
+            const month = document.getElementById('hist-month')?.value || new Date().toISOString().slice(0, 7);
+            const cat = document.getElementById('hist-cat')?.value || 'all';
+            const search = (document.getElementById('hist-search')?.value || '').toLowerCase();
+
+            const [expenses, suppliers] = await Promise.all([
+                this._getExpenseMovements(month),
+                Supplier.getAll().catch(() => [])
+            ]);
+
+            const supplierMap = {};
+            suppliers.forEach(s => supplierMap[s.id] = s);
+
+            let filtered = expenses;
+            if (cat !== 'all') filtered = filtered.filter(e => e.category === cat);
+            if (search) filtered = filtered.filter(e => (e.description || '').toLowerCase().includes(search));
+
+            if (filtered.length === 0) {
+                showNotification('No hay gastos en el período seleccionado para exportar', 'warning');
+                return;
+            }
+
+            const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+            const bizName = localStorage.getItem('BUSINESS_NAME') || 'Mi Negocio';
+            const bizRut = localStorage.getItem('BUSINESS_RUT') || '';
+            const now = new Date();
+            const total = filtered.reduce((s, e) => s + (e.amount || 0), 0);
+
+            // Banner superior
+            doc.setFillColor(30, 41, 59);
+            doc.rect(0, 0, 595, 65, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            doc.text(bizName.toUpperCase(), 40, 38);
+
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text('INFORME DE GASTOS OPERATIVOS', 380, 38);
+
+            // Datos período
+            let y = 90;
+            doc.setTextColor(30, 41, 59);
+            doc.setFontSize(9);
+            if (bizRut) { doc.text(`RUT Comercio: ${bizRut}`, 40, y); y += 13; }
+            doc.text(`Período: ${month}  |  Registros: ${filtered.length}  |  Emisión: ${now.toLocaleDateString('es-CL')} ${now.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`, 40, y);
+
+            // Caja Total
+            y += 18;
+            doc.setFillColor(254, 242, 242);
+            doc.rect(40, y, 515, 32, 'F');
+            doc.setDrawColor(254, 202, 202);
+            doc.rect(40, y, 515, 32, 'D');
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            doc.setTextColor(185, 28, 28);
+            doc.text(`TOTAL GASTOS DEL PERÍODO: ${formatCLP(total)}`, 50, y + 20);
+
+            // Tabla con autoTable
+            const docLabelMap = { 'comprobante_interno': 'Comp.', 'boleta': 'Boleta', 'factura': 'Factura', 'honorarios': 'Honorarios' };
+            const payMethodMap = { 'cash': 'Efectivo', 'transfer': 'Transf.', 'card': 'Tarjeta', 'product_stock': 'Insumo' };
+
+            const tableRows = filtered.map(e => {
+                const dateStr = e.date ? new Date(e.date).toLocaleDateString('es-CL') : '—';
+                const catObj = this.CATEGORIES.find(c => c.key === e.category);
+                const catLabel = catObj ? catObj.label : (e.category || 'Otros');
+                const docStr = `${docLabelMap[e.documentType] || 'Comp.'} ${e.documentNumber ? '#' + e.documentNumber : ''}`.trim();
+                const supStr = e.supplierId && supplierMap[e.supplierId] ? supplierMap[e.supplierId].name : '—';
+                const payStr = payMethodMap[e.paymentMethod] || 'Efectivo';
+                return [
+                    dateStr,
+                    catLabel,
+                    (e.description || '').replace('[GASTO] ', '').replace('[INSUMO TIENDA] ', ''),
+                    supStr,
+                    docStr,
+                    payStr,
+                    formatCLP(e.amount || 0)
+                ];
+            });
+
+            if (doc.autoTable) {
+                doc.autoTable({
+                    startY: y + 45,
+                    head: [['Fecha', 'Categoría', 'Descripción / Detalle', 'Proveedor', 'Documento', 'Medio Pago', 'Monto']],
+                    body: tableRows,
+                    theme: 'striped',
+                    headStyles: { fillColor: [220, 38, 38], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+                    bodyStyles: { fontSize: 8, textColor: [15, 23, 42] },
+                    margin: { left: 40, right: 40 }
+                });
+            }
+
+            const fileName = `informe_gastos_${month}.pdf`;
+            doc.save(fileName);
+            showNotification('Informe de gastos PDF generado con éxito', 'success');
+        } catch (e) {
+            console.error('Error al generar PDF de gastos:', e);
+            showNotification('Error al exportar PDF de gastos', 'error');
+        }
+    },
+
+    async exportExpensesExcel() {
+        try {
+            if (typeof XLSX === 'undefined') {
+                showNotification('Librería Excel no disponible', 'warning');
+                return;
+            }
+
+            const month = document.getElementById('hist-month')?.value || new Date().toISOString().slice(0, 7);
+            const cat = document.getElementById('hist-cat')?.value || 'all';
+            const search = (document.getElementById('hist-search')?.value || '').toLowerCase();
+
+            const [expenses, suppliers] = await Promise.all([
+                this._getExpenseMovements(month),
+                Supplier.getAll().catch(() => [])
+            ]);
+
+            const supplierMap = {};
+            suppliers.forEach(s => supplierMap[s.id] = s);
+
+            let filtered = expenses;
+            if (cat !== 'all') filtered = filtered.filter(e => e.category === cat);
+            if (search) filtered = filtered.filter(e => (e.description || '').toLowerCase().includes(search));
+
+            if (filtered.length === 0) {
+                showNotification('No hay gastos en el período para exportar', 'warning');
+                return;
+            }
+
+            const docLabelMap = { 'comprobante_interno': 'Comprobante Interno', 'boleta': 'Boleta', 'factura': 'Factura', 'honorarios': 'Boleta de Honorarios' };
+            const payMethodMap = { 'cash': 'Efectivo', 'transfer': 'Transferencia', 'card': 'Tarjeta', 'product_stock': 'Insumo Tienda' };
+
+            const data = filtered.map(e => {
+                const catObj = this.CATEGORIES.find(c => c.key === e.category);
+                return {
+                    'ID': e.id,
+                    'Fecha': e.date ? new Date(e.date).toLocaleDateString('es-CL') : '',
+                    'Categoría': catObj ? catObj.label : e.category,
+                    'Descripción': (e.description || '').replace('[GASTO] ', '').replace('[INSUMO TIENDA] ', ''),
+                    'Proveedor': e.supplierId && supplierMap[e.supplierId] ? supplierMap[e.supplierId].name : '',
+                    'Tipo Documento': docLabelMap[e.documentType] || e.documentType || '',
+                    'N° Documento': e.documentNumber || '',
+                    'Medio de Pago': payMethodMap[e.paymentMethod] || e.paymentMethod || '',
+                    'Monto ($)': e.amount || 0,
+                    'Usuario': e.userName || ''
+                };
+            });
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Gastos');
+            XLSX.writeFile(wb, `gastos_${month}.xlsx`);
+            showNotification('Planilla Excel exportada con éxito', 'success');
+        } catch (e) {
+            console.error('Error al exportar Excel de gastos:', e);
+            showNotification('Error al exportar Excel de gastos', 'error');
+        }
+    },
+
+    async printExpenseTicket(expenseId) {
+        try {
+            const exp = await Expense.getById(expenseId);
+            if (!exp) {
+                showNotification('Gasto no encontrado', 'error');
+                return;
+            }
+
+            const bizName = localStorage.getItem('BUSINESS_NAME') || 'Mi Negocio';
+            const bizRut = localStorage.getItem('BUSINESS_RUT') || '';
+            const bizAddress = localStorage.getItem('BUSINESS_ADDRESS') || '';
+            const catObj = this.CATEGORIES.find(c => c.key === exp.category);
+            const catLabel = catObj ? catObj.label : (exp.category || 'Otros');
+
+            const dateStr = exp.date ? new Date(exp.date).toLocaleDateString('es-CL') : new Date().toLocaleDateString('es-CL');
+            const timeStr = exp.date ? new Date(exp.date).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '';
+
+            const content = `
+                <div id="printExpenseSection" style="max-width: 340px; margin: 0 auto; font-family: 'Courier New', Courier, monospace; font-size: 13px; color: #000; background: #fff; padding: 1.25rem; border-radius: 0.75rem; border: 1px dashed #cbd5e1;">
+                    <div style="text-align: center; border-bottom: 1px dashed #cbd5e1; padding-bottom: 0.75rem; margin-bottom: 0.75rem;">
+                        <h2 style="font-size: 1.15rem; font-weight: 900; margin: 0; text-transform: uppercase;">${bizName}</h2>
+                        ${bizRut ? `<div style="font-size: 0.85rem;">RUT: ${bizRut}</div>` : ''}
+                        ${bizAddress ? `<div style="font-size: 0.8rem; color: #475569;">${bizAddress}</div>` : ''}
+                        <div style="margin-top: 0.5rem; font-weight: 800; font-size: 0.95rem; text-transform: uppercase; background: #fee2e2; color: #991b1b; padding: 0.25rem; border-radius: 4px;">
+                            VALE DE GASTO / EGRESO
+                        </div>
+                    </div>
+
+                    <div style="margin-bottom: 0.75rem; font-size: 0.85rem; line-height: 1.4;">
+                        <div><strong>Folio Gasto:</strong> #${exp.id}</div>
+                        <div><strong>Fecha:</strong> ${dateStr} ${timeStr}</div>
+                        <div><strong>Categoría:</strong> ${catLabel}</div>
+                        <div><strong>Medio Pago:</strong> ${exp.paymentMethod === 'cash' ? 'Efectivo' : (exp.paymentMethod === 'transfer' ? 'Transferencia' : (exp.paymentMethod === 'product_stock' ? 'Insumo Tienda' : 'Tarjeta'))}</div>
+                        ${exp.documentNumber ? `<div><strong>Documento:</strong> ${exp.documentType || 'Comp.'} N° ${exp.documentNumber}</div>` : ''}
+                        ${exp.userName ? `<div><strong>Autorizado por:</strong> ${exp.userName}</div>` : ''}
+                    </div>
+
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.65rem; margin-bottom: 1rem; font-size: 0.85rem;">
+                        <strong>Concepto / Detalle:</strong>
+                        <div style="margin-top: 0.25rem; color: #334155;">
+                            ${(exp.description || '').replace('[GASTO] ', '').replace('[INSUMO TIENDA] ', '')}
+                        </div>
+                    </div>
+
+                    <div style="text-align: center; margin-bottom: 1.25rem; border: 2px solid #ef4444; background: #fef2f2; border-radius: 8px; padding: 0.75rem;">
+                        <div style="font-size: 0.8rem; font-weight: 700; color: #991b1b; text-transform: uppercase;">Monto Autorizado</div>
+                        <div style="font-size: 1.5rem; font-weight: 950; color: #dc2626; margin-top: 0.25rem;">${formatCLP(exp.amount || 0)}</div>
+                    </div>
+
+                    <div style="margin-top: 2rem; border-top: 1px dashed #94a3b8; padding-top: 0.5rem; text-align: center; font-size: 0.8rem; color: #64748b;">
+                        <div>Firma Responsable / Receptor</div>
+                        <div style="margin-top: 2.5rem; border-bottom: 1px solid #000; width: 70%; margin-left: auto; margin-right: auto;"></div>
+                        <div style="margin-top: 0.35rem; font-size: 0.75rem;">Nombre / RUT</div>
+                    </div>
+                </div>
+            `;
+
+            const footer = `
+                <button class="btn btn-secondary" onclick="closeModal()">✕ Cerrar</button>
+                <button class="btn btn-primary" onclick="ExpensesView.printExpenseElement()" style="font-weight: 900; background: linear-gradient(135deg, #ef4444, #dc2626); border: none; padding: 0.6rem 1.5rem;">
+                    🖨️ Mandar a Imprimir
+                </button>
+            `;
+
+            showModal(content, { title: `🖨️ Comprobante Gasto #${exp.id}`, footer, width: '400px' });
+        } catch (e) {
+            console.error('Error al abrir comprobante de gasto:', e);
+            showNotification('Error al preparar vale de gasto', 'error');
+        }
+    },
+
+    printExpenseElement() {
+        const printContent = document.getElementById('printExpenseSection');
+        if (!printContent) return;
+
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        document.body.appendChild(iframe);
+
+        const doc = iframe.contentWindow.document;
+        doc.open();
+        doc.write(`
+            <html>
+                <head>
+                    <title>Vale de Gasto</title>
+                    <style>
+                        @page { margin: 0; size: 80mm auto; }
+                        body { margin: 10px; font-family: 'Courier New', monospace; font-size: 13px; color: #000; background: #fff; }
+                    </style>
+                </head>
+                <body>
+                    ${printContent.innerHTML}
+                </body>
+            </html>
+        `);
+        doc.close();
+
+        setTimeout(() => {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+            setTimeout(() => {
+                document.body.removeChild(iframe);
+            }, 1000);
+        }, 300);
+    },
+
+    async cancelExpense(expenseId) {
+        try {
+            const exp = await Expense.getById(expenseId);
+            if (!exp) {
+                showNotification('Gasto no encontrado', 'error');
+                return;
+            }
+
+            const confirmed = await showConfirm(
+                `¿Está seguro de anular el gasto de <strong>${formatCLP(exp.amount)}</strong>?<br><br>
+                <span style="font-size: 0.9rem; color: #475569;">
+                ${exp.paymentMethod === 'cash' && exp.cashRegisterId ? '• Se reintegrará el dinero físico a la caja activa.<br>' : ''}
+                ${exp.productId && exp.quantity ? `• Se devolverán las ${exp.quantity} unidades al inventario del producto.<br>` : ''}
+                • El registro se eliminará de las cuentas y estadísticas.
+                </span>`,
+                'Anular Gasto Operativo',
+                'Sí, Anular Gasto',
+                'Cancelar'
+            );
+
+            if (!confirmed) return;
+
+            // 1. Reintegrar stock si fue un insumo descontado
+            if (exp.productId && exp.quantity && typeof Product !== 'undefined' && typeof Product.updateStock === 'function') {
+                try {
+                    await Product.updateStock(exp.productId, exp.quantity, 'add');
+                    console.log(`[Expenses] Reintegradas ${exp.quantity} un al producto #${exp.productId}`);
+                } catch (stockErr) {
+                    console.error('[Expenses] Error al reintegrar stock de insumo:', stockErr);
+                }
+            }
+
+            // 2. Reintegrar efectivo a caja si provino de una caja registradora
+            if (exp.paymentMethod === 'cash' && exp.cashRegisterId && typeof CashMovement !== 'undefined' && typeof CashMovement.create === 'function') {
+                try {
+                    await CashMovement.create({
+                        cashRegisterId: exp.cashRegisterId,
+                        type: 'in',
+                        amount: exp.amount,
+                        description: `[ANULACIÓN GASTO] Reintegro de gasto #${exp.id}: ${exp.description}`,
+                        reason: `[ANULACIÓN GASTO] Reintegro de gasto #${exp.id}: ${exp.description}`,
+                        category: exp.category || 'otros',
+                        date: new Date().toISOString()
+                    });
+                    console.log(`[Expenses] Reintegrados ${exp.amount} a la caja #${exp.cashRegisterId}`);
+                } catch (cashErr) {
+                    console.error('[Expenses] Error al reintegrar efectivo en caja:', cashErr);
+                }
+            }
+
+            // 3. Eliminar el gasto
+            await Expense.delete(expenseId);
+            showNotification('Gasto anulado y reintegrado con éxito', 'success');
+
+            // 4. Recargar vista de historial
+            await this.loadHistory();
+            if (typeof this.loadSummary === 'function') {
+                await this.loadSummary();
+            }
+        } catch (e) {
+            console.error('Error al anular gasto:', e);
+            showNotification('Error al anular el gasto', 'error');
+        }
     },
 
     destroy() {

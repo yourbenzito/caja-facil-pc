@@ -63,16 +63,30 @@
     <!-- Script de actualización removido -->
     <!-- Google Fonts movidas al <head> con preload para mejor rendimiento -->
 
-    <!-- Splash screen para carga (Diseño Minimalista Ejecutivo Claro - Estilo Apple Business / Square) -->
+    <!-- Splash Screen Interactivo y Animado (Glassmorphism 3D + Aurora Glow + Mouse Tilt) -->
     <div id="splash-screen"
-        style="position: fixed; inset: 0; background: radial-gradient(circle at 50% 40%, #ffffff 0%, #f8fafc 60%, #f1f5f9 100%); display: flex; align-items: center; justify-content: center; z-index: 10000; font-family: 'Outfit', sans-serif; overflow: hidden;">
+        style="position: fixed; inset: 0; background: radial-gradient(circle at 50% 50%, #ffffff 0%, #f1f5f9 55%, #e2e8f0 100%); display: flex; align-items: center; justify-content: center; z-index: 10000; font-family: 'Outfit', sans-serif; overflow: hidden; perspective: 1200px;">
         
-        <!-- Contenedor Ejecutivo Minimalista -->
-        <div style="position: relative; z-index: 10; text-align: center; background: #ffffff; border: 1px solid #e2e8f0; padding: 2.75rem 2.25rem; border-radius: 1.5rem; box-shadow: 0 20px 25px -5px rgba(15, 23, 42, 0.05), 0 8px 10px -6px rgba(15, 23, 42, 0.02); animation: splashFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards; max-width: 410px; width: 88%;">
+        <!-- Orbes de Luz Ambiental Flotantes (Aurora Glow) -->
+        <div class="splash-orb splash-orb-blue" style="position: absolute; width: 380px; height: 380px; border-radius: 50%; background: radial-gradient(circle, rgba(59, 130, 246, 0.42) 0%, rgba(99, 102, 241, 0.18) 60%, transparent 80%); filter: blur(65px); top: 12%; left: 16%; animation: splashFloatOrb1 10s ease-in-out infinite alternate; pointer-events: none;"></div>
+        <div class="splash-orb splash-orb-purple" style="position: absolute; width: 340px; height: 340px; border-radius: 50%; background: radial-gradient(circle, rgba(139, 92, 246, 0.38) 0%, rgba(217, 70, 239, 0.15) 60%, transparent 80%); filter: blur(65px); bottom: 12%; right: 16%; animation: splashFloatOrb2 12s ease-in-out infinite alternate; pointer-events: none;"></div>
+        <div class="splash-orb splash-orb-cyan" style="position: absolute; width: 260px; height: 260px; border-radius: 50%; background: radial-gradient(circle, rgba(6, 182, 212, 0.3) 0%, transparent 75%); filter: blur(55px); bottom: 28%; left: 32%; animation: splashFloatOrb3 8s ease-in-out infinite alternate; pointer-events: none;"></div>
+
+        <!-- Tarjeta de Cristal Interactivo 3D (Tilt + Spotlight) -->
+        <div id="splash-card" style="position: relative; z-index: 10; text-align: center; background: rgba(255, 255, 255, 0.82); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1.5px solid rgba(255, 255, 255, 0.95); padding: 2.85rem 2.5rem 2.35rem; border-radius: 1.75rem; box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(255, 255, 255, 0.6) inset; max-width: 430px; width: 88%; transform-style: preserve-3d; transition: transform 0.15s ease-out, box-shadow 0.25s ease;">
             
-            <!-- Icono Caja Registradora / Terminal POS Formal -->
-            <div style="width: 72px; height: 72px; margin: 0 auto 1.25rem; border-radius: 1.15rem; background: #f8fafc; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04);">
-                <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <!-- Reflejo de Luz Dinámica que Sigue al Ratón -->
+            <div id="splash-spotlight" style="position: absolute; inset: 0; border-radius: 1.75rem; pointer-events: none; background: radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), rgba(255, 255, 255, 0.65) 0%, transparent 60%); opacity: 0.8; transition: opacity 0.3s;"></div>
+
+            <!-- Icono Central con Halo de Respiración Tecnológica -->
+            <div style="width: 78px; height: 78px; margin: 0 auto 1.35rem; border-radius: 1.3rem; background: linear-gradient(135deg, rgba(239, 246, 255, 0.95) 0%, rgba(224, 231, 255, 0.85) 100%); border: 1.5px solid rgba(199, 210, 254, 0.85); display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.28), 0 0 20px rgba(99, 102, 241, 0.2); animation: splashIconPulse 3.2s ease-in-out infinite;">
+                <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="url(#splash-icon-grad)" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                    <defs>
+                        <linearGradient id="splash-icon-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" stop-color="#2563eb" />
+                            <stop offset="100%" stop-color="#7c3aed" />
+                        </linearGradient>
+                    </defs>
                     <rect x="2" y="3" width="20" height="14" rx="2"></rect>
                     <line x1="8" y1="21" x2="16" y2="21"></line>
                     <line x1="12" y1="17" x2="12" y2="21"></line>
@@ -80,31 +94,111 @@
                 </svg>
             </div>
             
-            <h1 style="color: #0f172a; font-size: 2rem; font-weight: 800; margin: 0; letter-spacing: -0.5px; line-height: 1.1;">
-                Caja<span style="color: #2563eb;">Fácil</span> 
-                <span style="font-size: 0.72rem; vertical-align: middle; background: #eff6ff; color: #2563eb; border: 1px solid #bfdbfe; padding: 0.15rem 0.55rem; border-radius: 9999px; font-weight: 800; letter-spacing: 0.5px;">POS</span>
+            <!-- Tipografía de Marca -->
+            <h1 style="color: #0f172a; font-size: 2.15rem; font-weight: 900; margin: 0; letter-spacing: -0.6px; line-height: 1.1;">
+                Caja<span style="background: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">Fácil</span> 
+                <span style="font-size: 0.74rem; vertical-align: middle; background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%); color: #ffffff; padding: 0.2rem 0.65rem; border-radius: 9999px; font-weight: 900; letter-spacing: 0.6px; box-shadow: 0 4px 10px rgba(37,99,235,0.35);">POS</span>
             </h1>
-            <p style="color: #64748b; font-size: 0.85rem; margin-top: 0.4rem; margin-bottom: 2rem; font-weight: 500; letter-spacing: 0.2px;">Sistema de Punto de Venta & Gestión Comercial</p>
+            <p style="color: #475569; font-size: 0.86rem; margin-top: 0.45rem; margin-bottom: 2.1rem; font-weight: 600; letter-spacing: 0.15px;">Sistema de Punto de Venta & Gestión Comercial</p>
             
-            <!-- Barra de Progreso Sutil Corporativa -->
-            <div style="width: 100%; height: 5px; background: #f1f5f9; border-radius: 9999px; margin: 0 auto 1.1rem; overflow: hidden; position: relative; border: 1px solid #e2e8f0;">
-                <div style="position: absolute; height: 100%; width: 40%; background: #2563eb; border-radius: 9999px; animation: clean-scroll 1.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;"></div>
+            <!-- Barra de Carga Líquida con Shimmer Neón -->
+            <div style="width: 100%; height: 6px; background: rgba(226, 232, 240, 0.7); border-radius: 9999px; margin: 0 auto 1.25rem; overflow: hidden; position: relative; border: 1px solid rgba(203, 213, 225, 0.6); box-shadow: 0 1px 3px rgba(0,0,0,0.04) inset;">
+                <div style="position: absolute; height: 100%; width: 45%; background: linear-gradient(90deg, #3b82f6, #6366f1, #8b5cf6, #38bdf8); background-size: 200% 100%; border-radius: 9999px; box-shadow: 0 0 14px rgba(99, 102, 241, 0.65); animation: splashLiquidProgress 1.6s ease-in-out infinite;"></div>
             </div>
             
-            <p id="loading-text" style="color: #475569; font-size: 0.82rem; font-family: 'Inter', sans-serif; font-weight: 600; margin: 0;">Iniciando sistema de venta...</p>
+            <!-- Cápsula de Estado con Micro-Pulsación -->
+            <div style="display: inline-flex; align-items: center; gap: 0.45rem; background: rgba(241, 245, 249, 0.85); border: 1px solid rgba(226, 232, 240, 0.95); padding: 0.35rem 0.95rem; border-radius: 9999px; box-shadow: 0 2px 6px rgba(0,0,0,0.02);">
+                <span style="width: 7px; height: 7px; border-radius: 50%; background: #2563eb; display: inline-block; animation: splashDotBlink 1.1s ease-in-out infinite alternate; box-shadow: 0 0 6px rgba(37,99,235,0.6);"></span>
+                <span id="loading-text" style="color: #334155; font-size: 0.82rem; font-family: 'Inter', sans-serif; font-weight: 700; margin: 0;">Iniciando sistema de venta...</span>
+            </div>
         </div>
     </div>
 
+    <!-- Estilos y Animaciones del Splash Interactivo -->
     <style>
-        @keyframes splashFadeIn {
-            from { opacity: 0; transform: translateY(10px) scale(0.99); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
+        @keyframes splashFloatOrb1 {
+            0% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(45px, 35px) scale(1.1); }
+            100% { transform: translate(-30px, 50px) scale(0.95); }
         }
-        @keyframes clean-scroll {
-            0% { transform: translateX(-100%); }
-            100% { transform: translateX(280%); }
+        @keyframes splashFloatOrb2 {
+            0% { transform: translate(0, 0) scale(1); }
+            50% { transform: translate(-40px, -30px) scale(1.12); }
+            100% { transform: translate(35px, -45px) scale(0.92); }
+        }
+        @keyframes splashFloatOrb3 {
+            0% { transform: translate(0, 0) scale(1); }
+            100% { transform: translate(30px, -35px) scale(1.15); }
+        }
+        @keyframes splashIconPulse {
+            0%, 100% { transform: translateY(0) scale(1); box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.28), 0 0 20px rgba(99, 102, 241, 0.2); }
+            50% { transform: translateY(-3px) scale(1.04); box-shadow: 0 16px 30px -5px rgba(59, 130, 246, 0.4), 0 0 30px rgba(99, 102, 241, 0.35); }
+        }
+        @keyframes splashLiquidProgress {
+            0% { transform: translateX(-110%); background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { transform: translateX(290%); background-position: 0% 50%; }
+        }
+        @keyframes splashDotBlink {
+            0% { opacity: 0.4; transform: scale(0.85); }
+            100% { opacity: 1; transform: scale(1.2); }
         }
     </style>
+
+    <!-- Script de Interactividad 3D con el Ratón -->
+    <script>
+        (function initSplashInteractive() {
+            const splash = document.getElementById('splash-screen');
+            const card = document.getElementById('splash-card');
+            if (!splash || !card) return;
+
+            let rafId = null;
+            let targetRx = 0;
+            let targetRy = 0;
+            let currentRx = 0;
+            let currentRy = 0;
+
+            function updateCardTilt() {
+                currentRx += (targetRx - currentRx) * 0.12;
+                currentRy += (targetRy - currentRy) * 0.12;
+                card.style.transform = `perspective(1000px) rotateX(${currentRx.toFixed(2)}deg) rotateY(${currentRy.toFixed(2)}deg) translateY(-2px)`;
+                if (Math.abs(targetRx - currentRx) > 0.02 || Math.abs(targetRy - currentRy) > 0.02) {
+                    rafId = requestAnimationFrame(updateCardTilt);
+                } else {
+                    rafId = null;
+                }
+            }
+
+            splash.addEventListener('mousemove', (e) => {
+                const rect = splash.getBoundingClientRect();
+                const cardRect = card.getBoundingClientRect();
+                const cx = rect.width / 2;
+                const cy = rect.height / 2;
+                const dx = (e.clientX - cx) / cx;
+                const dy = (e.clientY - cy) / cy;
+
+                targetRy = dx * 10;
+                targetRx = -dy * 10;
+
+                const cardX = ((e.clientX - cardRect.left) / cardRect.width) * 100;
+                const cardY = ((e.clientY - cardRect.top) / cardRect.height) * 100;
+                card.style.setProperty('--mouse-x', `${cardX.toFixed(1)}%`);
+                card.style.setProperty('--mouse-y', `${cardY.toFixed(1)}%`);
+
+                if (!rafId) {
+                    rafId = requestAnimationFrame(updateCardTilt);
+                }
+            });
+
+            splash.addEventListener('mouseleave', () => {
+                targetRx = 0;
+                targetRy = 0;
+                if (!rafId) {
+                    rafId = requestAnimationFrame(updateCardTilt);
+                }
+            });
+        })();
+    </script>
 
     <div id="app" style="display: none;">
         <main id="main-content">
@@ -199,6 +293,13 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <!-- Botón Flotante Interactivo de Notas [F7] (Universal en todos los módulos) -->
+    <div id="floating-notes-fab" class="floating-notes-fab" onclick="app.openNotesModal()" title="Pizarra de Notas, Encargos y Envases [F7]">
+        <span class="fab-icon">📝</span>
+        <span class="fab-label">Notas <kbd>[F7]</kbd></span>
+        <span id="floating-notes-badge" class="fab-badge" style="display: none;">0</span>
     </div>
 
     <div id="modal-overlay" class="modal-overlay"></div>
@@ -314,7 +415,6 @@
     <script src="js/views/customers.js?v=20.10" defer></script>
     <script src="js/views/suppliers.js?v=5.1" defer></script>
     <script src="js/views/purchases.js?v=7.1" defer></script>
-    <script src="js/services/NotesService.js?v=1.0" defer></script>
     <script src="js/views/cash.js?v=2026.final.3" defer></script>
     <script src="js/views/inventory.js?v=2.4" defer></script>
     <script src="js/utils/reports-explanations.js" defer></script>

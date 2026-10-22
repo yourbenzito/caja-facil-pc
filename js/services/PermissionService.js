@@ -43,7 +43,7 @@ class PermissionService {
         'nav.cash': ['owner', 'partner', 'admin', 'cashier'],
         'nav.expenses': ['owner', 'partner', 'admin'],
         'nav.inventory': ['owner', 'partner', 'admin'],
-        'nav.reports': ['owner', 'partner'],
+        'nav.reports': ['owner'],
         'nav.sales': ['owner', 'partner', 'admin', 'cashier'],
         'nav.creditNotes': ['owner', 'partner', 'admin', 'cashier'],
         'nav.settings': ['owner', 'partner', 'admin', 'cashier'], // Todos acceden a "Mi Perfil"
@@ -102,9 +102,9 @@ class PermissionService {
         'expenses.delete': ['owner', 'partner'],
 
         // ─── 📈 Reportes y Finanzas ───
-        'reports.view_sales': ['owner', 'partner'],
-        'reports.view_profits': ['owner', 'partner'],
-        'reports.export': ['owner', 'partner'],
+        'reports.view_sales': ['owner'],
+        'reports.view_profits': ['owner'],
+        'reports.export': ['owner'],
 
         // ─── ⚙️ Configuración del Negocio ───
         'settings.profile': ['owner', 'partner', 'admin', 'cashier'], // Mi Perfil (colores, clave)

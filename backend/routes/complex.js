@@ -235,6 +235,22 @@ router.post('/api/complex/product', async (req, res) => {
     const product = { ...req.body, business_id: req.business_id, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), isActive: 1 };
     const bid = req.business_id;
     try {
+        // ponytail: Limpieza de espacios y validación anti-duplicados de código de barras por negocio
+        if (product.barcode !== undefined && product.barcode !== null) {
+            product.barcode = String(product.barcode).trim();
+            if (product.barcode !== '') {
+                const existing = await dbGet(
+                    "SELECT id, name FROM products WHERE barcode = ? AND business_id = ? AND isActive = 1 AND deletedAt IS NULL",
+                    [product.barcode, bid]
+                );
+                if (existing) {
+                    return res.status(400).json({
+                        error: `Este código de barras ya pertenece a "${existing.name}". Usa un código distinto o edita el producto existente.`
+                    });
+                }
+            }
+        }
+
         const result = await withTransaction(async () => {
             const allowedCols = await getTableColumns('products');
             const cleanProduct = filterToColumns(product, allowedCols);
@@ -269,6 +285,22 @@ router.put('/api/complex/product/:id', async (req, res) => {
     const product = { ...req.body }; 
     const bid = req.business_id;
     try {
+        // ponytail: Limpieza de espacios y validación anti-duplicados de código de barras por negocio excluyendo el producto actual
+        if (product.barcode !== undefined && product.barcode !== null) {
+            product.barcode = String(product.barcode).trim();
+            if (product.barcode !== '') {
+                const existing = await dbGet(
+                    "SELECT id, name FROM products WHERE barcode = ? AND business_id = ? AND id != ? AND isActive = 1 AND deletedAt IS NULL",
+                    [product.barcode, bid, id]
+                );
+                if (existing) {
+                    return res.status(400).json({
+                        error: `Este código de barras ya pertenece a "${existing.name}". Usa un código distinto o edita el producto existente.`
+                    });
+                }
+            }
+        }
+
         await withTransaction(async () => {
             const old = await dbGet("SELECT price, cost FROM products WHERE id = ? AND business_id = ?", [id, bid]);
             if (!old) throw new Error('Producto no encontrado');
@@ -893,6 +925,24 @@ router.post('/api/complex/supplier-payment', async (req, res) => {
                 );
             }
 
+            // Redacción clara y en lenguaje de negocio para auditoría
+            const methodMap = {
+                cash: 'Efectivo',
+                efectivo: 'Efectivo',
+                card: 'Tarjeta Débito/Crédito',
+                tarjeta: 'Tarjeta Débito/Crédito',
+                transfer: 'Transferencia Bancaria',
+                transferencia: 'Transferencia Bancaria',
+                credit: 'Crédito',
+                otro: 'Otro Medio'
+            };
+            const methodDisplay = methodMap[(method || '').toLowerCase()] || method || 'Efectivo';
+            const supplierRow = await dbGet("SELECT name FROM suppliers WHERE id = ? AND business_id = ?", [payment.supplierId, bid]);
+            const supplierNameDisplay = supplierRow ? supplierRow.name : (payment.supplierName || `#${payment.supplierId}`);
+            const formattedAmount = (typeof amount === 'number' || !isNaN(amount)) ? `$${Math.round(amount).toLocaleString('es-CL')}` : `$${amount}`;
+            const purchaseInfo = payment.purchaseId ? ` (Compra #${payment.purchaseId})` : '';
+            const auditSummary = `Pago a proveedor ${supplierNameDisplay} por ${formattedAmount} en ${methodDisplay}${purchaseInfo}`;
+
             await dbRun(
                 `INSERT INTO auditLogs (entity, entityId, action, summary, metadata, timestamp, userId, username, business_id)
                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -900,11 +950,17 @@ router.post('/api/complex/supplier-payment', async (req, res) => {
                     'supplierPayment',
                     r.lastID,
                     'create',
-                    `Pago a proveedor #${payment.supplierId} registrado - ${amount} (${method})`,
-                    JSON.stringify({ supplierId: payment.supplierId, purchaseId: payment.purchaseId || null, amount, method }),
+                    auditSummary,
+                    JSON.stringify({ 
+                        supplierId: payment.supplierId, 
+                        supplierName: supplierNameDisplay,
+                        purchaseId: payment.purchaseId || null, 
+                        amount, 
+                        method: methodDisplay 
+                    }),
                     date,
                     req.userId || null,
-                    req.username || 'sistema',
+                    req.username || payment.username || 'sistema',
                     bid
                 ]
             );

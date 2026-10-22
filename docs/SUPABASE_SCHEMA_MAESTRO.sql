@@ -6,8 +6,8 @@
 -- desarrolladores y restauración de base de datos desde cero.
 -- 
 -- Compatible con: PostgreSQL 15+ / Supabase
--- Tablas activas: 22 tablas con RLS (Row Level Security) y publicación Realtime.
--- Funciones RPC: sync_sale_atomic, adjust_stock_delta, delete_user_account.
+-- Tablas activas: 23 tablas con RLS (Row Level Security) y publicación Realtime.
+-- Funciones RPC: sync_sale_atomic, adjust_stock_delta, delete_user_account, join_business_by_code.
 -- =========================================================================================
 
 -- Habilitar extensiones necesarias
@@ -24,6 +24,8 @@ CREATE TABLE IF NOT EXISTS public.businesses (
     user_id UUID NOT NULL,
     local_id TEXT NOT NULL DEFAULT '1',
     name TEXT NOT NULL DEFAULT 'Mi Negocio',
+    business_code TEXT,
+    join_code TEXT,
     rut TEXT DEFAULT '',
     phone TEXT DEFAULT '',
     address TEXT DEFAULT '',
@@ -33,6 +35,9 @@ CREATE TABLE IF NOT EXISTS public.businesses (
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
+
+CREATE INDEX IF NOT EXISTS idx_businesses_business_code ON public.businesses(business_code);
+CREATE INDEX IF NOT EXISTS idx_businesses_join_code ON public.businesses(join_code);
 
 -- 1.2 Ajustes del Negocio (Ticket, Datos Bancarios)
 CREATE TABLE IF NOT EXISTS public.business_settings (
@@ -55,6 +60,7 @@ CREATE TABLE IF NOT EXISTS public.staff (
     name TEXT NOT NULL,
     pin TEXT NOT NULL DEFAULT '0000',
     role TEXT NOT NULL DEFAULT 'cashier',
+    permissions JSONB DEFAULT '{"posSales":true,"discounts":true,"voidSales":false,"modifyCatalog":false,"purchases":false,"expenses":true,"credits":false,"reportsProfit":false}'::jsonb,
     branch_code TEXT,
     is_active BOOLEAN DEFAULT true,
     is_deleted BOOLEAN DEFAULT false,
@@ -85,9 +91,14 @@ CREATE TABLE IF NOT EXISTS public.products (
     name TEXT NOT NULL,
     category TEXT,
     cost_price NUMERIC DEFAULT 0,
+    cost_neto NUMERIC DEFAULT 0,
     sale_price NUMERIC DEFAULT 0,
     stock NUMERIC DEFAULT 0,
     min_stock NUMERIC DEFAULT 0,
+    max_stock NUMERIC DEFAULT 0,
+    type TEXT DEFAULT 'unit',
+    additional_taxes_config JSONB DEFAULT '[]'::jsonb,
+    expiry_date TEXT,
     is_favorite BOOLEAN DEFAULT false,
     updated_at TIMESTAMPTZ DEFAULT now(),
     is_deleted BOOLEAN DEFAULT false,
@@ -121,7 +132,11 @@ CREATE TABLE IF NOT EXISTS public.sales (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL,
     local_id TEXT NOT NULL,
+    sale_number BIGINT,
     sale_date TIMESTAMPTZ NOT NULL DEFAULT now(),
+    subtotal NUMERIC DEFAULT 0,
+    tax_amount NUMERIC DEFAULT 0,
+    commission_amount NUMERIC DEFAULT 0,
     total NUMERIC NOT NULL DEFAULT 0,
     payment_method TEXT DEFAULT 'EFECTIVO',
     customer_id TEXT,
@@ -133,6 +148,7 @@ CREATE TABLE IF NOT EXISTS public.sales (
     payment_details JSONB DEFAULT '{}'::jsonb,
     paid_amount NUMERIC DEFAULT 0,
     discount_amount NUMERIC DEFAULT 0,
+    paid_at TIMESTAMPTZ,
     is_deleted BOOLEAN DEFAULT false,
     terminal_id TEXT DEFAULT 'PC-1',
     uuid TEXT
@@ -183,6 +199,65 @@ CREATE TABLE IF NOT EXISTS public.customer_credit_deposits (
     notes TEXT,
     business_id BIGINT DEFAULT 1
 );
+
+-- 1.11 Sesiones de Cobro Masivo de Deudas de Clientes
+CREATE TABLE IF NOT EXISTS public.debt_payment_sessions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    local_id TEXT,
+    customer_id TEXT NOT NULL,
+    date TIMESTAMPTZ NOT NULL DEFAULT now(),
+    total_paid NUMERIC DEFAULT 0,
+    total_debt NUMERIC DEFAULT 0,
+    discount NUMERIC DEFAULT 0,
+    methods JSONB DEFAULT '[]'::jsonb,
+    sales_data JSONB DEFAULT '[]'::jsonb,
+    notes TEXT,
+    cash_register_id TEXT,
+    business_id TEXT DEFAULT '1',
+    uuid TEXT,
+    is_deleted BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_debt_payment_sessions_user_biz ON public.debt_payment_sessions(user_id, business_id);
+CREATE INDEX IF NOT EXISTS idx_debt_payment_sessions_customer ON public.debt_payment_sessions(customer_id);
+CREATE INDEX IF NOT EXISTS idx_debt_payment_sessions_date ON public.debt_payment_sessions(date);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_debt_payment_sessions_upsert ON public.debt_payment_sessions (user_id, business_id, local_id);
+
+-- 1.12 Pizarra de Mostrador, Envases Retornables y Encargos (Multicaja y Multinegocio)
+CREATE TABLE IF NOT EXISTS public.counter_notes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    local_id BIGINT,
+    business_id TEXT DEFAULT '1',
+    category TEXT NOT NULL DEFAULT 'general', -- 'bottle', 'reservation', 'task', 'general'
+    text TEXT,
+    client_name TEXT,
+    client_phone TEXT,
+    customer_id TEXT,
+    bottle_detail TEXT,
+    bottle_count INTEGER DEFAULT 1,
+    reservation_detail TEXT,
+    reservation_deposit NUMERIC DEFAULT 0,
+    due_date TEXT,
+    due_time TEXT,
+    assigned_to TEXT DEFAULT 'Todos',
+    is_completed BOOLEAN DEFAULT false,
+    completed_at TIMESTAMPTZ,
+    completed_by TEXT,
+    created_by TEXT,
+    terminal_id TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    deleted_at TIMESTAMPTZ
+);
+
+CREATE INDEX IF NOT EXISTS idx_counter_notes_user_biz ON public.counter_notes(user_id, business_id);
+CREATE INDEX IF NOT EXISTS idx_counter_notes_category ON public.counter_notes(category);
+CREATE INDEX IF NOT EXISTS idx_counter_notes_is_completed ON public.counter_notes(is_completed);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_counter_notes_upsert ON public.counter_notes (user_id, business_id, local_id);
 
 -- =========================================================================================
 -- 2. CAJA Y FLUJO DE EFECTIVO
@@ -241,6 +316,15 @@ CREATE TABLE IF NOT EXISTS public.expenses (
     amount NUMERIC NOT NULL DEFAULT 0,
     category TEXT DEFAULT 'General',
     description TEXT NOT NULL DEFAULT '',
+    document_type TEXT DEFAULT 'comprobante_interno',
+    document_number TEXT,
+    payment_method TEXT DEFAULT 'cash',
+    supplier_id TEXT,
+    product_id TEXT,
+    product_name TEXT,
+    quantity NUMERIC,
+    cost_value NUMERIC,
+    sale_value NUMERIC,
     expense_date TIMESTAMPTZ NOT NULL DEFAULT now(),
     from_cash BOOLEAN DEFAULT true,
     is_deleted BOOLEAN DEFAULT false,
@@ -283,10 +367,17 @@ CREATE TABLE IF NOT EXISTS public.purchases (
     invoice_number TEXT,
     document_type TEXT DEFAULT 'boleta',
     purchase_date TIMESTAMPTZ NOT NULL DEFAULT now(),
+    subtotal NUMERIC DEFAULT 0,
+    iva_amount NUMERIC DEFAULT 0,
+    extra_taxes_amount NUMERIC DEFAULT 0,
     total NUMERIC NOT NULL DEFAULT 0,
     paid_amount NUMERIC DEFAULT 0,
+    due_date TIMESTAMPTZ,
+    vat_mode TEXT DEFAULT 'net',
     status TEXT DEFAULT 'paid',
     items JSONB NOT NULL DEFAULT '[]'::jsonb,
+    cancelled_at TIMESTAMPTZ,
+    cancel_reason TEXT,
     is_deleted BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now(),
@@ -447,6 +538,8 @@ ALTER TABLE public.product_cost_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.licenses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_licenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.debt_payment_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.counter_notes ENABLE ROW LEVEL SECURITY;
 
 -- Políticas de aislamiento por usuario autenticado (auth.uid() = user_id)
 DO $$
@@ -478,6 +571,12 @@ BEGIN
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'Acceso a Abonos Propios') THEN
         CREATE POLICY "Acceso a Abonos Propios" ON public.debt_payments FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'debt_payment_sessions_user_policy') THEN
+        CREATE POLICY "debt_payment_sessions_user_policy" ON public.debt_payment_sessions FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'counter_notes_user_policy') THEN
+        CREATE POLICY "counter_notes_user_policy" ON public.counter_notes FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
     END IF;
     IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'customer_credit_deposits_user_policy') THEN
         CREATE POLICY "customer_credit_deposits_user_policy" ON public.customer_credit_deposits FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
@@ -668,6 +767,66 @@ GRANT EXECUTE ON FUNCTION public.adjust_stock_delta(UUID, TEXT, NUMERIC) TO auth
 
 REVOKE ALL ON FUNCTION public.delete_user_account() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.delete_user_account() TO authenticated;
+
+-- 7.4 join_business_by_code: Permite vincular una caja o sucursal por código
+CREATE OR REPLACE FUNCTION public.join_business_by_code(p_join_code TEXT)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_clean_code TEXT;
+    v_biz RECORD;
+    v_staff JSONB;
+BEGIN
+    v_clean_code := UPPER(TRIM(COALESCE(p_join_code, '')));
+
+    IF v_clean_code = '' THEN
+        RETURN jsonb_build_object('success', false, 'error', 'El código no puede estar vacío');
+    END IF;
+
+    -- 1. Buscar negocio activo que coincida con el join_code o business_code
+    SELECT * INTO v_biz
+    FROM public.businesses
+    WHERE (UPPER(join_code) = v_clean_code OR UPPER(business_code) = v_clean_code)
+      AND is_active = true
+      AND is_deleted = false
+    ORDER BY created_at ASC
+    LIMIT 1;
+
+    IF v_biz.id IS NULL THEN
+        RETURN jsonb_build_object('success', false, 'error', 'Código de negocio no encontrado o inactivo');
+    END IF;
+
+    -- 2. Obtener personal / cajeros autorizados para esa sucursal
+    SELECT jsonb_agg(
+        jsonb_build_object(
+            'id', s.id,
+            'name', s.name,
+            'pin', s.pin,
+            'role', s.role,
+            'permissions', s.permissions,
+            'branch_code', s.branch_code
+        )
+    ) INTO v_staff
+    FROM public.staff s
+    WHERE s.user_id = v_biz.user_id
+      AND s.is_active = true
+      AND s.is_deleted = false;
+
+    -- 3. Retornar información para configurar la caja local
+    RETURN jsonb_build_object(
+        'success', true,
+        'business_id', COALESCE(v_biz.local_id, '1'),
+        'business_name', v_biz.name,
+        'currency', COALESCE(v_biz.currency, '$'),
+        'staff', COALESCE(v_staff, '[]'::jsonb)
+    );
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.join_business_by_code(TEXT) TO authenticated, anon;
 
 -- =========================================================================================
 -- 8. PUBLICACIÓN SUPABASE REALTIME (22 TABLAS MULTI-TERMINAL ACTIVAS)

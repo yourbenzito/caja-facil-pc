@@ -432,7 +432,7 @@ const CashView = {
                             <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
                                 <div style="width: 46px; height: 46px; border-radius: 1rem; background: #fffbeb; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; border: 1px solid #fef3c7;">📝</div>
                                 <span id="cash-exec-notes-badge" class="cash-badge-pill" style="background: ${notesCounts.totalPending > 0 ? '#fef3c7' : '#ecfdf5'}; color: ${notesCounts.totalPending > 0 ? '#b45309' : '#047857'}; border: 1px solid ${notesCounts.totalPending > 0 ? '#fde68a' : '#a7f3d0'};">
-                                    ${notesCounts.totalPending > 0 ? `📌 ${notesCounts.pendingOrders} encargos · ${notesCounts.pendingTasks} tareas` : '✅ Al día'}
+                                    ${notesCounts.totalPending > 0 ? `📌 ${notesCounts.bottlesCount || 0} envases · ${notesCounts.reservationsCount || 0} reservas · ${notesCounts.tasksCount || 0} tareas` : '✅ Al día'}
                                 </span>
                             </div>
                             <div>
@@ -526,114 +526,11 @@ const CashView = {
     },
 
     openNotesModal() {
-        const renderListHtml = (filter = 'all') => {
-            let currentNotes = typeof NotesService !== 'undefined' ? NotesService.getAll() : [];
-            if (filter === 'order') currentNotes = currentNotes.filter(n => n.category === 'order');
-            if (filter === 'task') currentNotes = currentNotes.filter(n => n.category === 'task');
-            if (filter === 'pending') currentNotes = currentNotes.filter(n => !n.isCompleted);
-
-            if (currentNotes.length === 0) {
-                return `
-                    <div style="text-align: center; padding: 2.5rem 1rem; color: #94a3b8;">
-                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">📝</div>
-                        <p style="font-weight: 700; font-size: 1rem; margin: 0; color: #64748b;">No hay notas registradas en esta vista.</p>
-                        <small style="color: #94a3b8;">Anota encargos de clientes o tareas del turno arriba.</small>
-                    </div>
-                `;
-            }
-
-            return currentNotes.map(n => `
-                <div id="note-item-${n.id}" style="display: flex; align-items: flex-start; justify-content: space-between; gap: 0.75rem; padding: 1rem; background: ${n.isCompleted ? '#f8fafc' : '#ffffff'}; border: 1.5px solid ${n.isCompleted ? '#e2e8f0' : (n.category === 'task' ? '#fed7aa' : '#bbf7d0')}; border-radius: 1rem; margin-bottom: 0.75rem; transition: all 0.2s;">
-                    <div style="display: flex; align-items: flex-start; gap: 0.75rem; flex: 1;">
-                        <input type="checkbox" 
-                               ${n.isCompleted ? 'checked' : ''} 
-                               onchange="CashView.handleToggleNote('${n.id}')" 
-                               style="width: 1.25rem; height: 1.25rem; accent-color: #10b981; cursor: pointer; margin-top: 0.2rem;">
-                        <div style="flex: 1;">
-                            <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.35rem;">
-                                <span style="font-size: 0.7rem; font-weight: 800; text-transform: uppercase; padding: 0.2rem 0.5rem; border-radius: 0.5rem; background: ${n.category === 'task' ? '#ffedd5' : '#dcfce7'}; color: ${n.category === 'task' ? '#c2410c' : '#15803d'};">
-                                    ${n.category === 'task' ? '📋 Tarea de Personal' : '🥖 Encargo / Cliente'}
-                                </span>
-                                ${n.time ? `<span style="font-size: 0.7rem; font-weight: 700; color: #64748b; background: #f1f5f9; padding: 0.2rem 0.5rem; border-radius: 0.5rem;">⏰ ${n.time}</span>` : ''}
-                                <span style="font-size: 0.7rem; color: #94a3b8; font-weight: 600;">👤 ${safeHTML(n.createdBy || 'Mostrador')}</span>
-                            </div>
-                            <p style="margin: 0; font-size: 0.95rem; color: ${n.isCompleted ? '#94a3b8' : '#1e293b'}; ${n.isCompleted ? 'text-decoration: line-through;' : 'font-weight: 700;'}; word-break: break-word;">
-                                ${safeHTML(n.text)}
-                            </p>
-                        </div>
-                    </div>
-                    <button type="button" 
-                            onclick="CashView.handleDeleteNote('${n.id}')" 
-                            title="Eliminar nota" 
-                            style="background: transparent; border: none; color: #94a3b8; font-size: 1.1rem; cursor: pointer; padding: 0.25rem; border-radius: 0.5rem; transition: color 0.2s;"
-                            onmouseover="this.style.color='#ef4444'"
-                            onmouseout="this.style.color='#94a3b8'">
-                        🗑️
-                    </button>
-                </div>
-            `).join('');
-        };
-
-        const content = `
-            <div style="display: flex; flex-direction: column; gap: 1.25rem;">
-                <!-- Formulario de nueva nota -->
-                <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 1.25rem; padding: 1.25rem;">
-                    <h4 style="margin: 0 0 0.75rem 0; font-size: 0.95rem; font-weight: 900; color: #1e293b; display: flex; align-items: center; gap: 0.5rem;">
-                        ➕ Nueva Nota o Encargo de Turno
-                    </h4>
-                    <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                        <input type="text" 
-                               id="modalNoteText" 
-                               placeholder="Ej: Don Juan encargó 2kg de pan / Guardar envase de bebida..." 
-                               style="width: 100%; padding: 0.75rem 1rem; border-radius: 0.75rem; border: 1.5px solid #cbd5e1; font-size: 0.95rem; font-weight: 600; outline: none; box-sizing: border-box;"
-                               onkeydown="if(event.key === 'Enter') CashView.addNoteFromModal()">
-                        
-                        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
-                            <select id="modalNoteCategory" style="padding: 0.6rem 0.8rem; border-radius: 0.75rem; border: 1.5px solid #cbd5e1; font-weight: 700; font-size: 0.85rem; background: #fff; cursor: pointer;">
-                                <option value="order">🥖 Encargo / Cliente (Mostrador)</option>
-                                <option value="task">📋 Tarea de Personal (Turno)</option>
-                            </select>
-                            
-                            <div style="display: flex; align-items: center; gap: 0.35rem; background: #fff; border: 1.5px solid #cbd5e1; border-radius: 0.75rem; padding: 0.35rem 0.75rem;">
-                                <span style="font-size: 0.8rem; color: #64748b; font-weight: 700;">⏰ Hora:</span>
-                                <input type="time" id="modalNoteTime" style="border: none; outline: none; font-weight: 700; font-size: 0.85rem;">
-                            </div>
-                            
-                            <button type="button" 
-                                    onclick="CashView.addNoteFromModal()" 
-                                    style="margin-left: auto; background: #10b981; color: white; border: none; padding: 0.65rem 1.4rem; border-radius: 0.75rem; font-weight: 800; font-size: 0.9rem; cursor: pointer; transition: background 0.2s;"
-                                    onmouseover="this.style.background='#059669'"
-                                    onmouseout="this.style.background='#10b981'">
-                                Guardar Nota
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Filtros de pestañas -->
-                <div style="display: flex; gap: 0.5rem; border-bottom: 2px solid #f1f5f9; padding-bottom: 0.5rem; flex-wrap: wrap;">
-                    <button type="button" class="btn btn-sm btn-filter-notes" onclick="CashView.filterNotesInModal('all', this)" style="border-radius: 0.6rem; font-weight: 800; padding: 0.4rem 0.8rem; background: #10b981; color: #fff;">Todas</button>
-                    <button type="button" class="btn btn-sm btn-filter-notes" onclick="CashView.filterNotesInModal('pending', this)" style="border-radius: 0.6rem; font-weight: 800; padding: 0.4rem 0.8rem; background: #f1f5f9; color: #475569;">Solo Pendientes</button>
-                    <button type="button" class="btn btn-sm btn-filter-notes" onclick="CashView.filterNotesInModal('order', this)" style="border-radius: 0.6rem; font-weight: 800; padding: 0.4rem 0.8rem; background: #f1f5f9; color: #475569;">🥖 Encargos</button>
-                    <button type="button" class="btn btn-sm btn-filter-notes" onclick="CashView.filterNotesInModal('task', this)" style="border-radius: 0.6rem; font-weight: 800; padding: 0.4rem 0.8rem; background: #f1f5f9; color: #475569;">📋 Tareas Personal</button>
-                </div>
-
-                <!-- Contenedor scrollable de notas -->
-                <div id="notesModalList" style="max-height: 380px; overflow-y: auto; padding-right: 0.25rem;">
-                    ${renderListHtml('all')}
-                </div>
-                
-                <p style="margin: 0; font-size: 0.8rem; color: #94a3b8; font-weight: 600; text-align: center;">
-                    💡 Las notas marcadas se conservan al final de la lista. Las notas pendientes se traspasan de turno automáticamente.
-                </p>
-            </div>
-        `;
-
-        showModal(content, {
-            title: '📝 Pizarra de Notas y Encargos del Negocio',
-            width: '680px',
-            footer: `<button class="btn btn-secondary" onclick="closeModal()" style="border-radius: 0.75rem; font-weight: 800;">Cerrar</button>`
-        });
+        if (typeof app !== 'undefined' && typeof app.openNotesModal === 'function') {
+            app.openNotesModal();
+        } else if (typeof NotesModal !== 'undefined') {
+            NotesModal.open();
+        }
     },
 
     addNoteFromModal() {
@@ -744,25 +641,7 @@ const CashView = {
 
     updateNotesBadgeOnMain() {
         if (typeof NotesService === 'undefined') return;
-        const counts = NotesService.getCounts();
-        const valEl = document.getElementById('cash-exec-notes-val');
-        const badgeEl = document.getElementById('cash-exec-notes-badge');
-        if (valEl) {
-            valEl.textContent = `${counts.totalPending} pendientes`;
-        }
-        if (badgeEl) {
-            if (counts.totalPending > 0) {
-                badgeEl.innerHTML = `📌 ${counts.pendingOrders} encargos · ${counts.pendingTasks} tareas`;
-                badgeEl.style.background = '#fef3c7';
-                badgeEl.style.color = '#b45309';
-                badgeEl.style.borderColor = '#fde68a';
-            } else {
-                badgeEl.innerHTML = `✅ Al día`;
-                badgeEl.style.background = '#ecfdf5';
-                badgeEl.style.color = '#047857';
-                badgeEl.style.borderColor = '#a7f3d0';
-            }
-        }
+        NotesService.updateAllBadges();
     },
 
     async openStockModal() {
@@ -1199,11 +1078,11 @@ const CashView = {
                         <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
                             <h1 style="margin:0; color:#0f172a; font-size:1.45rem; font-weight:900;">Control de Caja</h1>
                             <span style="background:#dcfce7; color:#166534; border:1px solid #86efac; font-size:0.75rem; font-weight:800; padding:0.25rem 0.75rem; border-radius:99px;">
-                                Caja #${cashRegister.id} • Abierta
+                                Caja #${cashRegister.id} • ${diffDays >= 1 ? `🟢 Turno activo (Día ${diffDays + 1})` : 'Abierta'}
                             </span>
-                            ${isLongSession ? `
-                                <span style="background:#fef3c7; color:#92400e; border:1px solid #fcd34d; font-size:0.75rem; font-weight:800; padding:0.25rem 0.75rem; border-radius:99px;">
-                                    ⏱️ Caja de Varios Días
+                            ${diffDays >= 1 ? `
+                                <span style="background:#eff6ff; color:#1d4ed8; border:1px solid #93c5fd; font-size:0.75rem; font-weight:800; padding:0.25rem 0.75rem; border-radius:99px;" title="Registro de auditoría: Esta caja acumula ${diffDays} día(s) abierta. No se bloquean ventas ni cobros.">
+                                    📆 ${diffDays} día(s) acumulados
                                 </span>
                             ` : ''}
                         </div>
@@ -1414,14 +1293,6 @@ const CashView = {
                     <small style="opacity:0.85; font-weight:600; font-size:0.75rem;">Salida para bolsillo o compras</small>
                 </button>
 
-                <!-- Falla #27: Distinción formal de Corte X (en vivo) vs Corte Z (cierre final) -->
-                <button class="cx-action-btn" onclick="CashView.generateCorteX()"
-                        style="background:linear-gradient(135deg,#3b82f6,#1d4ed8); color:#fff; box-shadow:0 4px 16px rgba(59,130,246,0.25);">
-                    <span class="cx-btn-icon">📊</span>
-                    <span>Corte X (En Vivo)</span>
-                    <small style="opacity:0.85; font-weight:600; font-size:0.75rem;">Lectura parcial sin cerrar</small>
-                </button>
-
                 <button class="cx-action-btn" onclick="CashView.showCloseCashForm()"
                         style="background:linear-gradient(135deg,#ef4444,#dc2626); color:#fff; box-shadow:0 4px 16px rgba(239,68,68,0.25);">
                     <span class="cx-btn-icon">🔒</span>
@@ -1470,7 +1341,7 @@ const CashView = {
             if (isTodayOnly && day.date !== todayDate) return;
 
             (day.sales || []).forEach(s => {
-                const ticketNum = (s.saleNumber !== undefined && s.saleNumber !== null && s.saleNumber !== '') ? `#${s.saleNumber}` : `#${s.id}`;
+                const ticketNum = (s.saleNumber !== undefined && s.saleNumber !== null && s.saleNumber !== '') ? `#${s.terminal_id ? s.terminal_id + '-' : ''}${s.saleNumber}` : `#${s.id}`;
                 const methodLabel = s.paymentMethod === 'mixed' ? '🔀 Mixto' : this.getPaymentMethodName(s.paymentMethod || 'cash');
                 const isCredit = (s.paymentMethod === 'debt' || (s.paidAmount !== undefined && parseFloat(s.paidAmount) < parseFloat(s.total)));
                 const clientName = s.customerName || (s.customer ? s.customer.name : null);
@@ -2769,6 +2640,9 @@ const CashView = {
                             const totalVentas = c.paymentSummary ? Object.values(c.paymentSummary).reduce((a, b) => a + b, 0) : 0;
                             const openInfo = formatDT(c.openDate);
                             const closeInfo = c.closeDate ? formatDT(c.closeDate) : null;
+                            const openDays = (c.status === 'open' && c.openDate) 
+                                ? Math.floor((Date.now() - new Date(c.openDate).getTime()) / (1000 * 60 * 60 * 24)) 
+                                : 0;
                             return `
                             <tr style="border-bottom: 1px solid rgba(255,255,255,0.03); transition: background 0.2s;">
                                 <td style="padding: 1.25rem 1rem; color: #f1f5f9; vertical-align: middle;">
@@ -2782,7 +2656,7 @@ const CashView = {
                                         <div style="font-size: 1rem; font-weight: 700; color: #94a3b8; margin-top: 0.15rem;">⏰ ${closeInfo.time}</div>
                                     ` : `
                                         <span style="background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 0.4rem 0.8rem; border-radius: 0.75rem; font-weight: 800; font-size: 0.95rem; border: 1px solid rgba(16, 185, 129, 0.3); display: inline-block;">
-                                            🔓 Abierta (En curso)
+                                            🔓 Abierta ${openDays >= 1 ? `(Día ${openDays + 1})` : '(En curso)'}
                                         </span>
                                     `}
                                 </td>
@@ -2794,7 +2668,7 @@ const CashView = {
                                 </td>
                                 <td style="padding: 1.25rem 1rem; text-align: center; vertical-align: middle;">
                                     <span class="badge ${c.status === 'open' ? 'badge-success' : 'badge-info'}" style="padding: 0.4rem 0.8rem; border-radius: 2rem; font-size: 0.85rem; font-weight: 800;">
-                                        ${c.status === 'open' ? 'Activa' : 'Cerrada'}
+                                        ${c.status === 'open' ? (openDays >= 1 ? `Activa (Día ${openDays + 1})` : 'Activa') : 'Cerrada'}
                                     </span>
                                 </td>
                                 <td style="padding: 1.25rem 1rem; text-align: right; vertical-align: middle;">
@@ -3594,12 +3468,18 @@ const CashView = {
         const summary = await CashRegister.getSummary(openCash.id);
         const dailyBreakdown = await CashController.getDailySales(openCash.id);
 
-        // ponytail: Arqueo ciego estricto SOLO para cajeros. El Dueño (owner), socios y administradores tienen visibilidad total de los montos esperados
+        // ponytail: Arqueo ciego estricto para cajeros y empleados según configuración del Dueño. 
+        // El Dueño (owner), socios y administradores NUNCA hacen arqueo ciego (tienen visibilidad total siempre).
         const userRole = (typeof AuthManager !== 'undefined' && AuthManager.getCurrentUserRole) 
             ? AuthManager.getCurrentUserRole() 
             : (localStorage.getItem('USER_ROLE') || 'cashier');
-        const isOwnerOrAdmin = ['owner', 'admin', 'partner'].includes(userRole);
-        const isBlindClose = !isOwnerOrAdmin && (userRole === 'cashier' || ((typeof PermissionService !== 'undefined') && PermissionService.roleHasPermission(userRole, 'cash.blind_close')));
+        const roleNormalized = String(userRole || '').toLowerCase().trim();
+        const isOwnerOrAdmin = ['owner', 'admin', 'partner', 'propietario', 'administrador'].includes(roleNormalized);
+        
+        // Consultar configuración del Dueño: por defecto activo (true) a menos que el dueño lo desactive en Ajustes
+        const blindSetting = localStorage.getItem('blindCashClosingForEmployees');
+        const isBlindEnabledByOwner = (blindSetting === null || blindSetting === 'true' || blindSetting === '1');
+        const isBlindClose = !isOwnerOrAdmin && isBlindEnabledByOwner;
 
         // Desglose de 4 métodos de pago solicitados
         const paymentMethods = ['cash', 'card', 'qr', 'other'];

@@ -268,7 +268,8 @@ class POSController {
             discount: discount,
             creditBalanceUsed: creditBalanceUsed,
             total: exactTotal, // Exact total for Card/Digital
-            roundedTotal: roundPrice(exactTotal), // Rounded total for Cash
+            // ponytail: Si la Ley del Redondeo está desactivada en Ajustes, se cobra el total exacto en efectivo
+            roundedTotal: (typeof localStorage !== 'undefined' && localStorage.getItem('ENABLE_CASH_ROUNDING') === 'false') ? exactTotal : roundPrice(exactTotal), // Rounded total for Cash
             actualTotalSale: afterDiscount 
         };
     }

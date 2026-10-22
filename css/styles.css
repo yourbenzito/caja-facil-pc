@@ -1988,15 +1988,29 @@ tbody tr:hover {
     backdrop-filter: blur(3px);
     -webkit-backdrop-filter: blur(3px);
     z-index: 2199;
+    overscroll-behavior: contain;
+    touch-action: none;
 }
 
 .modal-overlay.active {
     display: block;
 }
 
+html.modal-open,
 body.modal-open {
     overflow: hidden !important;
+    height: 100vh !important;
     touch-action: none;
+}
+
+/* El fondo queda totalmente congelado e inaccesible mientras haya un modal */
+body.modal-open #main-content,
+body.modal-open .bottom-nav,
+body.modal-open .top-header,
+body.modal-open .navbar,
+body.modal-open .sidebar {
+    pointer-events: none !important;
+    user-select: none !important;
 }
 
 .modal {
@@ -2013,6 +2027,8 @@ body.modal-open {
     max-height: 95vh;
     overflow-y: auto;
     overflow-x: hidden;
+    overscroll-behavior: contain;
+    pointer-events: auto !important;
 }
 
 .modal-header {
@@ -4972,7 +4988,7 @@ body.keyboard-nav .search-result-item.selected:hover {
     overflow: hidden;
 }
 
-.pos-cart-header {
+.pos-cart-container .pos-cart-header {
     padding: 0.85rem 1.5rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     background: rgba(0, 0, 0, 0.2);
@@ -6112,9 +6128,83 @@ body.keyboard-nav .search-result-item.selected:hover {
 
 .cart-empty-state {
     text-align: center;
-    padding: 3rem;
-    color: #94a3b8;
+    padding: 2.5rem 1rem;
+    color: var(--text-muted);
     font-weight: 600;
+}
+
+/* POS Compact Product Rows (Alta eficiencia horizontal) */
+.pos-cart-row {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    padding: 0.38rem 0.65rem !important;
+    background: var(--surface-content) !important;
+    border: 1.5px solid var(--border) !important;
+    border-radius: 0.65rem !important;
+    transition: all 0.15s ease;
+    min-height: 42px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.02);
+}
+
+.pos-cart-row:hover {
+    border-color: var(--primary) !important;
+    background: rgba(79, 70, 229, 0.03) !important;
+}
+
+.pos-cart-row.stock-warn {
+    border-left: 4px solid #f59e0b !important;
+    background: #fffbeb !important;
+}
+
+.pos-cart-row.is-loss {
+    border-left: 4px solid #ef4444 !important;
+    background: #fef2f2 !important;
+}
+
+.pos-cart-stepper-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-main);
+    font-weight: 900;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    padding: 0;
+}
+
+.pos-cart-stepper-btn:hover {
+    background: var(--primary);
+    color: #ffffff;
+    border-color: var(--primary);
+}
+
+.pos-cart-remove-btn {
+    width: 30px;
+    height: 30px;
+    border-radius: 6px;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    background: rgba(239, 68, 68, 0.06);
+    color: #dc2626;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    padding: 0;
+}
+
+.pos-cart-remove-btn:hover {
+    background: #ef4444;
+    color: #ffffff;
+    border-color: #ef4444;
 }
 
 /* Payment Modal Specifics */
@@ -7617,6 +7707,457 @@ button, input, select, textarea, .btn, .btn-stepper, .btn-bill, .btn-nav-arrow, 
     text-decoration: underline;
     font-weight: 800;
     cursor: pointer;
+}
+
+/* ========================================================
+   FLOATING ACTION BUTTON (FAB) DE NOTAS Y ENCARGOS [F7]
+   ======================================================== */
+.floating-notes-fab {
+    position: fixed;
+    bottom: 74px;
+    right: 22px;
+    z-index: 1500;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.55rem;
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+    color: #ffffff;
+    padding: 0.65rem 1.15rem;
+    border-radius: 999px;
+    box-shadow: 0 8px 24px rgba(79, 70, 229, 0.35), 0 2px 6px rgba(0, 0, 0, 0.1);
+    cursor: pointer;
+    user-select: none;
+    border: 1.5px solid rgba(255, 255, 255, 0.3);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+                background 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    font-family: inherit;
+    font-weight: 800;
+    font-size: 0.88rem;
+}
+
+.floating-notes-fab:hover {
+    transform: translateY(-3px) scale(1.03);
+    box-shadow: 0 12px 30px rgba(79, 70, 229, 0.5), 0 4px 10px rgba(0, 0, 0, 0.15);
+    background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
+}
+
+.floating-notes-fab:active {
+    transform: translateY(0) scale(0.97);
+}
+
+.floating-notes-fab .fab-icon {
+    font-size: 1.25rem;
+    line-height: 1;
+}
+
+.floating-notes-fab .fab-label {
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+.floating-notes-fab .fab-label kbd {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    font-size: 0.72rem;
+    margin-left: 0.25rem;
+    font-family: monospace;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.floating-notes-fab .fab-badge {
+    background: #ef4444;
+    color: #ffffff;
+    font-size: 0.72rem;
+    font-weight: 900;
+    min-width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 0.35rem;
+    border: 1.5px solid #ffffff;
+    box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
+    line-height: 1;
+}
+
+/* ========================================================
+   REDISEÑO PREMIUM DE TARJETA DE COMPRAS (COMPRAS VIEW)
+   ======================================================== */
+.purchase-card-premium {
+    background: #ffffff;
+    border-radius: 1.25rem;
+    border: 1.5px solid #e2e8f0;
+    box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -1px rgba(15, 23, 42, 0.03);
+    padding: 1.4rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.15rem;
+    position: relative;
+    cursor: default;
+    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+                box-shadow 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+                border-color 0.22s ease;
+}
+
+/* Microinteracción: Levitación al pasar el mouse (Hover) */
+.purchase-card-premium:hover {
+    transform: translateY(-6px) scale(1.008);
+    box-shadow: 0 20px 40px -10px rgba(79, 70, 229, 0.22), 0 0 0 1.5px rgba(99, 102, 241, 0.35);
+    border-color: #818cf8;
+}
+
+/* Microinteracción: Presión táctil háptica al hacer clic (Active) */
+.purchase-card-premium:active {
+    transform: translateY(-2px) scale(0.995);
+    box-shadow: 0 8px 20px -4px rgba(79, 70, 229, 0.2);
+}
+
+.purchase-card-premium.cancelled {
+    opacity: 0.72;
+    filter: grayscale(0.25);
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+/* Cabecera de la tarjeta */
+.purchase-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.purchase-card-identity {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+}
+
+.purchase-card-icon-bubble {
+    width: 48px;
+    height: 48px;
+    border-radius: 0.95rem;
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    box-shadow: 0 6px 16px rgba(79, 70, 229, 0.32);
+    flex-shrink: 0;
+    transition: transform 0.2s ease;
+}
+
+.purchase-card-premium:hover .purchase-card-icon-bubble {
+    transform: rotate(-6deg) scale(1.05);
+}
+
+.purchase-card-title-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.purchase-card-title {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 850;
+    color: #0f172a;
+    line-height: 1.25;
+}
+
+.purchase-card-tags {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    font-size: 0.78rem;
+}
+
+.purchase-tag-date {
+    color: #64748b;
+    font-weight: 700;
+}
+
+.purchase-tag-invoice {
+    background: #f1f5f9;
+    color: #334155;
+    padding: 0.15rem 0.6rem;
+    border-radius: 0.5rem;
+    font-weight: 750;
+    border: 1px solid #e2e8f0;
+}
+
+.purchase-card-status-badge {
+    padding: 0.45rem 1rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 850;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    letter-spacing: 0.3px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.purchase-card-status-badge.paid {
+    background: #ecfdf5;
+    color: #059669;
+    border: 1.5px solid #a7f3d0;
+    box-shadow: 0 2px 10px rgba(16, 185, 129, 0.18);
+}
+
+.purchase-card-status-badge.pending {
+    background: #fffbeb;
+    color: #d97706;
+    border: 1.5px solid #fde68a;
+    box-shadow: 0 2px 10px rgba(245, 158, 11, 0.18);
+}
+
+.purchase-card-status-badge.cancelled {
+    background: #fef2f2;
+    color: #dc2626;
+    border: 1.5px solid #fecaca;
+}
+
+/* Caja de métricas en 2 niveles (Cero desborde) */
+.purchase-metrics-container {
+    background: linear-gradient(135deg, rgba(248, 250, 252, 0.95) 0%, rgba(241, 245, 249, 0.75) 100%);
+    border: 1.5px solid #e2e8f0;
+    border-radius: 1.1rem;
+    padding: 1.15rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+}
+
+.purchase-metrics-hero {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 0.75rem;
+}
+
+.purchase-hero-total {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+}
+
+.purchase-hero-label {
+    font-size: 0.82rem;
+    font-weight: 850;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.purchase-hero-amount {
+    font-size: 1.65rem;
+    font-weight: 950;
+    color: #0f172a;
+    line-height: 1;
+}
+
+.purchase-hero-badge {
+    background: #eef2ff;
+    color: #4338ca;
+    font-size: 0.78rem;
+    font-weight: 850;
+    padding: 0.3rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid #c7d2fe;
+}
+
+.purchase-metrics-pills {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.65rem;
+}
+
+.purchase-pill-stat {
+    background: #ffffff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 0.85rem;
+    padding: 0.65rem 0.85rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.purchase-pill-stat:hover {
+    transform: translateY(-2px);
+    border-color: #cbd5e1;
+}
+
+.purchase-pill-stat.pill-paid {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+}
+
+.purchase-pill-stat.pill-debt {
+    background: #fef2f2;
+    border-color: #fecaca;
+}
+
+.purchase-pill-label {
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748b;
+}
+
+.purchase-pill-val {
+    font-size: 1.15rem;
+    font-weight: 900;
+    color: #1e293b;
+    line-height: 1.1;
+}
+
+/* Franja secundaria de medio de pago */
+.purchase-card-subbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.78rem;
+    color: #64748b;
+    padding: 0 0.25rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.purchase-payment-method-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: #eef2ff;
+    color: #4338ca;
+    padding: 0.3rem 0.75rem;
+    border-radius: 0.6rem;
+    font-weight: 800;
+    border: 1px solid #c7d2fe;
+}
+
+/* Botonera de acciones con levitación y respuesta al clic */
+.purchase-card-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.55rem;
+    margin-top: auto;
+    flex-wrap: wrap;
+}
+
+.purchase-card-actions .btn {
+    height: 38px;
+    padding: 0 1rem;
+    border-radius: 0.75rem;
+    font-weight: 850;
+    font-size: 0.85rem;
+    gap: 0.45rem;
+    cursor: pointer;
+    transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.purchase-card-actions .btn:active {
+    transform: scale(0.95) !important;
+}
+
+.purchase-btn-detail {
+    background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+}
+
+.purchase-btn-detail:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(79, 70, 229, 0.5);
+    background: linear-gradient(135deg, #4338ca 0%, #6d28d9 100%);
+}
+
+.purchase-btn-prices {
+    background: #f8fafc;
+    color: #334155 !important;
+    border: 1.5px solid #cbd5e1;
+}
+
+.purchase-btn-prices:hover {
+    background: #eef2ff;
+    color: #4338ca !important;
+    border-color: #818cf8;
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.22);
+    transform: translateY(-2px);
+}
+
+.purchase-btn-edit {
+    background: #f8fafc;
+    color: #2563eb !important;
+    border: 1.5px solid #bfdbfe;
+}
+
+.purchase-btn-edit:hover {
+    background: #eff6ff;
+    border-color: #60a5fa;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.22);
+    transform: translateY(-2px);
+}
+
+.purchase-btn-pay {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: #ffffff !important;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+
+.purchase-btn-pay:hover {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(16, 185, 129, 0.5);
+}
+
+.purchase-btn-delete {
+    background: #ffffff;
+    color: #ef4444 !important;
+    border: 1.5px solid #fecaca;
+}
+
+.purchase-btn-delete:hover {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: #ffffff !important;
+    border-color: #dc2626;
+    box-shadow: 0 6px 18px rgba(239, 68, 68, 0.38);
+    transform: translateY(-2px);
+}
+
+/* Responsividad para pantallas móviles y tablets */
+@media (max-width: 900px) {
+    .purchase-metrics-pills {
+        grid-template-columns: 1fr;
+    }
+    .purchase-card-actions {
+        width: 100%;
+        justify-content: stretch;
+    }
+    .purchase-card-actions .btn {
+        flex: 1 1 calc(50% - 0.55rem);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .floating-notes-fab,
+    .purchase-card-premium,
+    .purchase-card-actions .btn {
+        transition: none !important;
+        transform: none !important;
+    }
 }
 
 

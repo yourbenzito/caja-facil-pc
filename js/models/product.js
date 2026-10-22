@@ -104,30 +104,98 @@ class Product {
             data.category = (typeof CategoryHelper !== 'undefined') ? CategoryHelper.sanitize(data.category) : (data.category ? String(data.category).trim() : 'General');
         }
 
-        // C7: Capturar precio anterior ANTES de actualizar para historial
+        // Capturar producto ANTES de actualizar para calcular diff real de cambios y registrar auditoría/precios
+        let currentBeforeUpdate = null;
         let oldPrice = null;
-        if ('price' in data && data.price !== undefined) {
-            try {
-                const currentProduct = await this.getById(id);
-                if (currentProduct) oldPrice = parseFloat(currentProduct.price) || 0;
-            } catch (_) { /* fallback silencioso */ }
-        }
+        try {
+            currentBeforeUpdate = await this.getById(id);
+            if (currentBeforeUpdate && 'price' in data && data.price !== undefined) {
+                oldPrice = parseFloat(currentBeforeUpdate.price) || 0;
+            }
+        } catch (_) { /* fallback silencioso */ }
 
         // C3: Trazabilidad — quién modificó
         data.updatedBy = AuditLogService.getCurrentUserId();
 
+        // Calcular cambios reales (diff) antes vs después
+        const changes = {};
+        const changedFieldsLabels = [];
+        const labels = {
+            name: 'Nombre',
+            barcode: 'Código de Barras',
+            category: 'Categoría',
+            price: 'Precio Venta',
+            cost: 'Costo Bruto',
+            costNeto: 'Costo Neto',
+            minStock: 'Stock Mínimo',
+            description: 'Descripción',
+            ivaType: 'Tipo IVA',
+            markupPercent: 'Markup',
+            expiryDate: 'Vencimiento',
+            type: 'Tipo de Unidad',
+            image: 'Imagen',
+            isActive: 'Estado Activo',
+            supplierId: 'Proveedor'
+        };
+
+        if (currentBeforeUpdate) {
+            const ignoreKeys = ['id', 'updatedAt', 'updatedBy', 'createdAt', 'business_id', 'is_synced', 'last_sync', 'sync_id'];
+            for (const key in data) {
+                if (ignoreKeys.includes(key)) continue;
+
+                const isNumeric = ['price', 'cost', 'costNeto', 'minStock', 'markupPercent'].includes(key);
+                let hasChanged = false;
+                if (isNumeric) {
+                    const oldNum = parseFloat(currentBeforeUpdate[key]) || 0;
+                    const newNum = parseFloat(data[key]) || 0;
+                    hasChanged = Math.abs(oldNum - newNum) > 0.001;
+                } else {
+                    const oldStr = currentBeforeUpdate[key] != null ? String(currentBeforeUpdate[key]).trim() : '';
+                    const newStr = data[key] != null ? String(data[key]).trim() : '';
+                    hasChanged = oldStr !== newStr;
+                }
+
+                if (hasChanged) {
+                    changes[key] = {
+                        old: currentBeforeUpdate[key],
+                        new: data[key],
+                        label: labels[key] || key
+                    };
+                    changedFieldsLabels.push(labels[key] || key);
+                }
+            }
+        }
+
         if (db.mode === 'sqlite') {
             await window.ApiClient.put('complex/product', id, data);
             
-            // Audit log handling is tricky in complex mode, but we can do a simple one here
-            // because server.js doesn't log automatically for complex/product yet
-            AuditLogService.log({
-                entity: 'product',
-                entityId: id,
-                action: 'update',
-                summary: `Modificó producto (SQLite): ${id}`,
-                metadata: { id, changes: Object.keys(data) }
-            });
+            // C7: Registrar cambio de precio si hubo cambio real
+            if (oldPrice !== null && 'price' in data) {
+                try {
+                    await ProductPriceHistory.recordIfChanged(
+                        id, oldPrice, parseFloat(data.price) || 0,
+                        'Edición de producto'
+                    );
+                } catch (_) { /* No bloquear operación principal */ }
+            }
+
+            // Registrar auditoría con datos estructurados reales (solo si hubo cambios reales)
+            if (!options.allowStock && changedFieldsLabels.length > 0) {
+                const prodName = currentBeforeUpdate ? currentBeforeUpdate.name : (data.name || `ID #${id}`);
+                const changedSummary = changedFieldsLabels.length > 0 ? `: ${changedFieldsLabels.join(', ')}` : '';
+                AuditLogService.log({
+                    entity: 'product',
+                    entityId: id,
+                    action: 'update',
+                    summary: `Modificó producto "${prodName}"${changedSummary}`,
+                    metadata: {
+                        productName: prodName,
+                        id: id,
+                        changes: changes,
+                        changedFields: Object.keys(changes)
+                    }
+                });
+            }
             return true;
         }
 
@@ -144,57 +212,22 @@ class Product {
         }
 
         // C2: Audit log (solo cambios de datos, no de stock por flujo interno)
-        if (!options.allowStock) {
+        if (!options.allowStock && changedFieldsLabels.length > 0) {
             try {
-                const current = await this.getById(id);
-                if (current) {
-                    const changes = {};
-                    const labels = {
-                        name: 'Nombre',
-                        barcode: 'Código de Barras',
-                        category: 'Categoría',
-                        price: 'Precio Venta',
-                        cost: 'Costo Bruto',
-                        costNeto: 'Costo Neto',
-                        minStock: 'Stock Mínimo',
-                        description: 'Descripción',
-                        ivaType: 'Tipo IVA',
-                        markupPercent: 'Markup',
-                        expiryDate: 'Vencimiento',
-                        type: 'Tipo de Unidad',
-                        image: 'Imagen'
-                    };
-
-                    const changedFieldsLabels = [];
-                    for (const key in data) {
-                        if (['id', 'updatedAt', 'updatedBy'].includes(key)) continue;
-
-                        // Solo registrar si el valor es realmente distinto
-                        if (current[key] !== data[key]) {
-                            changes[key] = {
-                                old: current[key],
-                                new: data[key],
-                                label: labels[key] || key
-                            };
-                            changedFieldsLabels.push(labels[key] || key);
-                        }
+                const prodName = currentBeforeUpdate ? currentBeforeUpdate.name : (data.name || `ID #${id}`);
+                const changedSummary = changedFieldsLabels.length > 0 ? `: ${changedFieldsLabels.join(', ')}` : '';
+                await AuditLogService.log({
+                    entity: 'product',
+                    entityId: id,
+                    action: 'update',
+                    summary: `Modificó producto "${prodName}"${changedSummary}`,
+                    metadata: {
+                        productName: prodName,
+                        id: id,
+                        changes: changes,
+                        changedFields: Object.keys(changes)
                     }
-
-                    if (changedFieldsLabels.length > 0) {
-                        await AuditLogService.log({
-                            entity: 'product',
-                            entityId: id,
-                            action: 'update',
-                            summary: `Modificó producto: ${current.name}`,
-                            metadata: {
-                                productName: current.name,
-                                id: id,
-                                changes: changes,
-                                changedFields: Object.keys(changes)
-                            }
-                        });
-                    }
-                }
+                });
             } catch (e) {
                 console.error('Audit: Error capturando diff de producto:', e);
             }

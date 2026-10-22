@@ -10,7 +10,7 @@ const ALLOWED_TABLES = [
     'settings', 'users', 'auditLogs', 'saleReturns', 'expenses', 
     'supplierPayments', 'customerCreditDeposits', 'customerCreditUses', 
     'productPriceHistory', 'productCostHistory', 'businesses', 
-    'payments', 'passwordResets', 'debtPaymentSessions'
+    'payments', 'passwordResets', 'debtPaymentSessions', 'counterNotes'
 ];
 
 function validateTable(table) { 
@@ -184,7 +184,7 @@ router.get('/api/:table/search', async (req, res) => {
         const hasBusinessId = tableInfo.some(info => info.name === 'business_id');
 
         let cs = ['name'];
-        if (table === 'products') cs = ['name', 'barcode', 'description'];
+        if (table === 'products') cs = ['name', 'barcode', 'description', 'category'];
         else if (table === 'customers') cs = ['name', 'rut', 'phone', 'email'];
         else if (table === 'suppliers') cs = ['name', 'phone', 'email'];
         else if (table === 'sales') cs = ['saleNumber'];
@@ -273,6 +273,22 @@ router.post('/api/:table', async (req, res) => {
             }
         }
 
+        // ponytail: Validación de código de barra duplicado y trim si es producto
+        if (table === 'products' && item.barcode !== undefined && item.barcode !== null) {
+            item.barcode = String(item.barcode).trim();
+            if (item.barcode !== '') {
+                const existing = await dbGet(
+                    "SELECT id, name FROM products WHERE barcode = ? AND business_id = ? AND isActive = 1 AND deletedAt IS NULL",
+                    [item.barcode, bid]
+                );
+                if (existing) {
+                    return res.status(400).json({
+                        error: `Este código de barras ya pertenece a "${existing.name}". Usa un código distinto o edita el producto existente.`
+                    });
+                }
+            }
+        }
+
         const ks = Object.keys(item); 
         const r = await dbRun(`INSERT INTO ${table} (${ks.join(',')}) VALUES (${ks.map(()=>'?').join(',')})`, ks.map(k => typeof item[k] === 'object' ? JSON.stringify(item[k]) : item[k])); 
         const response = { id: r.lastID, ...item };
@@ -338,8 +354,22 @@ router.put('/api/:table/:id', async (req, res) => {
         const ks = Object.keys(item); 
         if (ks.length === 0) return res.json({ success: true });
         
-        // Falla #33: Trazabilidad obligatoria de cambios de precios y costos
+        // Falla #33: Trazabilidad obligatoria de cambios de precios y costos + Validación de código de barra
         if (table === 'products') {
+            if (item.barcode !== undefined && item.barcode !== null) {
+                item.barcode = String(item.barcode).trim();
+                if (item.barcode !== '') {
+                    const existing = await dbGet(
+                        "SELECT id, name FROM products WHERE barcode = ? AND business_id = ? AND id != ? AND isActive = 1 AND deletedAt IS NULL",
+                        [item.barcode, bid, id]
+                    );
+                    if (existing) {
+                        return res.status(400).json({
+                            error: `Este código de barras ya pertenece a "${existing.name}". Usa un código distinto o edita el producto existente.`
+                        });
+                    }
+                }
+            }
             const oldP = await dbGet("SELECT price, cost FROM products WHERE id = ? AND business_id = ?", [id, bid]);
             if (oldP) {
                 const nowIso = new Date().toISOString();

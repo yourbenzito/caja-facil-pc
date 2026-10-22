@@ -41,3 +41,9 @@ audit-db.js
 verify_all.js
 fix_suppliers.js
 get_exact_answers.js
+
+# Archivos de respaldo temporales y scripts locales
+*.backup*
+*.backup_*
+aliviar_disco.bat
+*.db

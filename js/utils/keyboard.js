@@ -57,6 +57,22 @@ const KeyboardManager = {
                 if (fillDebtBtn) { fillDebtBtn.click(); return; }
                 return;
             }
+
+            // Handle F7 shortcut: abrir o cerrar pizarra de notas, encargos y envases (toggle)
+            if (e.key === 'F7') {
+                e.preventDefault();
+                const notesModalEl = document.getElementById('notesModalContainer');
+                if (notesModalEl && typeof closeModal === 'function') {
+                    closeModal();
+                    return;
+                }
+                if (typeof app !== 'undefined' && typeof app.openNotesModal === 'function') {
+                    app.openNotesModal();
+                } else if (typeof NotesModal !== 'undefined' && typeof NotesModal.open === 'function') {
+                    NotesModal.open();
+                }
+                return;
+            }
         });
     },
     

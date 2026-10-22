@@ -17,7 +17,7 @@ async function getTableColumns(table, targetDb = null) {
 
 async function ensureColumn(table, column, definition, targetDb = null) {
     const cols = await getTableColumns(table, targetDb);
-    if (!cols.includes(column)) {
+    if (cols && cols.length > 0 && !cols.includes(column)) {
         if (targetDb) {
             await new Promise((resolve) => {
                 targetDb.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`, (err) => {
@@ -70,7 +70,7 @@ async function runSchemaMigrations(targetDb = null) {
     };
 
     // Asegurar columna business_id en tablas críticas para targetDb
-    const criticalTables = ['products', 'categories', 'customers', 'suppliers', 'sales', 'purchases', 'cashRegisters', 'cashMovements', 'stockMovements', 'users', 'auditLogs', 'settings', 'businesses'];
+    const criticalTables = ['products', 'categories', 'customers', 'suppliers', 'sales', 'purchases', 'cashRegisters', 'cashMovements', 'stockMovements', 'users', 'auditLogs', 'settings', 'businesses', 'counterNotes'];
     for (const tableName of criticalTables) {
         try {
             await ensureColumn(tableName, 'business_id', 'INTEGER DEFAULT 1', targetDb);
@@ -87,6 +87,8 @@ async function runSchemaMigrations(targetDb = null) {
         ['purchases', 'vatMode', 'TEXT DEFAULT "net"'],
         ['purchases', 'cancelledAt', 'TEXT'],   // fecha de anulación (soft-delete)
         ['purchases', 'cancelReason', 'TEXT'],  // motivo de anulación
+        ['purchases', 'extraTaxesAmount', 'REAL DEFAULT 0'], // impuesto adicional del pie de factura
+        ['purchases', 'priceChangesSummary', 'TEXT'],        // histórico de precios modificados en la compra
         ['cashRegisters', 'countedByMethod', 'JSON'], // conteo real por método al cerrar caja
         ['cashMovements', 'saleId', 'INTEGER'],
         ['cashMovements', 'expenseId', 'INTEGER'],
@@ -138,6 +140,9 @@ async function runSchemaMigrations(targetDb = null) {
         ['debtPaymentSessions', 'uuid', 'TEXT'],
         ['debtPaymentSessions', 'cloud_id', 'TEXT'],
         ['debtPaymentSessions', 'terminal_id', 'TEXT'],
+        ['debtPaymentSessions', 'is_synced', 'INTEGER DEFAULT 0'],
+        ['debtPaymentSessions', 'deleted_at', 'TEXT'],
+        ['debtPaymentSessions', 'synced_at', 'TEXT'],
         // Trazabilidad de usuarios y auditoría en movimientos
         ['stockMovements', 'userId', 'INTEGER'],
         ['stockMovements', 'userName', 'TEXT'],
@@ -463,6 +468,8 @@ async function runSchemaMigrations(targetDb = null) {
         await runDbRun("CREATE INDEX IF NOT EXISTS idx_cash_movements_is_synced ON cashMovements(is_synced)");
         await runDbRun("CREATE INDEX IF NOT EXISTS idx_supplier_payments_uuid ON supplierPayments(uuid)");
         await runDbRun("CREATE INDEX IF NOT EXISTS idx_supplier_payments_is_synced ON supplierPayments(is_synced)");
+        await runDbRun("CREATE INDEX IF NOT EXISTS idx_debt_payment_sessions_uuid ON debtPaymentSessions(uuid)");
+        await runDbRun("CREATE INDEX IF NOT EXISTS idx_debt_payment_sessions_is_synced ON debtPaymentSessions(is_synced)");
     } catch (e) {
         console.warn('[Schema] Error creando índices delta:', e.message);
     }
@@ -489,6 +496,44 @@ async function runSchemaMigrations(targetDb = null) {
         await runDbRun("CREATE INDEX IF NOT EXISTS idx_staff_pin ON staff(pin)");
     } catch (e) {
         console.warn('[Schema] Error asegurando tabla staff:', e.message);
+    }
+
+    // Asegurar tabla counterNotes para pizarra de mostrador, envases y reservas
+    try {
+        await runDbRun(`CREATE TABLE IF NOT EXISTS counterNotes (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid               TEXT,
+            category           TEXT DEFAULT 'general',
+            text               TEXT,
+            clientName         TEXT,
+            clientPhone        TEXT,
+            customerId         TEXT,
+            bottleDetail       TEXT,
+            bottleCount        INTEGER DEFAULT 1,
+            reservationDetail  TEXT,
+            reservationDeposit REAL DEFAULT 0,
+            dueDate            TEXT,
+            dueTime            TEXT,
+            assignedTo         TEXT DEFAULT 'Todos',
+            isCompleted        INTEGER DEFAULT 0,
+            completedAt        TEXT,
+            completedBy        TEXT,
+            createdBy          TEXT,
+            terminal_id        TEXT,
+            business_id        INTEGER DEFAULT 1,
+            is_synced          INTEGER DEFAULT 0,
+            synced_at          TEXT,
+            deleted_at         TEXT,
+            createdAt          TEXT,
+            updatedAt          TEXT
+        )`);
+        await runDbRun("CREATE INDEX IF NOT EXISTS idx_counter_notes_uuid ON counterNotes(uuid)");
+        await runDbRun("CREATE INDEX IF NOT EXISTS idx_counter_notes_is_synced ON counterNotes(is_synced)");
+        await runDbRun("CREATE INDEX IF NOT EXISTS idx_counter_notes_business ON counterNotes(business_id)");
+        await runDbRun("CREATE INDEX IF NOT EXISTS idx_counter_notes_category ON counterNotes(category)");
+        console.log('[Schema] Tabla counterNotes lista para multicaja.');
+    } catch (e) {
+        console.warn('[Schema] Error asegurando counterNotes:', e.message);
     }
 }
 

@@ -54,6 +54,11 @@ function getSupabaseAdmin() {
     return supabaseAdmin || supabase;
 }
 
+function safeDate(val, fallback = null) {
+    if (!val || val === 'null' || val === 'undefined') return fallback;
+    return val;
+}
+
 /**
  * Resuelve el identificador único del usuario en Supabase de forma segura.
  * Si el cliente está autenticado con JWT, consulta directamente auth.getUser().
@@ -88,6 +93,28 @@ async function resolveSupabaseUserId(req, client) {
 }
 
 /**
+ * GET /api/sync/has-pending
+ * Consulta ultrarrápida para verificar si hay cambios locales generados offline
+ * sin necesidad de ejecutar un ciclo completo de sincronización.
+ */
+router.get('/api/sync/has-pending', async (req, res) => {
+    try {
+        const businessId = Number(req.query.businessId || 1);
+        const [sales, purchases, expenses, payments, cashMovements] = await Promise.all([
+            dbGet("SELECT COUNT(*) as c FROM sales WHERE business_id = ? AND (is_synced IS NULL OR is_synced = 0)", [businessId]),
+            dbGet("SELECT COUNT(*) as c FROM purchases WHERE business_id = ? AND (is_synced IS NULL OR is_synced = 0)", [businessId]),
+            dbGet("SELECT COUNT(*) as c FROM expenses WHERE business_id = ? AND (is_synced IS NULL OR is_synced = 0)", [businessId]),
+            dbGet("SELECT COUNT(*) as c FROM payments WHERE business_id = ? AND (is_synced IS NULL OR is_synced = 0)", [businessId]),
+            dbGet("SELECT COUNT(*) as c FROM cashMovements WHERE business_id = ? AND (is_synced IS NULL OR is_synced = 0)", [businessId])
+        ]);
+        const totalPending = (sales?.c || 0) + (purchases?.c || 0) + (expenses?.c || 0) + (payments?.c || 0) + (cashMovements?.c || 0);
+        res.json({ success: true, hasPending: totalPending > 0, totalPending });
+    } catch (err) {
+        res.json({ success: false, hasPending: false, error: err.message });
+    }
+});
+
+/**
  * POST /api/sync/cloud
  * Sincronización Bidireccional Robusta PC <-> Supabase Cloud
  * Usa cliente autenticado por sesión JWT respetando políticas RLS.
@@ -110,6 +137,7 @@ router.post('/api/sync/cloud', async (req, res) => {
     }
 
     const businessId = Number(req.body?.businessId || req.headers['x-business-id'] || req.business_id || 1);
+    const targetTable = req.body?.table || req.query?.table || null;
 
     // Validación Defensiva de Plan y Licencia para Sincronización en PC
     try {
@@ -141,7 +169,21 @@ router.post('/api/sync/cloud', async (req, res) => {
     const isPullOnly = Boolean(req.body?.mode === 'pull_only' || req.query?.mode === 'pull_only');
     if (isPullOnly) {
         console.log(`📥 [SyncCloud] Modo PULL_ONLY activado para [${userId}] (Solo descarga reactiva - cero rebote hacia Supabase).`);
-        // Proxy protector de solo lectura: intercepta y anula escrituras hacia Supabase para evitar bucles de eco
+        // Proxy protector de solo lectura: intercepta y anula escrituras hacia Supabase para evitar bucles de eco.
+        // ponytail: soporte de llamadas encadenadas infinitas (.delete().eq().eq()) retornando un Proxy sobre la promesa.
+        const createDummyChain = () => {
+            const dummyPromise = Promise.resolve({ data: [], error: null });
+            const dummyProxy = new Proxy(dummyPromise, {
+                get(target, prop) {
+                    if (prop === 'then' || prop === 'catch' || prop === 'finally') {
+                        return target[prop].bind(target);
+                    }
+                    return () => dummyProxy;
+                }
+            });
+            return dummyProxy;
+        };
+
         const realSb = sb;
         sb = new Proxy(realSb, {
             get(target, prop) {
@@ -151,7 +193,7 @@ router.post('/api/sync/cloud', async (req, res) => {
                         return new Proxy(qb, {
                             get(qTarget, qProp) {
                                 if (['insert', 'upsert', 'update', 'delete'].includes(qProp)) {
-                                    return () => Promise.resolve({ data: [], error: null });
+                                    return () => createDummyChain();
                                 }
                                 return qTarget[qProp];
                             }
@@ -174,14 +216,15 @@ router.post('/api/sync/cloud', async (req, res) => {
         pulled: {
             businesses: 0, products: 0, categories: 0, customers: 0, sales: 0, suppliers: 0,
             purchases: 0, cash_registers: 0, expenses: 0, cash_movements: 0, debt_payments: 0,
-            stock_movements: 0, staff: 0, sale_returns: 0, product_price_history: 0, product_cost_history: 0
+            stock_movements: 0, staff: 0, sale_returns: 0, product_price_history: 0, product_cost_history: 0,
+            debt_payment_sessions: 0, counter_notes: 0
         },
         pushed: {
             businesses: 0, products: 0, categories: 0, customers: 0, sales: 0, suppliers: 0,
             purchases: 0, cash_registers: 0, expenses: 0, cash_movements: 0,
             debt_payments: 0, stock_movements: 0, staff: 0, sale_returns: 0, audit_logs: 0,
             product_price_history: 0, product_cost_history: 0, customer_credit_deposits: 0,
-            supplier_payments: 0
+            supplier_payments: 0, debt_payment_sessions: 0, counter_notes: 0
         }
     };
 
@@ -189,7 +232,20 @@ router.post('/api/sync/cloud', async (req, res) => {
         // =========================================================================
         // 0. SINCRONIZAR NEGOCIOS / SUCURSALES (BUSINESSES)
         // =========================================================================
+        if (!targetTable || targetTable === 'businesses') {
         try {
+            // ponytail: Vincular automáticamente el negocio local existente con el user_id de Supabase si venía de Plan Free (offline)
+            try {
+                await defaultDbRun(
+                    "UPDATE businesses SET user_id = ? WHERE (user_id IS NULL OR user_id = '' OR user_id = '1') AND id = ?",
+                    [userId, businessId]
+                );
+                await dbRun(
+                    "UPDATE businesses SET user_id = ? WHERE (user_id IS NULL OR user_id = '' OR user_id = '1') AND id = ?",
+                    [userId, businessId]
+                );
+            } catch (_) {}
+
             // A. PULL: Descargar negocios de Supabase
             const { data: cloudBizs, error: bizErr } = await sb
                 .from('businesses')
@@ -245,6 +301,7 @@ router.post('/api/sync/cloud', async (req, res) => {
                         user_id: userId,
                         local_id: String(b.id),
                         name: b.name || 'Mi Negocio',
+                        business_code: b.accessCode || b.business_code || null,
                         phone: b.phone || '',
                         address: b.address || '',
                         join_code: b.join_code || null,
@@ -260,10 +317,12 @@ router.post('/api/sync/cloud', async (req, res) => {
         } catch (bizSyncErr) {
             console.warn('[SyncCloud] Advertencia sincronizando negocios:', bizSyncErr.message);
         }
+        }
 
         // =========================================================================
         // 1. SINCRONIZAR CATEGORÍAS (PULL & PUSH)
         // =========================================================================
+        if (!targetTable || targetTable === 'categories') {
         try {
             // A. Descargar categorías de Supabase (filtradas por business_id activo)
             const { data: cloudCats, error: catErr } = await sb
@@ -273,21 +332,34 @@ router.post('/api/sync/cloud', async (req, res) => {
                 .eq('business_id', String(businessId));
 
             if (!catErr && cloudCats) {
-                const localCats = await dbAll("SELECT id, name, color FROM categories WHERE business_id = ?", [businessId]);
+                const localCats = await dbAll("SELECT id, name, color, deleted_at FROM categories WHERE business_id = ?", [businessId]);
                 const localCatsMap = new Map();
                 localCats.forEach(c => localCatsMap.set(c.name.trim().toLowerCase(), c));
 
+                const now = new Date().toISOString();
                 for (const cc of cloudCats) {
-                    if (cc.is_deleted) continue;
                     const catName = (cc.name || '').trim();
                     if (!catName) continue;
-
                     const existing = localCatsMap.get(catName.toLowerCase());
+
+                    if (cc.is_deleted) {
+                        // ponytail: Borrado lógico anti-zombi: si en Supabase está borrada, asegurar borrado local
+                        if (existing && !existing.deleted_at) {
+                            await dbRun("UPDATE categories SET deleted_at = ? WHERE id = ?", [now, existing.id]);
+                            stats.pulled.categories++;
+                        }
+                        continue;
+                    }
+
                     if (!existing) {
                         await dbRun(
                             "INSERT OR IGNORE INTO categories (name, color, business_id, is_synced) VALUES (?, ?, ?, 1)",
                             [catName, cc.color || '#3b82f6', businessId]
                         );
+                        stats.pulled.categories++;
+                    } else if (existing.deleted_at) {
+                        // Si en la nube está activa pero localmente estaba borrada, reactivar
+                        await dbRun("UPDATE categories SET deleted_at = NULL, color = ? WHERE id = ?", [cc.color || existing.color || '#3b82f6', existing.id]);
                         stats.pulled.categories++;
                     } else if (cc.color && existing.color !== cc.color) {
                         await dbRun("UPDATE categories SET color = ? WHERE id = ?", [cc.color, existing.id]);
@@ -295,14 +367,17 @@ router.post('/api/sync/cloud', async (req, res) => {
                     }
                 }
 
-                // B. Subir categorías locales a Supabase que no estén en la nube
+                // B. Subir categorías locales a Supabase (incluyendo estado de borrado lógico)
                 const cloudCatsMap = new Map();
                 cloudCats.forEach(c => cloudCatsMap.set((c.name || '').trim().toLowerCase(), c));
 
                 const catsToPush = [];
                 for (const lc of localCats) {
                     const cleanName = lc.name.trim();
-                    if (!cloudCatsMap.has(cleanName.toLowerCase())) {
+                    const cloudCat = cloudCatsMap.get(cleanName.toLowerCase());
+                    const isLocallyDeleted = Boolean(lc.deleted_at);
+
+                    if (!cloudCat || Boolean(cloudCat.is_deleted) !== isLocallyDeleted) {
                         catsToPush.push({
                             user_id: userId,
                             business_id: String(businessId),
@@ -310,7 +385,7 @@ router.post('/api/sync/cloud', async (req, res) => {
                             name: cleanName,
                             color: lc.color || '#3b82f6',
                             icon: 'tag',
-                            is_deleted: false,
+                            is_deleted: isLocallyDeleted,
                             updated_at: new Date().toISOString()
                         });
                     }
@@ -320,11 +395,22 @@ router.post('/api/sync/cloud', async (req, res) => {
                     const { error: pushCatErr } = await sb
                         .from('categories')
                         .upsert(catsToPush, { onConflict: 'user_id,business_id,local_id' });
-                    if (!pushCatErr) stats.pushed.categories = catsToPush.length;
+                    if (!pushCatErr) {
+                        stats.pushed.categories = catsToPush.length;
+                    } else {
+                        // ponytail: Fallback individual tolerante a fallos
+                        for (const singleCat of catsToPush) {
+                            const { error: sCatErr } = await sb
+                                .from('categories')
+                                .upsert([singleCat], { onConflict: 'user_id,business_id,local_id' });
+                            if (!sCatErr) stats.pushed.categories++;
+                        }
+                    }
                 }
             }
         } catch (catSyncErr) {
             console.warn('[SyncCloud] Advertencia sincronizando categorías:', catSyncErr.message);
+        }
         }
 
         // =========================================================================
@@ -356,7 +442,7 @@ router.post('/api/sync/cloud', async (req, res) => {
 
             // Obtener productos locales actuales en SQLite para este negocio
             const localProducts = await dbAll(
-                "SELECT id, barcode, name, description, category, cost, price, stock, minStock, image, isActive, deletedAt, cloud_id, updatedAt FROM products WHERE business_id = ?",
+                "SELECT id, barcode, name, description, category, cost, costNeto, price, stock, minStock, maxStock, type, additionalTaxesConfig, expiryDate, image, isActive, deletedAt, cloud_id, updatedAt FROM products WHERE business_id = ?",
                 [businessId]
             );
 
@@ -406,9 +492,14 @@ router.post('/api/sync/cloud', async (req, res) => {
                                     description = ?,
                                     category = ?,
                                     cost = ?,
+                                    costNeto = ?,
                                     price = ?,
                                     stock = ?,
                                     minStock = ?,
+                                    maxStock = ?,
+                                    type = ?,
+                                    additionalTaxesConfig = ?,
+                                    expiryDate = ?,
                                     image = ?,
                                     isActive = ?,
                                     deletedAt = ?,
@@ -421,9 +512,14 @@ router.post('/api/sync/cloud', async (req, res) => {
                                     cp.description || existing.description || '',
                                     cp.category || existing.category || 'General',
                                     Number(cp.cost_price ?? existing.cost ?? 0),
+                                    Number(cp.cost_neto ?? existing.costNeto ?? 0),
                                     Number(cp.sale_price ?? existing.price ?? 0),
                                     Number(cp.stock ?? existing.stock ?? 0),
                                     Number(cp.min_stock ?? existing.minStock ?? 0),
+                                    Number(cp.max_stock ?? existing.maxStock ?? 0),
+                                    cp.type || existing.type || 'unit',
+                                    cp.additional_taxes_config ? (typeof cp.additional_taxes_config === 'string' ? cp.additional_taxes_config : JSON.stringify(cp.additional_taxes_config)) : (existing.additionalTaxesConfig || '[]'),
+                                    cp.expiry_date || existing.expiryDate || null,
                                     cp.image || existing.image || '',
                                     isActive,
                                     deletedAt,
@@ -438,18 +534,23 @@ router.post('/api/sync/cloud', async (req, res) => {
                         // Insertar nuevo producto proveniente de la nube
                         await dbRun(
                             `INSERT INTO products (
-                                barcode, name, description, category, cost, price, stock, minStock, 
-                                image, isActive, deletedAt, business_id, cloud_id, is_synced, createdAt, updatedAt
-                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?, 1, ?, ?)`,
+                                barcode, name, description, category, cost, costNeto, price, stock, minStock, maxStock,
+                                type, additionalTaxesConfig, expiryDate, image, isActive, deletedAt, business_id, cloud_id, is_synced, createdAt, updatedAt
+                             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, ?, 1, ?, ?)`,
                             [
                                 cleanCode || targetCloudId,
                                 cp.name || 'Sin Nombre',
                                 cp.description || '',
                                 cp.category || 'General',
                                 Number(cp.cost_price || 0),
+                                Number(cp.cost_neto || 0),
                                 Number(cp.sale_price || 0),
                                 Number(cp.stock || 0),
                                 Number(cp.min_stock || 0),
+                                Number(cp.max_stock || 0),
+                                cp.type || 'unit',
+                                cp.additional_taxes_config ? (typeof cp.additional_taxes_config === 'string' ? cp.additional_taxes_config : JSON.stringify(cp.additional_taxes_config)) : '[]',
+                                cp.expiry_date || null,
                                 cp.image || '',
                                 businessId,
                                 targetCloudId,
@@ -471,7 +572,7 @@ router.post('/api/sync/cloud', async (req, res) => {
 
             const prodsToPush = [];
             const freshLocalProducts = await dbAll(
-                "SELECT id, barcode, name, description, category, cost, price, stock, minStock, image, isActive, deletedAt, cloud_id, updatedAt FROM products WHERE business_id = ?",
+                "SELECT id, barcode, name, description, category, cost, costNeto, price, stock, minStock, maxStock, type, additionalTaxesConfig, expiryDate, image, isActive, deletedAt, cloud_id, updatedAt FROM products WHERE business_id = ?",
                 [businessId]
             );
 
@@ -488,6 +589,12 @@ router.post('/api/sync/cloud', async (req, res) => {
 
                 if (!cloudProd || (localUpdated > cloudUpdated)) {
                     seenPushIds.add(targetLocalId);
+                    // ponytail: Preservar el stock existente en Supabase para evitar sobreescribir ventas de otras terminales
+                    const effectiveStock = cloudProd ? Number(cloudProd.stock ?? lp.stock ?? 0) : Number(lp.stock || 0);
+
+                    let parsedTaxes = [];
+                    try { parsedTaxes = typeof lp.additionalTaxesConfig === 'string' ? JSON.parse(lp.additionalTaxesConfig || '[]') : (lp.additionalTaxesConfig || []); } catch (_) {}
+
                     prodsToPush.push({
                         user_id: userId,
                         business_id: String(businessId),
@@ -496,9 +603,14 @@ router.post('/api/sync/cloud', async (req, res) => {
                         name: lp.name || 'Sin Nombre',
                         category: lp.category || 'General',
                         cost_price: Number(lp.cost || 0),
+                        cost_neto: Number(lp.costNeto || 0),
                         sale_price: Number(lp.price || 0),
-                        stock: Number(lp.stock || 0),
+                        stock: effectiveStock,
                         min_stock: Number(lp.minStock || 0),
+                        max_stock: Number(lp.maxStock || 0),
+                        type: lp.type || 'unit',
+                        additional_taxes_config: parsedTaxes,
+                        expiry_date: lp.expiryDate || null,
                         image: lp.image || '',
                         description: lp.description || '',
                         is_favorite: false,
@@ -517,7 +629,18 @@ router.post('/api/sync/cloud', async (req, res) => {
                         .from('products')
                         .upsert(chunk, { onConflict: 'user_id,business_id,local_id' });
                     if (pushErr) {
-                        console.warn('[SyncCloud] Error subiendo lote de productos:', pushErr.message);
+                        console.warn('[SyncCloud] Conflicto en lote de productos, reintentando individualmente:', pushErr.message);
+                        // ponytail: Resiliencia tolerante a fallos: aislar productos conflictivos para no trabar el resto del lote
+                        for (const singleProd of chunk) {
+                            const { error: singleProdErr } = await sb
+                                .from('products')
+                                .upsert([singleProd], { onConflict: 'user_id,business_id,local_id' });
+                            if (!singleProdErr) {
+                                stats.pushed.products++;
+                            } else {
+                                console.warn(`[SyncCloud] Producto individual omitido por error (${singleProd.code || singleProd.local_id}):`, singleProdErr.message);
+                            }
+                        }
                     } else {
                         stats.pushed.products += chunk.length;
                     }
@@ -533,11 +656,18 @@ router.post('/api/sync/cloud', async (req, res) => {
         // 3. SINCRONIZAR VENTAS (PUSH ITERATIVO COMPLETO POR LOTES)
         // =========================================================================
         try {
+            // Mapa de cajas locales para vincular venta con UUID universal de la caja
+            const localRegRows = await dbAll("SELECT id, uuid FROM cashRegisters WHERE business_id = ?", [businessId]);
+            const localRegMap = new Map();
+            localRegRows.forEach(r => { if (r.uuid) localRegMap.set(Number(r.id), String(r.uuid)); });
+
             let hasMoreSales = true;
+            const SALE_BATCH_SIZE = 200; // ponytail: Lotes de 200 para máxima estabilidad y evitar timeouts en conexiones lentas
+
             while (hasMoreSales) {
                 const unsyncedSales = await dbAll(
-                    "SELECT * FROM sales WHERE business_id = ? AND (is_synced IS NULL OR is_synced = 0) ORDER BY date ASC LIMIT 500",
-                    [businessId]
+                    "SELECT * FROM sales WHERE business_id = ? AND (is_synced IS NULL OR is_synced = 0) ORDER BY date ASC LIMIT ?",
+                    [businessId, SALE_BATCH_SIZE]
                 );
 
                 if (!unsyncedSales || unsyncedSales.length === 0) {
@@ -557,19 +687,28 @@ router.post('/api/sync/cloud', async (req, res) => {
                     }
 
                     const saleUuid = s.uuid || s.server_id || ('sale_' + (s.terminal_id || 'PC') + '_' + s.id);
+                    const mappedRegisterId = (s.cashRegisterId && localRegMap.get(Number(s.cashRegisterId))) 
+                        ? localRegMap.get(Number(s.cashRegisterId)) 
+                        : (s.cashRegisterId ? String(s.cashRegisterId) : null);
+
                     return {
                         user_id: userId,
                         business_id: String(businessId),
                         local_id: String(saleUuid),
+                        sale_number: s.saleNumber || null,
                         sale_date: s.date || s.createdAt || new Date().toISOString(),
+                        subtotal: Number(s.subtotal || 0),
+                        tax_amount: Number(s.tax || s.tax_amount || 0),
+                        commission_amount: Number(s.commission_amount || 0),
                         total: Number(s.total || 0),
                         payment_method: s.paymentMethod || 'EFECTIVO',
                         customer_id: s.customerId ? String(s.customerId) : null,
                         items: parsedItems,
-                        cash_register_id: s.cashRegisterId ? String(s.cashRegisterId) : null,
+                        cash_register_id: mappedRegisterId,
                         status: s.status || 'completed',
                         payment_details: pd || {},
                         paid_amount: Number(s.paidAmount !== undefined ? s.paidAmount : s.total || 0),
+                        paid_at: s.paidAt || null,
                         terminal_id: s.terminal_id || 'PC-1',
                         synced_at: new Date().toISOString()
                     };
@@ -579,16 +718,69 @@ router.post('/api/sync/cloud', async (req, res) => {
                     .from('sales')
                     .upsert(salesPayload, { onConflict: 'user_id,business_id,local_id' });
 
+                let successfulSales = [];
                 if (salesPushErr) {
-                    console.warn('[SyncCloud] Advertencia subiendo lote de ventas:', salesPushErr.message);
-                    break;
+                    console.warn('[SyncCloud] Conflicto en lote de ventas, reintentando individualmente:', salesPushErr.message);
+                    for (let idx = 0; idx < salesPayload.length; idx++) {
+                        const singleSale = salesPayload[idx];
+                        const { error: singleSaleErr } = await sb
+                            .from('sales')
+                            .upsert([singleSale], { onConflict: 'user_id,business_id,local_id' });
+                        if (!singleSaleErr) {
+                            successfulSales.push({ ...singleSale, localSaleId: unsyncedSales[idx]?.id });
+                        } else {
+                            console.warn(`[SyncCloud] Venta individual omitida (${singleSale.local_id}):`, singleSaleErr.message);
+                        }
+                    }
+                    if (successfulSales.length === 0) break;
+                } else {
+                    successfulSales = salesPayload.map((sp, idx) => ({ ...sp, localSaleId: unsyncedSales[idx]?.id }));
                 }
 
-                const syncedIds = unsyncedSales.map(s => s.id);
-                await dbRunSilent(`UPDATE sales SET is_synced = 1 WHERE id IN (${syncedIds.map(() => '?').join(',')})`, syncedIds);
-                stats.pushed.sales += unsyncedSales.length;
+                // ponytail: Descontar stock relativo atómico en Supabase para cada producto vendido con éxito en este lote
+                for (const s of successfulSales) {
+                    if (Array.isArray(s.items)) {
+                        for (const it of s.items) {
+                            const qty = Number(it.quantity || it.qty || 0);
+                            if (qty > 0) {
+                                const pLocalId = String(it.productId || it.id || '');
+                                const pCode = (it.barcode || it.code || '').trim();
+                                if (pLocalId || pCode) {
+                                    try {
+                                        const { error: rpcErr } = await sb.rpc('adjust_stock_delta', {
+                                            p_user_id: userId,
+                                            p_local_id: pLocalId || pCode,
+                                            p_delta: -qty
+                                        });
+                                        if (rpcErr) {
+                                            // Fallback directo sobre tabla products si RPC no estuviera instalado en Supabase
+                                            const { data: cloudItem } = await sb
+                                                .from('products')
+                                                .select('id, stock')
+                                                .eq('user_id', userId)
+                                                .or(pLocalId ? `local_id.eq.${pLocalId}` : `code.eq.${pCode}`)
+                                                .maybeSingle();
+                                            if (cloudItem && cloudItem.stock !== undefined) {
+                                                await sb.from('products').update({
+                                                    stock: Number(cloudItem.stock || 0) - qty,
+                                                    updated_at: new Date().toISOString()
+                                                }).eq('id', cloudItem.id);
+                                            }
+                                        }
+                                    } catch (_) { }
+                                }
+                            }
+                        }
+                    }
+                }
 
-                if (unsyncedSales.length < 500) {
+                const syncedIds = successfulSales.map(s => s.localSaleId).filter(Boolean);
+                if (syncedIds.length > 0) {
+                    await dbRunSilent(`UPDATE sales SET is_synced = 1 WHERE id IN (${syncedIds.map(() => '?').join(',')})`, syncedIds);
+                    stats.pushed.sales += syncedIds.length;
+                }
+
+                if (unsyncedSales.length < SALE_BATCH_SIZE) {
                     hasMoreSales = false;
                 }
             }
@@ -612,6 +804,23 @@ router.post('/api/sync/cloud', async (req, res) => {
                 const existingUuidMap = new Set();
                 const localSalesById = new Map();
                 const localSalesBySignature = new Map();
+
+                // Mapas de resolución UUID -> ID entero para clientes y cajas de este negocio
+                const localCustList = await dbAll("SELECT id, uuid, cloud_id FROM customers WHERE business_id = ?", [businessId]);
+                const custResolverMap = new Map();
+                localCustList.forEach(c => {
+                    custResolverMap.set(String(c.id), c.id);
+                    if (c.uuid) custResolverMap.set(String(c.uuid), c.id);
+                    if (c.cloud_id) custResolverMap.set(String(c.cloud_id), c.id);
+                });
+
+                const localCrList = await dbAll("SELECT id, uuid, cloud_id FROM cashRegisters WHERE business_id = ?", [businessId]);
+                const crResolverMap = new Map();
+                localCrList.forEach(cr => {
+                    crResolverMap.set(String(cr.id), cr.id);
+                    if (cr.uuid) crResolverMap.set(String(cr.uuid), cr.id);
+                    if (cr.cloud_id) crResolverMap.set(String(cr.cloud_id), cr.id);
+                });
 
                 localExistingSales.forEach(ls => {
                     localSalesById.set(Number(ls.id), ls);
@@ -651,8 +860,8 @@ router.post('/api/sync/cloud', async (req, res) => {
                     // 3. Firma digital única (Mismo cliente + misma fecha/hora + mismo monto)
                     if (!matchedLocalSale && cs.sale_date && cs.total !== undefined) {
                         const cloudDateKey = String(cs.sale_date).slice(0, 19);
-                        const cloudCustKey = cs.customer_id ? String(cs.customer_id) : 'none';
-                        const cloudSig = `${cloudCustKey}_${cloudDateKey}_${Number(cs.total).toFixed(2)}`;
+                        const resolvedCustForSig = cs.customer_id ? (custResolverMap.get(String(cs.customer_id)) || cs.customer_id) : 'none';
+                        const cloudSig = `${resolvedCustForSig}_${cloudDateKey}_${Number(cs.total).toFixed(2)}`;
                         if (localSalesBySignature.has(cloudSig)) {
                             matchedLocalSale = localSalesBySignature.get(cloudSig);
                         }
@@ -692,6 +901,10 @@ router.post('/api/sync/cloud', async (req, res) => {
                         pdStr = typeof cs.payment_details === 'string' ? cs.payment_details : JSON.stringify(cs.payment_details || {});
                     } catch (_) { pdStr = '{}'; }
 
+                    // Resolver cliente y caja por ID o UUID
+                    const resolvedCustomerId = cs.customer_id ? (custResolverMap.get(String(cs.customer_id)) || (parseInt(cs.customer_id, 10) || null)) : null;
+                    const resolvedCashRegisterId = cs.cash_register_id ? (crResolverMap.get(String(cs.cash_register_id)) || (parseInt(cs.cash_register_id, 10) || null)) : null;
+
                     await dbRun(`
                         INSERT INTO sales (
                             date, total, paidAmount, paymentMethod, paymentDetails, customerId, 
@@ -703,8 +916,8 @@ router.post('/api/sync/cloud', async (req, res) => {
                         Number(cs.paid_amount !== undefined ? cs.paid_amount : cs.total || 0),
                         cs.payment_method || 'EFECTIVO',
                         pdStr,
-                        cs.customer_id ? parseInt(cs.customer_id, 10) || null : null,
-                        cs.cash_register_id ? parseInt(cs.cash_register_id, 10) || null : null,
+                        resolvedCustomerId,
+                        resolvedCashRegisterId,
                         itemsStr,
                         cs.status || 'completed',
                         businessId,
@@ -715,6 +928,23 @@ router.post('/api/sync/cloud', async (req, res) => {
                         cs.sale_date || new Date().toISOString(),
                         cs.updated_at || new Date().toISOString()
                     ]);
+
+                    // ponytail: Descontar stock local para la venta remota descargada sin truncar arbitrariamente a 0 (respetar ventas sin stock)
+                    let parsedRemoteItems = [];
+                    try { parsedRemoteItems = JSON.parse(itemsStr); } catch (_) {}
+                    if (Array.isArray(parsedRemoteItems)) {
+                        for (const it of parsedRemoteItems) {
+                            const pId = it.productId || it.id;
+                            const pCode = (it.barcode || it.code || '').trim();
+                            const qty = Number(it.quantity || it.qty || 0);
+                            if (qty > 0 && (pId || pCode)) {
+                                await dbRun(
+                                    "UPDATE products SET stock = stock - ? WHERE (id = ? OR (barcode = ? AND barcode != '')) AND business_id = ?",
+                                    [qty, pId || 0, pCode, businessId]
+                                );
+                            }
+                        }
+                    }
 
                     existingCloudMap.add(cloudId);
                     if (cloudLocalId) existingUuidMap.add(cloudLocalId);
@@ -728,6 +958,7 @@ router.post('/api/sync/cloud', async (req, res) => {
         // =========================================================================
         // 4. SINCRONIZAR CLIENTES (PULL & PUSH)
         // =========================================================================
+        if (!targetTable || targetTable === 'customers') {
         try {
             // A. Descargar clientes desde Supabase (filtrados por business_id activo)
             const { data: cloudCustomers, error: custErr } = await sb
@@ -878,10 +1109,12 @@ router.post('/api/sync/cloud', async (req, res) => {
         } catch (custSyncErr) {
             console.warn('[SyncCloud] Advertencia sincronizando clientes:', custSyncErr.message);
         }
+        }
 
         // =========================================================================
         // 5. SINCRONIZAR PROVEEDORES (PULL & PUSH)
         // =========================================================================
+        if (!targetTable || targetTable === 'suppliers') {
         try {
             const { data: cloudSupps, error: suppErr } = await sb
                 .from('suppliers')
@@ -936,10 +1169,12 @@ router.post('/api/sync/cloud', async (req, res) => {
         } catch (suppSyncErr) {
             console.warn('[SyncCloud] Advertencia sincronizando proveedores:', suppSyncErr.message);
         }
+        }
 
         // =========================================================================
         // 6. SINCRONIZAR COMPRAS (PUSH ITERATIVO CON UUID Y SEMÁFORO DE SINCRONIZACIÓN)
         // =========================================================================
+        if (!targetTable || targetTable === 'purchases') {
         try {
             let hasMorePurchases = true;
             let offsetPurch = 0;
@@ -963,12 +1198,19 @@ router.post('/api/sync/cloud', async (req, res) => {
                         invoice_number: p.invoiceNumber || String(p.purchaseNumber || ''),
                         document_type: p.documentType || 'boleta',
                         purchase_date: p.date || p.createdAt || new Date().toISOString(),
+                        subtotal: Number(p.subtotal || 0),
+                        iva_amount: Number(p.ivaAmount || 0),
+                        extra_taxes_amount: Number(p.extraTaxesAmount || 0),
                         total: Number(p.total || 0),
                         paid_amount: Number(p.paidAmount || 0),
+                        due_date: safeDate(p.dueDate, null),
+                        vat_mode: p.vatMode || 'net',
                         status: p.status || 'paid',
                         items: itms,
+                        cancelled_at: safeDate(p.cancelledAt, null),
+                        cancel_reason: p.cancelReason || null,
                         is_deleted: false,
-                        updated_at: p.updatedAt || new Date().toISOString()
+                        updated_at: safeDate(p.updatedAt, new Date().toISOString())
                     };
                 });
 
@@ -1015,6 +1257,15 @@ router.post('/api/sync/cloud', async (req, res) => {
                     }
                 });
 
+                // Mapa de resolución UUID/cloud_id -> ID entero para proveedores
+                const localSuppList = await dbAll("SELECT id, uuid, cloud_id FROM suppliers WHERE business_id = ?", [businessId]);
+                const suppResolverMap = new Map();
+                localSuppList.forEach(s => {
+                    suppResolverMap.set(String(s.id), s.id);
+                    if (s.uuid) suppResolverMap.set(String(s.uuid), s.id);
+                    if (s.cloud_id) suppResolverMap.set(String(s.cloud_id), s.id);
+                });
+
                 for (const cp of cloudPurch) {
                     if (cp.is_deleted) continue;
                     const cloudId = String(cp.id);
@@ -1031,7 +1282,7 @@ router.post('/api/sync/cloud', async (req, res) => {
                         itemsStr = typeof cp.items === 'string' ? cp.items : JSON.stringify(cp.items || []);
                     } catch (_) { itemsStr = '[]'; }
 
-                    const suppId = cp.supplier_id ? (parseInt(cp.supplier_id, 10) || null) : null;
+                    const suppId = cp.supplier_id ? (suppResolverMap.get(String(cp.supplier_id)) || (parseInt(cp.supplier_id, 10) || null)) : null;
                     const tot = Number(cp.total || 0);
                     const subtot = Number(cp.subtotal !== undefined ? cp.subtotal : tot);
                     const paid = Number(cp.paid_amount !== undefined ? cp.paid_amount : tot);
@@ -1069,10 +1320,12 @@ router.post('/api/sync/cloud', async (req, res) => {
         } catch (pullPurchErr) {
             console.warn('[SyncCloud] Advertencia descargando compras:', pullPurchErr.message);
         }
+        }
 
         // =========================================================================
         // 7. SINCRONIZAR CAJAS REGISTRADORAS Y MOVIMIENTOS (PUSH & PULL)
         // =========================================================================
+        if (!targetTable || targetTable === 'cash_registers' || targetTable === 'sales') {
         try {
             // A. PUSH: Subir cajas locales a Supabase (solo no sincronizadas o activas)
             const localCashes = await dbAll("SELECT * FROM cashRegisters WHERE business_id = ? AND (is_synced IS NULL OR is_synced = 0) ORDER BY id ASC", [businessId]);
@@ -1289,10 +1542,12 @@ router.post('/api/sync/cloud', async (req, res) => {
         } catch (cashSyncErr) {
             console.warn('[SyncCloud] Advertencia sincronizando cajas/movimientos:', cashSyncErr.message);
         }
+        }
 
         // =========================================================================
         // 8. SINCRONIZAR GASTOS OPERATIVOS
         // =========================================================================
+        if (!targetTable || targetTable === 'expenses') {
         try {
             const localExpenses = await dbAll("SELECT * FROM expenses WHERE business_id = ? AND (is_synced IS NULL OR is_synced = 0) ORDER BY id ASC LIMIT 100", [businessId]);
             if (localExpenses && localExpenses.length > 0) {
@@ -1303,6 +1558,15 @@ router.post('/api/sync/cloud', async (req, res) => {
                     amount: Number(e.amount || 0),
                     category: e.category || 'General',
                     description: e.description || '',
+                    document_type: e.documentType || 'comprobante_interno',
+                    document_number: e.documentNumber || null,
+                    payment_method: e.paymentMethod || 'cash',
+                    supplier_id: e.supplierId ? String(e.supplierId) : null,
+                    product_id: e.productId ? String(e.productId) : null,
+                    product_name: e.productName || null,
+                    quantity: Number(e.quantity || 0),
+                    cost_value: Number(e.cost_value || 0),
+                    sale_value: Number(e.sale_value || 0),
                     expense_date: e.date || new Date().toISOString(),
                     from_cash: Boolean(e.paymentMethod === 'cash'),
                     updated_at: new Date().toISOString()
@@ -1366,10 +1630,12 @@ router.post('/api/sync/cloud', async (req, res) => {
         } catch (pullExpErr) {
             console.warn('[SyncCloud] Advertencia descargando gastos:', pullExpErr.message);
         }
+        }
 
         // =========================================================================
         // 9. SINCRONIZAR ABONOS A DEUDAS
         // =========================================================================
+        if (!targetTable || targetTable === 'debt_payments') {
         try {
             let hasMorePayments = true;
             let offsetPayments = 0;
@@ -1425,13 +1691,22 @@ router.post('/api/sync/cloud', async (req, res) => {
                     }
                 });
 
+                // Mapa de resolución UUID/cloud_id -> ID entero para clientes
+                const localCustList = await dbAll("SELECT id, uuid, cloud_id FROM customers WHERE business_id = ?", [businessId]);
+                const custResolverMap = new Map();
+                localCustList.forEach(c => {
+                    custResolverMap.set(String(c.id), c.id);
+                    if (c.uuid) custResolverMap.set(String(c.uuid), c.id);
+                    if (c.cloud_id) custResolverMap.set(String(c.cloud_id), c.id);
+                });
+
                 for (const dp of cloudPayments) {
                     if (dp.is_deleted) continue;
                     const targetId = String(dp.local_id || dp.id);
                     const sig = `${dp.customer_id}_${dp.payment_date}_${Number(dp.amount || 0).toFixed(2)}`;
                     if (payMap.has(targetId) || payMap.has(sig)) continue;
 
-                    const custId = dp.customer_id ? parseInt(dp.customer_id, 10) || null : null;
+                    const custId = dp.customer_id ? (custResolverMap.get(String(dp.customer_id)) || (parseInt(dp.customer_id, 10) || null)) : null;
                     await dbRun(`
                         INSERT INTO payments (
                             customerId, amount, paymentMethod, date, notes, business_id, is_synced, server_id
@@ -1453,11 +1728,13 @@ router.post('/api/sync/cloud', async (req, res) => {
         } catch (pullPayErr) {
             console.warn('[SyncCloud] Advertencia descargando abonos:', pullPayErr.message);
         }
+        }
 
         // =========================================================================
         // 10. SINCRONIZAR AJUSTES DEL NEGOCIO (PUSH & PULL)
         // =========================================================================
         let cloudBizSettings = null;
+        if (!targetTable || targetTable === 'settings') {
         try {
             const biz = await dbGet("SELECT * FROM businesses WHERE id = ?", [businessId]);
             if (biz) {
@@ -1510,10 +1787,12 @@ router.post('/api/sync/cloud', async (req, res) => {
         } catch (bizSyncErr) {
             console.warn('[SyncCloud] Advertencia sincronizando ajustes negocio:', bizSyncErr.message);
         }
+        }
 
         // =========================================================================
         // 11. SINCRONIZAR MOVIMIENTOS DE STOCK (KARDEX / AJUSTES)
         // =========================================================================
+        if (!targetTable || targetTable === 'stock_movements' || targetTable === 'sales') {
         try {
             // A. PULL: Descargar movimientos de stock de Supabase
             const { data: cloudStock, error: csErr } = await sb
@@ -1627,14 +1906,14 @@ router.post('/api/sync/cloud', async (req, res) => {
                     notes: m.notes || null,
                     cost_value: Number(m.cost_value || 0),
                     sale_value: Number(m.sale_value || 0),
-                    date: m.date || new Date().toISOString(),
-                    movement_date: m.date || new Date().toISOString(),
+                    date: safeDate(m.date, new Date().toISOString()),
+                    movement_date: safeDate(m.date, new Date().toISOString()),
                     status: m.status || 'active',
-                    cancelled_at: m.cancelledAt || null,
+                    cancelled_at: safeDate(m.cancelledAt, null),
                     cancelled_by: m.cancelledBy || null,
                     cancel_reason: m.cancelReason || null,
                     is_deleted: Boolean(m.status === 'cancelled'),
-                    updated_at: m.updatedAt || new Date().toISOString()
+                    updated_at: safeDate(m.updatedAt, new Date().toISOString())
                 }));
 
                 const BATCH = 100;
@@ -1651,10 +1930,12 @@ router.post('/api/sync/cloud', async (req, res) => {
         } catch (stockErr) {
             console.warn('[SyncCloud] Advertencia stock_movements:', stockErr.message);
         }
+        }
 
         // =========================================================================
         // 11.B. SINCRONIZAR PERSONAL / CAJEROS (STAFF)
         // =========================================================================
+        if (!targetTable || targetTable === 'staff') {
         try {
             // A. PULL: Descargar cajeros de Supabase
             const { data: cloudStaff, error: staffErr } = await sb
@@ -1772,6 +2053,7 @@ router.post('/api/sync/cloud', async (req, res) => {
             }
         } catch (staffSyncErr) {
             console.warn('[SyncCloud] Advertencia sincronizando staff:', staffSyncErr.message);
+        }
         }
 
         // =========================================================================
@@ -2207,6 +2489,202 @@ router.post('/api/sync/cloud', async (req, res) => {
             console.warn('[SyncCloud] Advertencia debt_payments:', dpErr.message);
         }
 
+        // =========================================================================
+        // 19. SINCRONIZAR SESIONES DE PAGO DE DEUDAS (DEBT_PAYMENT_SESSIONS)
+        // =========================================================================
+        try {
+            // A. PULL: Descargar sesiones registradas en Supabase
+            const { data: cloudSessions, error: sessPullErr } = await sb
+                .from('debt_payment_sessions')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('business_id', String(businessId));
+
+            if (!sessPullErr && cloudSessions && cloudSessions.length > 0) {
+                const localSessions = await dbAll("SELECT id, uuid, date, customerId, totalPaid FROM debtPaymentSessions WHERE business_id = ?", [businessId]);
+                for (const cs of cloudSessions) {
+                    const csTime = cs.date ? new Date(cs.date).getTime() : 0;
+                    const csPaid = Math.abs(Number(cs.total_paid || 0));
+
+                    const exists = (localSessions || []).some(s => {
+                        if (s.uuid && cs.id && String(s.uuid) === String(cs.id)) return true;
+                        if (String(s.id) === String(cs.local_id)) return true;
+                        const sTime = s.date ? new Date(s.date).getTime() : 0;
+                        return String(s.customerId) === String(cs.customer_id) &&
+                            Math.abs(sTime - csTime) < 3000 &&
+                            Math.abs((Number(s.totalPaid) || 0) - csPaid) < 0.01;
+                    });
+
+                    if (!exists) {
+                        const methodsStr = typeof cs.methods === 'string' ? cs.methods : JSON.stringify(cs.methods || []);
+                        const salesDataStr = typeof cs.sales_data === 'string' ? cs.sales_data : JSON.stringify(cs.sales_data || []);
+                        await dbRun(
+                            `INSERT INTO debtPaymentSessions (customerId, date, totalPaid, totalDebt, discount, methods, salesData, notes, cashRegisterId, business_id, uuid, is_synced)
+                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+                            [
+                                cs.customer_id,
+                                cs.date || new Date().toISOString(),
+                                csPaid,
+                                Number(cs.total_debt || 0),
+                                Number(cs.discount || 0),
+                                methodsStr,
+                                salesDataStr,
+                                cs.notes || '',
+                                cs.cash_register_id ? parseInt(cs.cash_register_id, 10) : null,
+                                businessId,
+                                cs.id || ('sess_' + Date.now().toString(36))
+                            ]
+                        );
+                        stats.pulled.debt_payment_sessions = (stats.pulled.debt_payment_sessions || 0) + 1;
+                    }
+                }
+            }
+
+            // B. PUSH: Subir sesiones locales pendientes a Supabase
+            const localSessToPush = await dbAll(
+                "SELECT * FROM debtPaymentSessions WHERE business_id = ? AND (is_synced IS NULL OR is_synced = 0) ORDER BY id DESC LIMIT 200",
+                [businessId]
+            );
+
+            if (localSessToPush && localSessToPush.length > 0) {
+                const sessPayload = localSessToPush.map(s => {
+                    let parsedMethods = [];
+                    let parsedSales = [];
+                    try { parsedMethods = typeof s.methods === 'string' ? JSON.parse(s.methods || '[]') : (s.methods || []); } catch (_) {}
+                    try { parsedSales = typeof s.salesData === 'string' ? JSON.parse(s.salesData || '[]') : (s.salesData || []); } catch (_) {}
+
+                    const sUuid = s.uuid || ('sess_' + businessId + '_' + s.id);
+                    return {
+                        user_id: userId,
+                        business_id: String(businessId),
+                        local_id: String(sUuid),
+                        customer_id: String(s.customerId || ''),
+                        date: s.date || new Date().toISOString(),
+                        total_paid: Number(s.totalPaid || 0),
+                        total_debt: Number(s.totalDebt || 0),
+                        discount: Number(s.discount || 0),
+                        methods: parsedMethods,
+                        sales_data: parsedSales,
+                        notes: s.notes || '',
+                        cash_register_id: s.cashRegisterId ? String(s.cashRegisterId) : null,
+                        is_deleted: false,
+                        updated_at: new Date().toISOString()
+                    };
+                });
+
+                const { error: sessPushErr } = await sb
+                    .from('debt_payment_sessions')
+                    .upsert(sessPayload, { onConflict: 'user_id,business_id,local_id' });
+
+                if (!sessPushErr) {
+                    for (const s of localSessToPush) {
+                        const sUuid = s.uuid || ('sess_' + businessId + '_' + s.id);
+                        await dbRun("UPDATE debtPaymentSessions SET is_synced = 1, uuid = ? WHERE id = ?", [sUuid, s.id]);
+                    }
+                    stats.pushed.debt_payment_sessions = sessPayload.length;
+                } else {
+                    console.warn('[SyncCloud] Advertencia subiendo debt_payment_sessions:', sessPushErr.message);
+                }
+            }
+        } catch (sessErr) {
+            console.warn('[SyncCloud] Advertencia debt_payment_sessions:', sessErr.message);
+        }
+
+        // =========================================================================
+        // 20. SINCRONIZAR PIZARRA DE MOSTRADOR, ENVASES Y ENCARGOS (COUNTER_NOTES)
+        // =========================================================================
+        try {
+            // A. PULL: Descargar notas, envases y reservas de Supabase
+            const { data: cloudNotes, error: notesPullErr } = await sb
+                .from('counter_notes')
+                .select('*')
+                .eq('user_id', userId)
+                .eq('business_id', String(businessId));
+
+            if (!notesPullErr && cloudNotes && cloudNotes.length > 0) {
+                const localNotes = await dbAll("SELECT id, uuid, text, clientName, category, isCompleted FROM counterNotes WHERE business_id = ?", [businessId]);
+                for (const cn of cloudNotes) {
+                    const exists = (localNotes || []).find(n => (n.uuid && cn.id && String(n.uuid) === String(cn.id)) || (cn.local_id && String(n.id) === String(cn.local_id)));
+
+                    if (!exists) {
+                        await dbRun(
+                            `INSERT INTO counterNotes (
+                                uuid, category, text, clientName, clientPhone, customerId, 
+                                bottleDetail, bottleCount, reservationDetail, reservationDeposit, 
+                                dueDate, dueTime, assignedTo, isCompleted, completedAt, completedBy, 
+                                createdBy, terminal_id, business_id, is_synced, createdAt, updatedAt, deleted_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+                            [
+                                cn.id, cn.category || 'general', cn.text || '', cn.client_name || '', cn.client_phone || '', cn.customer_id || null,
+                                cn.bottle_detail || '', cn.bottle_count || 1, cn.reservation_detail || '', cn.reservation_deposit || 0,
+                                cn.due_date || '', cn.due_time || '', cn.assigned_to || 'Todos', cn.is_completed ? 1 : 0, cn.completed_at || null, cn.completed_by || null,
+                                cn.created_by || 'Mostrador', cn.terminal_id || null, businessId, cn.created_at || new Date().toISOString(), cn.updated_at || new Date().toISOString(), cn.deleted_at || null
+                            ]
+                        );
+                        stats.pulled.counter_notes++;
+                    } else {
+                        // Si en la nube se completó o reactivó la nota/envase, actualizar en local
+                        if (Boolean(exists.isCompleted) !== Boolean(cn.is_completed)) {
+                            await dbRun(
+                                "UPDATE counterNotes SET isCompleted = ?, completedAt = ?, completedBy = ?, is_synced = 1, updatedAt = ? WHERE id = ?",
+                                [cn.is_completed ? 1 : 0, cn.completed_at || null, cn.completed_by || null, cn.updated_at || new Date().toISOString(), exists.id]
+                            );
+                            stats.pulled.counter_notes++;
+                        }
+                    }
+                }
+            }
+
+            // B. PUSH: Subir notas locales creadas o modificadas hacia Supabase
+            const localNotesToPush = await dbAll("SELECT * FROM counterNotes WHERE business_id = ? AND (is_synced = 0 OR is_synced IS NULL) LIMIT 200", [businessId]);
+            if (localNotesToPush && localNotesToPush.length > 0) {
+                const notesPayload = localNotesToPush.map(n => {
+                    const nUuid = n.uuid || ('note_' + businessId + '_' + (n.id || Math.random().toString(36).substr(2, 9)));
+                    return {
+                        user_id: userId,
+                        business_id: String(businessId),
+                        local_id: n.id,
+                        category: n.category || 'general',
+                        text: n.text || '',
+                        client_name: n.clientName || '',
+                        client_phone: n.clientPhone || '',
+                        customer_id: n.customerId ? String(n.customerId) : null,
+                        bottle_detail: n.bottleDetail || '',
+                        bottle_count: parseInt(n.bottleCount) || 1,
+                        reservation_detail: n.reservationDetail || '',
+                        reservation_deposit: parseFloat(n.reservationDeposit) || 0,
+                        due_date: n.dueDate || '',
+                        due_time: n.dueTime || '',
+                        assigned_to: n.assignedTo || 'Todos',
+                        is_completed: Boolean(n.isCompleted),
+                        completed_at: safeDate(n.completedAt, null),
+                        completed_by: n.completedBy || null,
+                        created_by: n.createdBy || 'Mostrador',
+                        terminal_id: n.terminal_id || null,
+                        created_at: safeDate(n.createdAt, new Date().toISOString()),
+                        updated_at: new Date().toISOString(),
+                        deleted_at: safeDate(n.deleted_at, null)
+                    };
+                });
+
+                const { error: notesPushErr } = await sb
+                    .from('counter_notes')
+                    .upsert(notesPayload, { onConflict: 'user_id,business_id,local_id' });
+
+                if (!notesPushErr) {
+                    for (const n of localNotesToPush) {
+                        const nUuid = n.uuid || ('note_' + businessId + '_' + n.id);
+                        await dbRun("UPDATE counterNotes SET is_synced = 1, uuid = ? WHERE id = ?", [nUuid, n.id]);
+                    }
+                    stats.pushed.counter_notes = notesPayload.length;
+                } else {
+                    console.warn('[SyncCloud] Advertencia subiendo counter_notes:', notesPushErr.message);
+                }
+            }
+        } catch (cnErr) {
+            console.warn('[SyncCloud] Advertencia counter_notes:', cnErr.message);
+        }
+
         // Conteos totales actuales en SQLite para respuesta informativa
         const totalProdsRow = await dbGet("SELECT COUNT(*) as count FROM products WHERE business_id = ? AND isActive = 1", [businessId]);
         const totalCatsRow = await dbGet("SELECT COUNT(*) as count FROM categories WHERE business_id = ?", [businessId]);
@@ -2291,7 +2769,8 @@ async function cleanUserCloudData(userId, businessId = null) {
         'purchases', 'cash_registers', 'expenses', 'cash_movements',
         'staff', 'debt_payments', 'stock_movements', 'business_settings',
         'sale_returns', 'audit_logs', 'product_price_history',
-        'product_cost_history', 'customer_credit_deposits', 'supplier_payments'
+        'product_cost_history', 'customer_credit_deposits', 'supplier_payments',
+        'debt_payment_sessions'
     ];
 
     const results = {};

@@ -222,6 +222,21 @@ class User {
         return String(expectedPin) === String(pin);
     }
 
+    static async verifyOwnerPassword(username, password, businessName = null) {
+        if (db.mode === 'sqlite' && window.ApiClient) {
+            try {
+                const result = await window.ApiClient.post('auth/verify-owner-password', { username, password, businessName });
+                return !!(result && result.valid);
+            } catch (err) {
+                console.error('[User] Error verifying owner password:', err);
+                return false;
+            }
+        }
+        const user = await this.findByUsername(username, businessName);
+        if (!user) return false;
+        return (user.password === password);
+    }
+
     static async resetPasswordWithPIN(username, pin, newPass, businessName = null) {
         if (db.mode === 'sqlite' && window.ApiClient) {
             const result = await window.ApiClient.post('auth/reset-password-pin', { username, pin, newPass, businessName });

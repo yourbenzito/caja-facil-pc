@@ -323,25 +323,32 @@ class AuthManager {
             }
         }
 
-        // Regla A: Si el usuario no tiene ningún negocio registrado aún en la nube
-        if (businesses.length === 0) {
-            // Verificar si hay datos locales del modo offline listos para ser respaldados/vinculados
+        // Verificación Previa Obligatoria de Migración (Free -> Pro):
+        // Si esta PC tiene datos locales creados en modo Free (offline) y el usuario inicia sesión Pro,
+        // es OBLIGATORIO preguntarle si desea respaldar y vincular sus datos locales a la nube.
+        const hasSkippedLink = sessionStorage.getItem('skipLocalDataLink') === '1';
+        if (!hasSkippedLink) {
             try {
                 const apiBase = (typeof window !== 'undefined' && window.API_CONFIG && window.API_CONFIG.API_URL) 
                     ? window.API_CONFIG.API_URL.replace(/\/api$/, '') 
                     : 'http://localhost:3000';
-                const localDataRes = await fetch(`${apiBase}/api/businesses/check-local-data`);
+                const localDataRes = await fetch(`${apiBase}/api/businesses/check-local-data?userId=${encodeURIComponent(user?.id || '')}`, {
+                    headers: { 'x-supabase-user-id': user?.id || '' }
+                });
                 const localData = await localDataRes.json();
                 if (localData && localData.hasData) {
                     const loginScreen = document.getElementById('login-screen');
                     if (loginScreen) loginScreen.remove();
-                    this.showLinkLocalBusinessModal(user, localData);
+                    this.showLinkLocalBusinessModal(user, localData, businesses);
                     return false;
                 }
             } catch (err) {
                 console.warn('[AuthManager] Error consultando datos locales para migración:', err);
             }
+        }
 
+        // Regla A: Si el usuario no tiene ningún negocio registrado aún en la nube
+        if (businesses.length === 0) {
             const loginScreen = document.getElementById('login-screen');
             if (loginScreen) loginScreen.remove();
             this.showOnboardingModal(user);
@@ -434,34 +441,62 @@ class AuthManager {
                 try {
                     const { data: sessionData } = await client.auth.getSession();
                     if (sessionData?.session?.access_token) {
-                        sbToken = sessionData.session.access_token;
-                        localStorage.setItem('SUPABASE_ACCESS_TOKEN', sbToken);
-                        sessionStorage.setItem('SUPABASE_ACCESS_TOKEN', sbToken);
+                        const isExpired = sessionData.session.expires_at && (sessionData.session.expires_at * 1000 < Date.now());
+                        if (isExpired) {
+                            try {
+                                const { data: refreshed } = await client.auth.refreshSession();
+                                sbToken = refreshed?.session?.access_token || null;
+                            } catch (_) {
+                                sbToken = null;
+                            }
+                        } else {
+                            sbToken = sessionData.session.access_token;
+                        }
+                        if (sbToken) {
+                            localStorage.setItem('SUPABASE_ACCESS_TOKEN', sbToken);
+                            sessionStorage.setItem('SUPABASE_ACCESS_TOKEN', sbToken);
+                        }
+                    } else {
+                        // Limpiar token huérfano si no hay sesión activa en el cliente
+                        sbToken = null;
+                        localStorage.removeItem('SUPABASE_ACCESS_TOKEN');
+                        sessionStorage.removeItem('SUPABASE_ACCESS_TOKEN');
                     }
                 } catch (_) {}
             }
 
             const localToken = localStorage.getItem('AUTH_TOKEN') || sessionStorage.getItem('AUTH_TOKEN');
-            const headers = { 'Content-Type': 'application/json' };
-            if (sbToken) headers['Authorization'] = `Bearer ${sbToken}`;
-            if (localToken) headers['x-pos-token'] = localToken;
+            // Solo sincronizar si contamos con al menos un token válido (Supabase o token local POS)
+            if (sbToken || localToken) {
+                const headers = { 'Content-Type': 'application/json' };
+                if (sbToken) headers['Authorization'] = `Bearer ${sbToken}`;
+                if (localToken) headers['x-pos-token'] = localToken;
 
-            const syncRes = await fetch(`${apiBase}/api/auth/supabase-session`, {
-                method: 'POST',
-                headers: headers,
-                body: JSON.stringify({ 
-                    email, 
-                    userId, 
-                    businessName, 
-                    businessId: Number(businessId),
-                    accessToken: sbToken 
-                })
-            });
-            const syncData = await syncRes.json();
-            if (syncData && syncData.token) {
-                localStorage.setItem('AUTH_TOKEN', syncData.token);
-                sessionStorage.setItem('AUTH_TOKEN', syncData.token);
-                console.log(`✅ Sesión backend actualizada para sucursal: "${businessName}" (ID: ${businessId})`);
+                const syncRes = await fetch(`${apiBase}/api/auth/supabase-session`, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({ 
+                        email, 
+                        userId, 
+                        businessName, 
+                        businessId: Number(businessId),
+                        accessToken: sbToken 
+                    })
+                });
+
+                if (syncRes.status === 401) {
+                    // Limpieza preventiva de token huérfano de Supabase para evitar reincidencia de 401
+                    localStorage.removeItem('SUPABASE_ACCESS_TOKEN');
+                    sessionStorage.removeItem('SUPABASE_ACCESS_TOKEN');
+                    console.info(`ℹ️ Sesión en modo local para sucursal: "${businessName}" (ID: ${businessId})`);
+                } else if (syncRes.ok) {
+                    const syncData = await syncRes.json();
+                    if (syncData && syncData.token) {
+                        localStorage.setItem('AUTH_TOKEN', syncData.token);
+                        sessionStorage.setItem('AUTH_TOKEN', syncData.token);
+                        console.log(`✅ Sesión backend actualizada para sucursal: "${businessName}" (ID: ${businessId})`);
+                    }
+                }
             }
         } catch (e) {
             console.warn('⚠️ Error renovando token para la sucursal:', e.message);
@@ -787,7 +822,7 @@ class AuthManager {
      * Modal de Migración: De Free (Offline) a Pro (Nube)
      * Pregunta al usuario si desea vincular su negocio local existente o comenzar uno nuevo
      */
-    static showLinkLocalBusinessModal(user, localData) {
+    static showLinkLocalBusinessModal(user, localData, businesses = []) {
         const modalId = 'modal-link-local-business';
         const existing = document.getElementById(modalId);
         if (existing) existing.remove();
@@ -886,7 +921,17 @@ class AuthManager {
             skipBtn.onclick = () => {
                 const m = document.getElementById(modalId);
                 if (m) m.remove();
-                AuthManager.showOnboardingModal(user);
+                sessionStorage.setItem('skipLocalDataLink', '1');
+                if (businesses && businesses.length > 0) {
+                    if (businesses.length === 1) {
+                        const onlyBiz = businesses[0];
+                        AuthManager.selectBusinessAndProceed(onlyBiz.local_id || onlyBiz.id, onlyBiz.name || 'Mi Negocio', user, onlyBiz.accessCode || onlyBiz.business_code || '');
+                    } else {
+                        AuthManager.showBusinessSelectorModal(businesses, user);
+                    }
+                } else {
+                    AuthManager.showOnboardingModal(user);
+                }
             };
         }
     }

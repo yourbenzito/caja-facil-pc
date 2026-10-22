@@ -254,6 +254,45 @@ router.post('/api/auth/verify-admin-pin', async (req, res) => {
     }
 });
 
+router.post('/api/auth/verify-owner-password', async (req, res) => {
+    const { username, password, businessName } = req.body;
+    const bid = req.business_id;
+    try {
+        if (!username || !password) {
+            return res.status(400).json({ valid: false, error: 'Usuario y contraseña requeridos' });
+        }
+        let businessId = bid || 1;
+        if (businessName) {
+            businessId = await getBusinessIdByName(businessName);
+        }
+        const user = await dbGet(
+            "SELECT id, username, password, role FROM users WHERE LOWER(username) = LOWER(?) AND business_id = ?",
+            [username.trim(), businessId]
+        );
+        if (!user) {
+            return res.status(404).json({ valid: false, error: 'Usuario no encontrado en este negocio' });
+        }
+        const role = (user.role || '').toLowerCase();
+        if (!['owner', 'admin', 'partner', 'propietario', 'administrador'].includes(role)) {
+            return res.status(403).json({ valid: false, error: 'Solo el dueño o administrador puede restablecer el PIN' });
+        }
+        const passwordHash = user.password || '';
+        let isMatch = false;
+        if (passwordHash.startsWith('$2a$') || passwordHash.startsWith('$2b$')) {
+            isMatch = await bcrypt.compare(String(password), passwordHash);
+        } else {
+            isMatch = passwordHash === String(password);
+        }
+        if (!isMatch) {
+            return res.status(401).json({ valid: false, error: 'Contraseña de dueño incorrecta' });
+        }
+        res.json({ valid: true, message: 'Identidad de dueño confirmada' });
+    } catch (err) {
+        console.error('[VerifyOwnerPassword] Error:', err.message);
+        res.status(500).json({ valid: false, error: err.message });
+    }
+});
+
 router.post('/api/auth/local-offline-session', async (req, res) => {
     try {
         const { businessName, accessCode } = req.body || {};
@@ -585,9 +624,21 @@ router.get('/api/businesses/list', async (req, res) => {
 
 router.get('/api/businesses/check-local-data', async (req, res) => {
     try {
-        const localBiz = await dbGet("SELECT * FROM businesses WHERE (user_id IS NULL OR user_id = '') AND isActive = 1 ORDER BY id ASC LIMIT 1") 
-            || await dbGet("SELECT * FROM businesses WHERE id = 1");
+        const supabaseUserId = req.query.userId || req.headers['x-supabase-user-id'];
+        let localBiz = await dbGet("SELECT * FROM businesses WHERE (user_id IS NULL OR user_id = '') AND isActive = 1 ORDER BY id ASC LIMIT 1");
+        
         if (!localBiz) {
+            const biz1 = await dbGet("SELECT * FROM businesses WHERE id = 1 AND isActive = 1");
+            if (biz1 && (!biz1.user_id || biz1.user_id === '')) {
+                localBiz = biz1;
+            }
+        }
+
+        if (!localBiz) {
+            return res.json({ hasData: false, productCount: 0, customerCount: 0, saleCount: 0 });
+        }
+
+        if (supabaseUserId && localBiz.user_id === supabaseUserId) {
             return res.json({ hasData: false, productCount: 0, customerCount: 0, saleCount: 0 });
         }
         const pRow = await dbGet("SELECT COUNT(*) as count FROM products WHERE business_id = ? AND isActive = 1", [localBiz.id]) || { count: 0 };
@@ -1101,44 +1152,64 @@ router.post('/api/auth/supabase-session', async (req, res) => {
     if (!email || !userId) {
         return res.status(400).json({ error: 'Email y userId son requeridos' });
     }
+    // Validación Criptográfica estricta contra Supabase Auth (OWASP Zero-Trust) con fallback local
+    let isAuthenticated = false;
 
-    // Validación Criptográfica estricta contra Supabase Auth (OWASP Zero-Trust)
-    if (effectiveToken) {
+    // ponytail: Helper para verificar si un token pertenece genuinamente a Supabase Cloud antes de enviar peticiones remotas
+    const isSupabaseToken = (tok) => {
+        if (!tok || typeof tok !== 'string' || tok.length < 20) return false;
+        try {
+            const parts = tok.split('.');
+            if (parts.length === 3) {
+                const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+                return Boolean(payload && (payload.iss === 'supabase' || payload.aud === 'authenticated' || (typeof payload.iss === 'string' && payload.iss.includes('supabase'))));
+            }
+        } catch (_) {}
+        return false;
+    };
+
+    // 1. Intentar validación contra Supabase Auth SOLO si el token proviene de la nube
+    if (effectiveToken && isSupabaseToken(effectiveToken)) {
         try {
             const { data: authData, error: authError } = await supabase.auth.getUser(effectiveToken);
-            if (authError || !authData || !authData.user) {
+            if (!authError && authData && authData.user) {
+                if (authData.user.id === userId || !userId) {
+                    isAuthenticated = true;
+                } else {
+                    console.warn(`[SupabaseSession] Suplantación detectada: token userId (${authData.user.id}) != req userId (${userId})`);
+                    return res.status(403).json({ error: 'Discrepancia de identidad: el token no corresponde al usuario solicitado' });
+                }
+            } else {
                 const decodedToken = jwt.decode(effectiveToken);
                 if (decodedToken && (decodedToken.sub === userId || decodedToken.id === userId)) {
                     console.log('[SupabaseSession] Token validado por firma de identidad para usuario:', userId);
+                    isAuthenticated = true;
                 } else {
-                    console.warn('[SupabaseSession] Token de Supabase rechazado:', authError?.message);
-                    return res.status(401).json({ error: 'Token de sesión de Supabase inválido o expirado' });
+                    console.warn('[SupabaseSession] Token de Supabase no validado o expirado:', authError?.message);
                 }
-            } else if (authData.user.id !== userId) {
-                console.warn(`[SupabaseSession] Suplantación detectada: token userId (${authData.user.id}) != req userId (${userId})`);
-                return res.status(403).json({ error: 'Discrepancia de identidad: el token no corresponde al usuario solicitado' });
             }
         } catch (authValErr) {
             console.warn('[SupabaseSession] Error durante verificación con Supabase:', authValErr.message);
-            if (!authValErr.message.includes('fetch') && !authValErr.message.includes('network')) {
-                return res.status(401).json({ error: 'Fallo de autenticación con el proveedor de identidad' });
-            }
         }
-    } else {
-        // En ausencia de token de Supabase, verificar si el cliente ya cuenta con un token JWT local válido
-        const localAuth = req.headers['x-pos-token'];
-        let isLocalValid = false;
+    }
+
+    // 2. Validación directa de token local del POS (firmado localmente con JWT_SECRET):
+    // No requiere consultar la nube de Supabase, garantizando alta velocidad y funcionamiento offline
+    if (!isAuthenticated) {
+        const localAuth = req.headers['x-pos-token'] || (authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null) || effectiveToken;
         if (localAuth) {
             try {
                 const decoded = jwt.verify(localAuth, JWT_SECRET);
-                if (decoded && (decoded.supabaseUserId === userId || decoded.userId)) {
-                    isLocalValid = true;
+                if (decoded && (String(decoded.supabaseUserId) === String(userId) || String(decoded.userId) === String(userId) || decoded.userId)) {
+                    isAuthenticated = true;
+                    console.log('[SupabaseSession] Sesión validada exitosamente vía token local del POS para usuario:', userId);
                 }
             } catch (_) {}
         }
-        if (!isLocalValid) {
-            return res.status(401).json({ error: 'Se requiere token de autorización Bearer de Supabase válido para sincronizar la sesión' });
-        }
+    }
+
+    if (!isAuthenticated) {
+        return res.status(401).json({ error: 'Sesión no autorizada o expirada. Por favor inicie sesión nuevamente.' });
     }
 
     try {
@@ -1250,5 +1321,26 @@ router.post('/api/auth/logout', async (req, res) => {
     res.json({ success: true, message: 'Sesión cerrada exitosamente' });
 });
 
+// Actualizar nombre de usuario para auditoría y visualización
+router.post('/api/auth/update-display-name', async (req, res) => {
+    try {
+        const { name } = req.body;
+        if (!name || typeof name !== 'string' || !name.trim()) {
+            return res.status(400).json({ error: 'Nombre no válido' });
+        }
+        const cleanName = name.trim();
+        const userId = req.userId;
+        const bid = req.business_id || 1;
+
+        if (userId) {
+            await dbRun("UPDATE users SET username = ? WHERE id = ? AND business_id = ?", [cleanName, userId, bid]);
+        }
+        res.json({ success: true, name: cleanName });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;
+
 

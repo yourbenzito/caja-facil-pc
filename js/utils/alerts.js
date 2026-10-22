@@ -144,6 +144,11 @@ const showUpdateNotification = (onConfirm) => {
 };
 
 const showModal = (content, options = {}) => {
+    // 1. Quitar foco del fondo inmediatamente para evitar escritura fantasma detrás del modal
+    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+    }
+
     const overlay = document.getElementById('modal-overlay');
 
     if (overlay && !overlay._hasBackdropClickListener) {
@@ -159,10 +164,18 @@ const showModal = (content, options = {}) => {
                 }
             }
         });
+        // Bloquear scroll con rueda del ratón y táctil sobre la cortina oscura
+        overlay.addEventListener('wheel', (e) => {
+            if (e.target === overlay) e.preventDefault();
+        }, { passive: false });
+        overlay.addEventListener('touchmove', (e) => {
+            if (e.target === overlay) e.preventDefault();
+        }, { passive: false });
     }
 
     const modal = document.createElement('div');
     modal.className = 'modal';
+    modal.tabIndex = -1; // Permite foco directo para atrapar el teclado
     if (options.staticBackdrop) {
         modal.dataset.backdrop = 'static';
     }
@@ -189,10 +202,44 @@ const showModal = (content, options = {}) => {
 
     overlay.classList.add('active');
     document.body.classList.add('modal-open');
+    document.documentElement.classList.add('modal-open');
     document.body.appendChild(modal);
+
+    // Auto-foco seguro dentro del modal
+    setTimeout(() => {
+        const firstInput = modal.querySelector('input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled]), button.btn-primary');
+        if (firstInput) {
+            firstInput.focus();
+        } else {
+            modal.focus();
+        }
+    }, 40);
 
     return modal;
 };
+
+const closeAllModals = () => {
+    const modals = document.querySelectorAll('.modal');
+    for (let i = modals.length - 1; i >= 0; i--) {
+        const m = modals[i];
+        if (m._enterKeyHandler) {
+            document.removeEventListener('keydown', m._enterKeyHandler, true);
+        }
+        m.remove();
+    }
+    const overlay = document.getElementById('modal-overlay');
+    if (overlay) overlay.classList.remove('active');
+    document.body.classList.remove('modal-open');
+    document.documentElement.classList.remove('modal-open');
+    if (typeof POSView !== 'undefined') {
+        if (POSView._receiptTimer) {
+            clearInterval(POSView._receiptTimer);
+            POSView._receiptTimer = null;
+        }
+        POSView._activeModalProductId = null;
+    }
+};
+window.closeAllModals = closeAllModals;
 
 const closeModal = () => {
     const modals = document.querySelectorAll('.modal');
@@ -200,6 +247,7 @@ const closeModal = () => {
         const overlay = document.getElementById('modal-overlay');
         if (overlay) overlay.classList.remove('active');
         document.body.classList.remove('modal-open');
+        document.documentElement.classList.remove('modal-open');
         return;
     }
 
@@ -213,6 +261,9 @@ const closeModal = () => {
         clearInterval(POSView._receiptTimer);
         POSView._receiptTimer = null;
     }
+    if (typeof POSView !== 'undefined') {
+        POSView._activeModalProductId = null;
+    }
     lastModal.remove();
 
     // Only hide overlay if no more modals exist
@@ -220,6 +271,7 @@ const closeModal = () => {
         const overlay = document.getElementById('modal-overlay');
         if (overlay) overlay.classList.remove('active');
         document.body.classList.remove('modal-open');
+        document.documentElement.classList.remove('modal-open');
 
         // Si había un refresco de pantalla postergado mientras el modal estaba abierto, ejecutarlo ahora limpiamente
         if (typeof app !== 'undefined' && app._pendingViewRefresh) {
@@ -311,15 +363,30 @@ const showConfirm = (message, titleOrCallback = 'Confirmación', confirmText = '
     });
 };
 
-// Global Escape key handler to close modals
+// Global key handler para modales: Escape para cerrar y aislamiento de escritura en el fondo
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        const modals = document.querySelectorAll('.modal');
-        if (modals.length > 0) {
+    const modals = document.querySelectorAll('.modal');
+    if (modals.length > 0) {
+        if (e.key === 'Escape') {
             closeModal();
+            return;
+        }
+
+        // Si el elemento enfocado está fuera del modal superior activo
+        const topModal = modals[modals.length - 1];
+        if (!topModal.contains(document.activeElement)) {
+            // Si el usuario presiona una tecla de texto o número, reubicar foco al modal
+            if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+                const firstInput = topModal.querySelector('input:not([type="hidden"]):not([disabled]), textarea:not([disabled]), select:not([disabled])');
+                if (firstInput) {
+                    firstInput.focus();
+                } else {
+                    topModal.focus();
+                }
+            }
         }
     }
-});
+}, true);
 
 /**
  * =========================================================================
@@ -358,6 +425,13 @@ const SupervisorAuth = {
         );
     },
 
+    async requirePin(title, message) {
+        return this.requestPinModal(
+            title || '🔑 Autorización de Dueño / Supervisor',
+            message || 'Esta operación sensible requiere el PIN Maestro del Dueño o Administrador.'
+        );
+    },
+
     requestPinModal(title, message) {
         return new Promise((resolve) => {
             const content = `
@@ -365,7 +439,7 @@ const SupervisorAuth = {
                     <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">🔐</div>
                     <h3 style="font-size: 1.15rem; font-weight: 800; color: var(--text-main, #0f172a); margin-bottom: 0.5rem;">${title}</h3>
                     <p style="font-size: 0.88rem; color: var(--text-muted, #64748b); margin-bottom: 1.25rem; line-height: 1.45;">${message}</p>
-                    <input type="password" id="globalSupervisorPinInput" maxlength="8" placeholder="PIN de Supervisor"
+                    <input type="password" id="globalSupervisorPinInput" maxlength="8" placeholder="PIN de Permisos"
                            style="width: 220px; height: 50px; font-size: 1.8rem; text-align: center; letter-spacing: 6px; font-weight: 900; border: 2px solid #cbd5e1; border-radius: 0.75rem; margin-bottom: 1rem; outline: none; background: rgba(0,0,0,0.03);"
                            onkeydown="if(event.key === 'Enter') document.getElementById('btnConfirmGlobalSupervisorPin').click();">
                     <div style="display: flex; gap: 0.75rem; justify-content: center;">
@@ -375,7 +449,7 @@ const SupervisorAuth = {
                 </div>
             `;
             window._globalSupervisorPinResolver = resolve;
-            showModal(content, { title: 'Autorización de Supervisor', width: '420px', staticBackdrop: true });
+            showModal(content, { title: 'Autorización de Dueño', width: '420px', staticBackdrop: true });
             setTimeout(() => {
                 const inp = document.getElementById('globalSupervisorPinInput');
                 if (inp) inp.focus();
@@ -386,32 +460,44 @@ const SupervisorAuth = {
     async verifyPin() {
         const pin = document.getElementById('globalSupervisorPinInput')?.value?.trim();
         if (!pin) {
-            showNotification('Ingrese el PIN de supervisor', 'warning');
+            showNotification('Ingrese el PIN de permisos', 'warning');
             return;
         }
 
         try {
             let isValid = false;
-            let supervisorName = 'Supervisor';
+            let supervisorName = 'Dueño / Administrador';
 
-            // 1. Buscar en la tabla staff del backend
-            try {
-                const resp = await fetch('/api/staff');
-                if (resp.ok) {
-                    const staffList = await resp.json();
-                    const matched = (staffList || []).find(s => String(s.pin) === String(pin) && ['admin', 'owner', 'manager', 'partner'].includes(s.role));
-                    if (matched) {
-                        isValid = true;
-                        supervisorName = matched.name;
+            // 1. Verificar contra el PIN Maestro del Dueño configurado oficialmente
+            if (typeof User !== 'undefined' && typeof User.verifyAdminPIN === 'function') {
+                try {
+                    isValid = await User.verifyAdminPIN(pin);
+                    if (isValid) supervisorName = 'Dueño / Administrador';
+                } catch (_) {}
+            }
+
+            // 2. Buscar en la tabla staff del backend si aplica
+            if (!isValid) {
+                try {
+                    const resp = await fetch('/api/staff');
+                    if (resp.ok) {
+                        const staffList = await resp.json();
+                        const matched = (staffList || []).find(s => String(s.pin) === String(pin) && ['admin', 'owner', 'manager', 'partner'].includes(s.role));
+                        if (matched) {
+                            isValid = true;
+                            supervisorName = matched.name;
+                        }
                     }
-                }
-            } catch (_) {}
+                } catch (_) {}
+            }
 
-            // 2. Fallback de seguridad: verificar PIN admin configurado
-            const adminPin = localStorage.getItem('ADMIN_PIN') || '1234';
-            if (pin === adminPin) {
-                isValid = true;
-                supervisorName = 'Administrador';
+            // 3. Fallback de seguridad en localStorage
+            if (!isValid) {
+                const adminPin = localStorage.getItem('ADMIN_PIN') || '1234';
+                if (pin === adminPin) {
+                    isValid = true;
+                    supervisorName = 'Administrador';
+                }
             }
 
             if (isValid) {

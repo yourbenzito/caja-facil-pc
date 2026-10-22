@@ -71,46 +71,40 @@ class SyncService {
         if (this.timerId) clearInterval(this.timerId);
 
         const hasCloudSession = Boolean(localStorage.getItem('SUPABASE_ACCESS_TOKEN') || sessionStorage.getItem('SUPABASE_ACCESS_TOKEN'));
-        const canLiveSync = typeof LicenseService !== 'undefined' && LicenseService.canLiveSync();
-        const canBackup = typeof LicenseService !== 'undefined' && LicenseService.canBackup();
+        // ponytail: Si hay sesión iniciada en Supabase, habilitamos Realtime en vivo para sincronización multi-terminal ultrarrápida.
+        const canLiveSync = Boolean(hasCloudSession);
+        const canBackup = Boolean(hasCloudSession || (typeof LicenseService !== 'undefined' && LicenseService.canBackup()));
 
         // 1. MODO LOCAL OFFLINE ESTRICTO (Plan FREE o sin sesión Supabase)
-        if (!hasCloudSession || !canBackup) {
-            this.updateUI('offline', 'Modo Local Offline (Plan FREE / Sin Nube)');
+        if (!hasCloudSession) {
+            this.updateUI('offline', 'Modo Local Offline (Sin Nube)');
             console.log('💻 [SyncService] Operando en Modo Local 100% Offline (SQLite local sin nube).');
             return;
         }
 
-        // 2. ACTUALIZAR UI PARA PLANES DE PAGO
+        // 2. ACTUALIZAR UI PARA CONEXIÓN A LA NUBE
         this.updateUI(navigator.onLine ? 'synced' : 'offline');
 
-        // 3. CANAL REALTIME WEBSOCKET: Exclusivo para FULL PRO
+        // 3. CANAL REALTIME WEBSOCKET: Activo siempre que haya sesión en Supabase y conexión a internet
         if (canLiveSync) {
             setTimeout(() => {
                 if (navigator.onLine) {
                     this.initRealtime();
                 }
-            }, 1500);
-        } else {
-            console.log('💻 [SyncService] Plan PC PRO: Respaldos automáticos activos (cada 12h y al cierre de turno). WebSockets en vivo desactivados.');
+            }, 1000);
         }
 
         // Escuchar eventos de red
-        window.addEventListener('online', () => {
+        window.addEventListener('online', async () => {
             const hasCloud = Boolean(localStorage.getItem('SUPABASE_ACCESS_TOKEN') || sessionStorage.getItem('SUPABASE_ACCESS_TOKEN'));
-            const canLive = typeof LicenseService !== 'undefined' && LicenseService.canLiveSync();
-            const canBkp = typeof LicenseService !== 'undefined' && LicenseService.canBackup();
-
-            if (!hasCloud || !canBkp) {
-                this.updateUI('offline', 'Modo Local Offline (Plan FREE / Sin Nube)');
+            if (!hasCloud) {
+                this.updateUI('offline', 'Modo Local Offline');
                 return;
             }
             console.log('🌐 [SyncService] Conexión a internet detectada.');
             this.updateUI('synced');
-            if (canLive) {
-                this.syncAll();
-                this.initRealtime();
-            }
+            this.initRealtime();
+            await SyncService.syncPendingOfflineChanges();
         });
 
         window.addEventListener('beforeunload', () => {
@@ -122,8 +116,7 @@ class SyncService {
 
         window.addEventListener('offline', () => {
             const hasCloud = Boolean(localStorage.getItem('SUPABASE_ACCESS_TOKEN') || sessionStorage.getItem('SUPABASE_ACCESS_TOKEN'));
-            const canBkp = typeof LicenseService !== 'undefined' && LicenseService.canBackup();
-            if (!hasCloud || !canBkp) {
+            if (!hasCloud) {
                 this.updateUI('offline', 'Modo Local Offline');
             } else {
                 console.log('📡 [SyncService] Sin conexión temporal a internet.');
@@ -131,17 +124,7 @@ class SyncService {
             }
         });
 
-        // Escuchar foco de ventana: respaldo si han pasado más de 12 horas
-        window.addEventListener('focus', () => {
-            if (document.querySelector('.modal') || document.body.classList.contains('modal-open')) {
-                return;
-            }
-            const hasCloud = Boolean(localStorage.getItem('SUPABASE_ACCESS_TOKEN') || sessionStorage.getItem('SUPABASE_ACCESS_TOKEN'));
-            const canBkp = typeof LicenseService !== 'undefined' && LicenseService.canBackup();
-            if (navigator.onLine && hasCloud && canBkp && (!SyncService.lastSyncTime || (Date.now() - SyncService.lastSyncTime.getTime() > SyncService.intervalMs))) {
-                SyncService.syncAll(false);
-            }
-        });
+        // ponytail: Se elimina la sincronización por 'focus' de la ventana para que la app esté 100% en reposo pasivo.
 
         // Ciclo de respaldo periódico programado cada 12 horas
         this.timerId = setInterval(() => {
@@ -149,8 +132,7 @@ class SyncService {
                 return;
             }
             const hasCloud = Boolean(localStorage.getItem('SUPABASE_ACCESS_TOKEN') || sessionStorage.getItem('SUPABASE_ACCESS_TOKEN'));
-            const canBkp = typeof LicenseService !== 'undefined' && LicenseService.canBackup();
-            if (navigator.onLine && hasCloud && canBkp) {
+            if (navigator.onLine && hasCloud) {
                 console.log('⏰ [SyncService] Disparando respaldo periódico programado (12h)...');
                 this.syncAll(false);
             }
@@ -161,26 +143,23 @@ class SyncService {
 
     /**
      * Dispara una sincronización inmediata con debounce (Event-Driven)
-     * Invocado tras ventas, creación/edición de productos, arqueos y gastos (Solo FULL PRO).
+     * Invocado tras ventas, creación/edición de productos, arqueos y gastos.
      */
-    static triggerAutoSync(delayMs = 2500) {
+    static triggerAutoSync(delayMs = 800) {
         if (!navigator.onLine) return;
-        // La sincronización reactiva en tiempo real continuo es exclusiva de FULL PRO
-        if (typeof LicenseService !== 'undefined' && !LicenseService.canLiveSync()) return;
+        const hasCloud = Boolean(localStorage.getItem('SUPABASE_ACCESS_TOKEN') || sessionStorage.getItem('SUPABASE_ACCESS_TOKEN'));
+        if (!hasCloud) return;
         if (this._autoSyncDebounceTimer) clearTimeout(this._autoSyncDebounceTimer);
 
-        // Asegurar un delay suficiente (mínimo 2500ms) para que la interfaz local guarde y cierre de inmediato sin contención en SQLite
-        const effectiveDelay = Math.max(Number(delayMs) || 0, 2500);
+        // ponytail: Reducir delay a 800ms para reflejar ventas y mutaciones casi al segundo
+        const effectiveDelay = Math.max(Number(delayMs) || 0, 800);
 
         this._autoSyncDebounceTimer = setTimeout(async () => {
-            if (document.querySelector('.modal') || document.body.classList.contains('modal-open')) {
-                console.log('⏸️ [SyncService] Modal activo. Postergando auto-sync...');
-                this.triggerAutoSync(2500);
-                return;
-            }
             try {
                 console.log('⚡ [SyncService] Auto-sync reactivo activado por mutación local.');
                 await this.syncAll(false);
+                // Emitir señal de broadcast ligera para que otros terminales se enteren de inmediato
+                this.sendBroadcastSignal('mutation');
             } catch (e) {
                 console.warn('⚠️ [SyncService] Advertencia en auto-sync reactivo:', e.message);
             }
@@ -216,6 +195,36 @@ class SyncService {
     }
 
     /**
+     * Verifica de forma ultrarrápida si se generaron ventas, compras, gastos o abonos
+     * mientras la computadora estuvo sin conexión, y solo en ese caso sube los cambios pendientes (push_only).
+     */
+    static async syncPendingOfflineChanges() {
+        try {
+            const apiBase = (typeof window !== 'undefined' && window.API_CONFIG && window.API_CONFIG.API_URL) 
+                ? window.API_CONFIG.API_URL.replace(/\/api$/, '') 
+                : 'http://localhost:3000';
+            const businessId = this.getCurrentBusinessId();
+            const token = localStorage.getItem('AUTH_TOKEN') || sessionStorage.getItem('AUTH_TOKEN');
+            const resp = await fetch(`${apiBase}/api/sync/has-pending?businessId=${businessId}`, {
+                headers: {
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                }
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data && data.hasPending) {
+                    console.log(`📤 [SyncService] Se detectaron ${data.totalPending} transacciones locales pendientes creadas offline. Respaldando en la nube...`);
+                    await this.syncAll(false, 'push_only');
+                } else {
+                    console.log('✨ [SyncService] Reconexión exitosa: Cero transacciones pendientes por subir.');
+                }
+            }
+        } catch (e) {
+            console.warn('[SyncService] Verificación de cambios offline no disponible:', e.message);
+        }
+    }
+
+    /**
      * Inicializa la escucha de cambios en tiempo real vía WebSockets de Supabase
      * Exclusivo para PLAN FULL PRO
      */
@@ -224,9 +233,10 @@ class SyncService {
         const userId = await this.getCurrentUserId();
         if (!client || !userId || !navigator.onLine) return;
 
-        // Comprobación de plan y licencia: WebSockets solo en FULL PRO
-        if (typeof LicenseService !== 'undefined' && !LicenseService.canLiveSync()) {
-            console.log('⏸️ [Realtime PC] Canal en vivo omitido: El plan actual no incluye sincronización en tiempo real.');
+        // ponytail: Canal en vivo habilitado para todos los usuarios con sesión en la nube activa
+        const hasCloud = Boolean(localStorage.getItem('SUPABASE_ACCESS_TOKEN') || sessionStorage.getItem('SUPABASE_ACCESS_TOKEN'));
+        if (!hasCloud) {
+            console.log('⏸️ [Realtime PC] Canal en vivo omitido: Sin sesión en Supabase.');
             if (this._realtimeChannel) {
                 try { client.removeChannel(this._realtimeChannel); } catch (_) {}
                 this._realtimeChannel = null;
@@ -324,17 +334,12 @@ class SyncService {
     /**
      * Dispara una sincronización reactiva rápida agrupando llamadas consecutivas hacia SQLite
      */
-    static scheduleDebouncedSync(sourceTable = 'general', delayMs = 1500, mode = 'pull_only') {
+    static scheduleDebouncedSync(sourceTable = 'general', delayMs = 400, mode = 'pull_only') {
         if (this._realtimeDebounceTimer) clearTimeout(this._realtimeDebounceTimer);
         this._realtimeDebounceTimer = setTimeout(async () => {
-            if (document.querySelector('.modal') || document.body.classList.contains('modal-open')) {
-                console.log(`⏸️ [SyncService] Modal activo. Postergando debounced sync (${sourceTable})...`);
-                this.scheduleDebouncedSync(sourceTable, 2000, mode);
-                return;
-            }
             if (!this.isSyncing && Date.now() >= (this._suppressRealtimeUntil || 0) && navigator.onLine) {
                 console.log(`⚡ [SyncService] Ejecutando sincronización reactiva (${mode}) por evento: ${sourceTable}`);
-                await this.syncAll(false, mode);
+                await this.syncAll(false, mode, sourceTable);
             }
         }, delayMs);
     }
@@ -390,7 +395,7 @@ class SyncService {
     /**
      * Sincronización completa bidireccional (Push & Pull)
      */
-    static async syncAll(isManual = false, mode = 'full') {
+    static async syncAll(isManual = false, mode = 'full', targetTable = null) {
         if (this.isSyncing) return { success: false, reason: 'Sync already in progress' };
         if (!navigator.onLine) {
             this.updateUI('offline', 'Modo Local');
@@ -438,7 +443,7 @@ class SyncService {
                         'x-supabase-user-id': userId,
                         'x-business-id': String(businessId)
                     },
-                    body: JSON.stringify({ userId, businessId, mode })
+                    body: JSON.stringify({ userId, businessId, mode, table: targetTable })
                 });
 
                 if (resp.ok) {
@@ -491,7 +496,13 @@ class SyncService {
                 if (pulled.cash_movements > 0) pulledParts.push(`${pulled.cash_movements} movs. de caja`);
                 if (pulled.customers > 0) pulledParts.push(`${pulled.customers} clientes`);
                 if (pulled.suppliers > 0) pulledParts.push(`${pulled.suppliers} proveedores`);
+                if (pulled.counter_notes > 0) pulledParts.push(`${pulled.counter_notes} notas/envases`);
                 if (pulled.business_settings > 0) pulledParts.push(`ajustes`);
+
+                // Recargar notas y envases en memoria si hubo cambios
+                if (typeof NotesService !== 'undefined' && typeof NotesService.load === 'function') {
+                    NotesService.load();
+                }
 
                 // Notificación silenciosa: no interrumpir al cajero si es sincronización en segundo plano
                 if (pulledParts.length > 0) {

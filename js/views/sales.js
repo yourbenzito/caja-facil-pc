@@ -1,6 +1,13 @@
 const SalesView = {
     currentFilter: 'all', // 'all', 'cash', 'card', 'qr', 'other', 'pending', 'mixed'
-    dateFrom: null,
+    // ponytail: iniciar siempre con el día actual por defecto
+    dateFrom: (() => {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    })(),
     dateTo: null,
     offset: 0,
     limit: 50,
@@ -9,10 +16,12 @@ const SalesView = {
     allSales: [],
     currentSearchQuery: '',
 
-    // Estado del selector tipo calendario (rango o día único)
+    // Estado del selector tipo calendario modal
     _calendarYear: null,
     _calendarMonth: null, // 0-11
     _monthNames: ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'],
+    _modalDateFrom: null,
+    _modalDateTo: null,
 
     async loadInitialSales() {
         if (this.currentFilter === 'returns') {
@@ -121,6 +130,23 @@ const SalesView = {
             `;
         }
 
+        const todayStr = this.getLocalDateString(new Date());
+        const yesterdayStr = this.getLocalDateString(new Date(Date.now() - 86400000));
+        const isToday = this.dateFrom === todayStr && !this.dateTo;
+        const isYesterday = this.dateFrom === yesterdayStr && !this.dateTo;
+        const isCustomDate = (this.dateFrom || this.dateTo) && !isToday && !isYesterday;
+
+        let dateBadgeText = 'Todas las fechas';
+        if (isToday) {
+            dateBadgeText = `Hoy (${todayStr})`;
+        } else if (isYesterday) {
+            dateBadgeText = `Ayer (${yesterdayStr})`;
+        } else if (this.dateFrom && this.dateTo) {
+            dateBadgeText = `${this.dateFrom} al ${this.dateTo}`;
+        } else if (this.dateFrom) {
+            dateBadgeText = `${this.dateFrom}`;
+        }
+
         const salesTableHtml = await this.renderSalesTable(this.allSales);
 
         return `
@@ -128,6 +154,14 @@ const SalesView = {
                 <div>
                     <h1 style="margin: 0; font-size: 1.75rem; font-weight: 900; color: var(--text-color, #0f172a);">Historial de Ventas</h1>
                     <p style="margin: 0.35rem 0 0 0; color: var(--text-muted, #64748b); font-size: 0.95rem;">Consulta y gestiona todas las ventas del negocio</p>
+                </div>
+                <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-sm" onclick="SalesView.exportSalesPDF()" style="display: flex; align-items: center; gap: 0.4rem; font-weight: 800; background: #fef2f2; border: 1.5px solid #fecaca; color: #dc2626; border-radius: 0.5rem; padding: 0.5rem 0.9rem; cursor: pointer; transition: all 0.2s;" title="Descargar resumen de ventas en PDF">
+                        <span>📄</span> <span>Resumen PDF</span>
+                    </button>
+                    <button type="button" class="btn btn-sm" onclick="SalesView.exportSalesExcel()" style="display: flex; align-items: center; gap: 0.4rem; font-weight: 800; background: #ecfdf5; border: 1.5px solid #a7f3d0; color: #047857; border-radius: 0.5rem; padding: 0.5rem 0.9rem; cursor: pointer; transition: all 0.2s;" title="Exportar ventas a planilla Excel">
+                        <span>📊</span> <span>Exportar Excel</span>
+                    </button>
                 </div>
             </div>
 
@@ -185,40 +219,34 @@ const SalesView = {
                         </div>
                     </div>
 
-                    <!-- Botones Rápidos y Limpiar -->
+                    <!-- Botones Rápidos de Fecha, Calendario y Limpiar (sin calendario desplegado) -->
                     <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
-                        <button onclick="SalesView.selectToday()" title="Filtrar por Hoy" style="height: 44px; padding: 0 1.25rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; background: white; color: #3b82f6; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.9rem; transition: all 0.2s;" onmouseover="this.style.background='#eff6ff'; this.style.borderColor='#3b82f6';" onmouseout="this.style.background='white'; this.style.borderColor='#cbd5e1';">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M8 14h.01"></path><path d="M12 14h.01"></path><path d="M16 14h.01"></path><path d="M8 18h.01"></path><path d="M12 18h.01"></path><path d="M16 18h.01"></path></svg>
+                        <button onclick="SalesView.selectToday()" title="Filtrar por Hoy" 
+                                style="height: 42px; padding: 0 1.15rem; border-radius: 0.5rem; border: 1.5px solid ${isToday ? '#3b82f6' : '#cbd5e1'}; background: ${isToday ? '#3b82f6' : 'white'}; color: ${isToday ? 'white' : '#3b82f6'}; cursor: pointer; display: flex; align-items: center; gap: 0.45rem; font-weight: 800; font-size: 0.88rem; transition: all 0.2s; box-shadow: ${isToday ? '0 2px 8px rgba(59, 130, 246, 0.3)' : 'none'};">
+                            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                             Hoy
                         </button>
-                        <button onclick="SalesView.clearDateFilter()" title="Limpiar Fechas" style="height: 44px; padding: 0 1.25rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; background: white; color: #ef4444; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 700; font-size: 0.9rem; transition: all 0.2s;" onmouseover="this.style.background='#fef2f2'; this.style.borderColor='#ef4444';" onmouseout="this.style.background='white'; this.style.borderColor='#cbd5e1';">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"></path><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"></path><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
-                            Limpiar
+                        <button onclick="SalesView.selectYesterday()" title="Filtrar por Ayer" 
+                                style="height: 42px; padding: 0 1.15rem; border-radius: 0.5rem; border: 1.5px solid ${isYesterday ? '#6366f1' : '#cbd5e1'}; background: ${isYesterday ? '#6366f1' : 'white'}; color: ${isYesterday ? 'white' : '#6366f1'}; cursor: pointer; display: flex; align-items: center; gap: 0.45rem; font-weight: 800; font-size: 0.88rem; transition: all 0.2s; box-shadow: ${isYesterday ? '0 2px 8px rgba(99, 102, 241, 0.3)' : 'none'};">
+                            <span>⏪</span>
+                            Ayer
                         </button>
+                        <button onclick="SalesView.openCalendarModal()" title="Abrir calendario para seleccionar fecha o rango" 
+                                style="height: 42px; padding: 0 1.15rem; border-radius: 0.5rem; border: 1.5px solid ${isCustomDate ? '#059669' : '#cbd5e1'}; background: ${isCustomDate ? '#059669' : '#f8fafc'}; color: ${isCustomDate ? 'white' : '#0f172a'}; cursor: pointer; display: flex; align-items: center; gap: 0.5rem; font-weight: 800; font-size: 0.88rem; transition: all 0.2s; box-shadow: ${isCustomDate ? '0 2px 8px rgba(5, 150, 105, 0.3)' : 'none'};">
+                            <span>📅</span>
+                            <span>Seleccionar Fecha / Rango</span>
+                        </button>
+                        <button onclick="SalesView.clearDateFilter()" title="Ver todas las ventas registradas" 
+                                style="height: 42px; padding: 0 1rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; background: white; color: #64748b; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; font-weight: 700; font-size: 0.88rem; transition: all 0.2s;">
+                            <span>✕</span>
+                            <span>Todo</span>
+                        </button>
+                        <div style="padding: 0.35rem 0.85rem; border-radius: 99px; background: #f1f5f9; border: 1px solid #e2e8f0; font-size: 0.78rem; font-weight: 800; color: #475569; display: flex; align-items: center; gap: 0.35rem;">
+                            <span>📌</span>
+                            <span>${dateBadgeText}</span>
+                        </div>
                     </div>
                 </div>
-
-                <!-- Acordeón / Colapsable de Mini Calendario -->
-                <details style="border-top: 1px solid #f1f5f9; padding-top: 1rem;" ${this.dateFrom || this.dateTo ? 'open' : ''}>
-                    <summary style="font-size: 0.85rem; font-weight: 700; color: #64748b; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; user-select: none; display: flex; align-items: center; gap: 0.5rem;">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
-                        Rango de fecha (Mini Calendario)
-                    </summary>
-                    <div style="margin-top: 1.25rem; display: flex; flex-direction: column; gap: 1rem;">
-                        <div style="display: flex; gap: 0.5rem;">
-                            <select id="salesHistoryMonthSelect" class="form-control" onchange="SalesView.setSalesCalendarMonth(this.value)" style="width: auto; padding: 0.4rem 2rem 0.4rem 1rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; font-weight: 700; font-size: 0.9rem; color: #334155; background: white; cursor: pointer;">
-                                ${this._monthNames.map((name, index) => `<option value="${index}" ${index === this._calendarMonth ? 'selected' : ''}>${name}</option>`).join('')}
-                            </select>
-                            <select id="salesHistoryYearSelect" class="form-control" onchange="SalesView.setSalesCalendarYear(this.value)" style="width: auto; padding: 0.4rem 2rem 0.4rem 1rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; font-weight: 700; font-size: 0.9rem; color: #334155; background: white; cursor: pointer;">
-                                ${this.getCalendarYears().map(year => `<option value="${year}" ${year === this._calendarYear ? 'selected' : ''}>${year}</option>`).join('')}
-                            </select>
-                        </div>
-                        
-                        <div id="salesHistoryDayGrid" style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.35rem; max-width: 320px; background: #f8fafc; padding: 1rem; border-radius: 0.75rem; border: 1px solid #e2e8f0;">
-                            ${this.renderSalesHistoryDayGridButtons(this._calendarYear, this._calendarMonth)}
-                        </div>
-                    </div>
-                </details>
 
                 <!-- Filtros por Método de Pago -->
                 <div style="border-top: 1px solid #f1f5f9; padding-top: 1rem; display: flex; align-items: center; gap: 1.25rem; flex-wrap: wrap;">
@@ -315,7 +343,28 @@ const SalesView = {
     },
 
     async init() {
-        // No init needed for now
+        // ponytail: al entrar al módulo de ventas, asegurar que comience en el día actual
+        const todayStr = this.getLocalDateString(new Date());
+        if (this.dateFrom !== todayStr || this.dateTo !== null) {
+            this.dateFrom = todayStr;
+            this.dateTo = null;
+            this.offset = 0;
+            this.allSales = [];
+            this.hasMore = true;
+            await this.loadInitialSales();
+            await this.refresh();
+        }
+    },
+
+    destroy() {
+        // ponytail: restablecer al día actual para cuando se vuelva a abrir el módulo
+        const todayStr = this.getLocalDateString(new Date());
+        this.dateFrom = todayStr;
+        this.dateTo = null;
+        this.offset = 0;
+        this.allSales = [];
+        this.hasMore = true;
+        this.currentSearchQuery = '';
     },
 
     // Helper: Obtener fecha en formato YYYY-MM-DD en hora local
@@ -382,28 +431,124 @@ const SalesView = {
         return new Date(y, m - 1, d).getTime();
     },
 
-    renderSalesHistoryDayGridButtons(year, monthIndex) {
+    // ── GESTIÓN DE CALENDARIO EN VENTANA MODAL ──
+
+    openCalendarModal() {
+        this.ensureCalendarState();
+        this._modalDateFrom = this.dateFrom;
+        this._modalDateTo = this.dateTo;
+
+        const content = `
+            <div style="display: flex; flex-direction: column; gap: 0.85rem;">
+                <div style="display: flex; gap: 0.5rem; justify-content: space-between;">
+                    <select id="salesModalMonthSelect" class="form-control" onchange="SalesView.setModalCalendarMonth(this.value)" style="flex: 1; padding: 0.45rem 0.65rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.9rem; border: 1.5px solid #cbd5e1;">
+                        ${this._monthNames.map((name, index) => `<option value="${index}" ${index === this._calendarMonth ? 'selected' : ''}>${name}</option>`).join('')}
+                    </select>
+                    <select id="salesModalYearSelect" class="form-control" onchange="SalesView.setModalCalendarYear(this.value)" style="width: 100px; padding: 0.45rem 0.65rem; border-radius: 0.5rem; font-weight: 700; font-size: 0.9rem; border: 1.5px solid #cbd5e1;">
+                        ${this.getCalendarYears().map(year => `<option value="${year}" ${year === this._calendarYear ? 'selected' : ''}>${year}</option>`).join('')}
+                    </select>
+                </div>
+
+                <div id="salesModalSummary" style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 0.5rem; padding: 0.5rem 0.85rem; text-align: center; font-size: 0.85rem; font-weight: 800; color: #1e40af;">
+                    ${this.getModalCalendarSummaryText()}
+                </div>
+
+                <div id="salesModalDayGrid" style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.35rem; background: #f8fafc; padding: 0.75rem; border-radius: 0.75rem; border: 1px solid #e2e8f0;">
+                    ${this.renderModalCalendarDayGridButtons(this._calendarYear, this._calendarMonth)}
+                </div>
+
+                <div style="font-size: 0.74rem; color: #64748b; text-align: center; line-height: 1.4;">
+                    💡 Haz clic en <strong>un día</strong> para ver sus ventas, o en <strong>dos días</strong> para definir un rango.
+                </div>
+            </div>
+        `;
+
+        const footer = `
+            <div style="display: flex; justify-content: space-between; width: 100%; gap: 0.5rem;">
+                <button type="button" class="btn btn-outline" onclick="SalesView.clearModalDates()" style="border: 1.5px solid #cbd5e1; color: #64748b; font-weight: 700; font-size: 0.85rem;">
+                    Limpiar (Ver Todo)
+                </button>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+                    <button type="button" class="btn btn-primary" onclick="SalesView.applyModalCalendarFilter()" style="font-weight: 800; background: #4f46e5; border: none;">
+                        ✓ Aplicar Filtro
+                    </button>
+                </div>
+            </div>
+        `;
+
+        showModal(content, { title: '📅 Seleccionar Día o Rango de Ventas', footer, width: '420px' });
+    },
+
+    selectModalCalendarDay(day) {
+        const year = this._calendarYear ?? new Date().getFullYear();
+        const monthIndex = this._calendarMonth ?? new Date().getMonth();
+        const dd = String(day).padStart(2, '0');
+        const mm = String(monthIndex + 1).padStart(2, '0');
+        const selectedKey = `${year}-${mm}-${dd}`;
+
+        if (!this._modalDateFrom || (this._modalDateFrom && this._modalDateTo)) {
+            this._modalDateFrom = selectedKey;
+            this._modalDateTo = null;
+        } else if (this._modalDateFrom && !this._modalDateTo) {
+            this._modalDateTo = selectedKey;
+            if (this._modalDateTo < this._modalDateFrom) {
+                const tmp = this._modalDateFrom;
+                this._modalDateFrom = this._modalDateTo;
+                this._modalDateTo = tmp;
+            }
+        }
+
+        this.refreshModalCalendar();
+    },
+
+    getModalCalendarSummaryText() {
+        if (!this._modalDateFrom && !this._modalDateTo) {
+            return 'Sin filtro de fecha: se mostrarán todas las ventas';
+        }
+        if (this._modalDateFrom && !this._modalDateTo) {
+            return `Día: ${this._modalDateFrom} (toca otro día para rango)`;
+        }
+        return `Rango: ${this._modalDateFrom} al ${this._modalDateTo}`;
+    },
+
+    refreshModalCalendar() {
+        const gridEl = document.getElementById('salesModalDayGrid');
+        const summaryEl = document.getElementById('salesModalSummary');
+        if (summaryEl) summaryEl.innerHTML = this.getModalCalendarSummaryText();
+        if (gridEl) gridEl.innerHTML = this.renderModalCalendarDayGridButtons(this._calendarYear, this._calendarMonth);
+    },
+
+    setModalCalendarMonth(m) {
+        this._calendarMonth = parseInt(m, 10);
+        this.refreshModalCalendar();
+    },
+
+    setModalCalendarYear(y) {
+        this._calendarYear = parseInt(y, 10);
+        this.refreshModalCalendar();
+    },
+
+    renderModalCalendarDayGridButtons(year, monthIndex) {
         const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
         const firstDayOfWeek = new Date(year, monthIndex, 1).getDay();
-        // getDay() es 0(Dom) a 6(Sab). Lunes = 0, Domingo = 6 en formato ISO europeo.
         let offset = firstDayOfWeek === 0 ? 6 : firstDayOfWeek - 1;
 
-        const fromTs = this.getDateLocalTime(this.dateFrom);
-        const hasEnd = !!this.dateTo;
-        const toTs = this.getDateLocalTime(hasEnd ? this.dateTo : this.dateFrom);
+        const fromTs = this.getDateLocalTime(this._modalDateFrom);
+        const hasEnd = !!this._modalDateTo;
+        const toTs = this.getDateLocalTime(hasEnd ? this._modalDateTo : this._modalDateFrom);
 
-        const fromKey = this.dateFrom;
-        const toKey = hasEnd ? this.dateTo : this.dateFrom;
+        const fromKey = this._modalDateFrom;
+        const toKey = hasEnd ? this._modalDateTo : this._modalDateFrom;
 
-        // Cabeceras de Lunes a Domingo
         let html = `
-            <div style="text-align:center; font-size: 0.75rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.5rem;">LU</div>
-            <div style="text-align:center; font-size: 0.75rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.5rem;">MA</div>
-            <div style="text-align:center; font-size: 0.75rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.5rem;">MI</div>
-            <div style="text-align:center; font-size: 0.75rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.5rem;">JU</div>
-            <div style="text-align:center; font-size: 0.75rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.5rem;">VI</div>
-            <div style="text-align:center; font-size: 0.75rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.5rem;">SA</div>
-            <div style="text-align:center; font-size: 0.75rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.5rem;">DO</div>
+            <div style="text-align:center; font-size: 0.72rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.35rem;">LU</div>
+            <div style="text-align:center; font-size: 0.72rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.35rem;">MA</div>
+            <div style="text-align:center; font-size: 0.72rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.35rem;">MI</div>
+            <div style="text-align:center; font-size: 0.72rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.35rem;">JU</div>
+            <div style="text-align:center; font-size: 0.72rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.35rem;">VI</div>
+            <div style="text-align:center; font-size: 0.72rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.35rem;">SA</div>
+            <div style="text-align:center; font-size: 0.72rem; font-weight: 800; color: #94a3b8; padding-bottom: 0.35rem;">DO</div>
         `;
 
         for (let i = 0; i < offset; i++) {
@@ -414,7 +559,6 @@ const SalesView = {
             const dd = String(day).padStart(2, '0');
             const mm = String(monthIndex + 1).padStart(2, '0');
             const dayKey = `${year}-${mm}-${dd}`;
-
             const dayTs = new Date(year, monthIndex, day).getTime();
 
             const isFrom = fromKey === dayKey;
@@ -435,10 +579,10 @@ const SalesView = {
 
             html += `
                 <button type="button"
-                        style="border: none; background: ${bg}; color: ${color}; font-weight: ${fw}; border-radius: 0.5rem; height: 38px; cursor: pointer; transition: all 0.15s; font-size: 0.9rem;"
+                        style="border: none; background: ${bg}; color: ${color}; font-weight: ${fw}; border-radius: 0.5rem; height: 36px; cursor: pointer; transition: all 0.15s; font-size: 0.88rem;"
                         onmouseover="if(this.style.background === 'transparent') { this.style.background='#e2e8f0'; }"
                         onmouseout="if(this.style.background === 'rgb(226, 232, 240)' || this.style.background === '#e2e8f0') { this.style.background='transparent'; }"
-                        onclick="SalesView.selectSalesCalendarDay(${day})">
+                        onclick="SalesView.selectModalCalendarDay(${day})">
                     ${day}
                 </button>
             `;
@@ -447,112 +591,25 @@ const SalesView = {
         return html;
     },
 
-    refreshSalesHistoryDayGrid() {
-        if (this._calendarYear === null || this._calendarMonth === null) {
-            this.ensureCalendarState();
-        }
-        const gridEl = document.getElementById('salesHistoryDayGrid');
-        const titleEl = document.getElementById('salesHistoryDayGridTitle');
-
-        if (titleEl) titleEl.textContent = `${this._monthNames[this._calendarMonth]} ${this._calendarYear}`;
-        if (gridEl) gridEl.innerHTML = this.renderSalesHistoryDayGridButtons(this._calendarYear, this._calendarMonth);
-    },
-
-    setSalesCalendarMonth(monthIndex) {
-        this._calendarMonth = parseInt(monthIndex, 10);
-        this.refreshSalesHistoryDayGrid();
-    },
-
-    setSalesCalendarYear(year) {
-        this._calendarYear = parseInt(year, 10);
-        this.refreshSalesHistoryDayGrid();
-    },
-
-    async setDateFilter(type, value) {
-        if (type === 'from') {
-            this.dateFrom = value || null;
-        } else if (type === 'to') {
-            this.dateTo = value || null;
-        }
-
-        // Autocorrección si "desde" es mayor a "hasta"
-        if (this.dateFrom && this.dateTo && this.dateFrom > this.dateTo) {
-            const tmp = this.dateFrom;
-            this.dateFrom = this.dateTo;
-            this.dateTo = tmp;
-        }
-
+    async applyModalCalendarFilter() {
+        this.dateFrom = this._modalDateFrom;
+        this.dateTo = this._modalDateTo;
+        closeModal();
         this.offset = 0;
         this.allSales = [];
         this.hasMore = true;
+        await this.loadInitialSales();
         await this.refresh();
     },
 
-    async selectSalesCalendarDay(day) {
-        const year = this._calendarYear ?? new Date().getFullYear();
-        const monthIndex = this._calendarMonth ?? new Date().getMonth();
-        const dd = String(day).padStart(2, '0');
-        const mm = String(monthIndex + 1).padStart(2, '0');
-        const selectedKey = `${year}-${mm}-${dd}`;
-
-        // 1er click: define inicio (día único)
-        // 2do click: define fin del rango
-        // 3er click (o más): reinicia el rango
-        if (!this.dateFrom || (this.dateFrom && this.dateTo)) {
-            this.dateFrom = selectedKey;
-            this.dateTo = null;
-        } else if (this.dateFrom && !this.dateTo) {
-            this.dateTo = selectedKey;
-            if (this.dateTo < this.dateFrom) {
-                const tmp = this.dateFrom;
-                this.dateFrom = this.dateTo;
-                this.dateTo = tmp;
-            }
-        }
-
+    async clearModalDates() {
+        this.dateFrom = null;
+        this.dateTo = null;
+        closeModal();
         this.offset = 0;
         this.allSales = [];
         this.hasMore = true;
-        await this.refresh();
-    },
-
-    async applyDateFilter() {
-        const fromInput = document.getElementById('dateFromFilter');
-        const toInput = document.getElementById('dateToFilter');
-
-        const fromVal = fromInput ? (fromInput.value || null) : null;
-        const toVal = toInput ? (toInput.value || null) : null;
-
-        let from = fromVal;
-        let to = toVal;
-
-        // Si el usuario seleccionó solo una fecha, se usa como inicio y fin del rango.
-        if (from && !to) to = from;
-        if (to && !from) from = to;
-
-        if (from && to) {
-            if (from > to) {
-                const tmp = from;
-                from = to;
-                to = tmp;
-                // Mantener inputs consistentes con el rango normalizado.
-                if (fromInput) fromInput.value = from;
-                if (toInput) toInput.value = to;
-            }
-
-            this.dateFrom = from;
-            this.dateTo = to;
-            this.offset = 0;
-            this.allSales = await Sale.getByDateRange(from + 'T00:00:00', to + 'T23:59:59', { limit: this.limit, offset: 0 });
-            this.hasMore = this.allSales.length === this.limit;
-        } else {
-            this.dateFrom = null;
-            this.dateTo = null;
-            this.offset = 0;
-            this.allSales = await Sale.getLatest(this.limit, 0);
-            this.hasMore = this.allSales.length === this.limit;
-        }
-
+        await this.loadInitialSales();
         await this.refresh();
     },
 
@@ -560,7 +617,6 @@ const SalesView = {
         const today = new Date();
         const todayStr = this.getLocalDateString(today);
         this.dateFrom = todayStr;
-        // Un día solamente: dateTo se mantiene null hasta que selecciones un segundo día.
         this.dateTo = null;
         this._calendarYear = today.getFullYear();
         this._calendarMonth = today.getMonth();
@@ -568,6 +624,22 @@ const SalesView = {
         this.offset = 0;
         this.allSales = [];
         this.hasMore = true;
+        await this.loadInitialSales();
+        await this.refresh();
+    },
+
+    async selectYesterday() {
+        const yesterday = new Date(Date.now() - 86400000);
+        const yestStr = this.getLocalDateString(yesterday);
+        this.dateFrom = yestStr;
+        this.dateTo = null;
+        this._calendarYear = yesterday.getFullYear();
+        this._calendarMonth = yesterday.getMonth();
+
+        this.offset = 0;
+        this.allSales = [];
+        this.hasMore = true;
+        await this.loadInitialSales();
         await this.refresh();
     },
 
@@ -580,6 +652,7 @@ const SalesView = {
         const today = new Date();
         this._calendarYear = today.getFullYear();
         this._calendarMonth = today.getMonth();
+        await this.loadInitialSales();
         await this.refresh();
     },
 
@@ -978,7 +1051,7 @@ const SalesView = {
                     
                     <!-- Folio e Items -->
                     <div style="display: flex; flex-direction: column; width: 120px; flex-shrink: 0;">
-                        <span style="font-weight: 700; color: var(--text-color); font-size: 0.9rem;">#${s.saleNumber}</span>
+                        <span style="font-weight: 700; color: var(--text-color); font-size: 0.9rem;">#${s.terminal_id ? s.terminal_id + '-' : ''}${s.saleNumber}</span>
                         <span style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem;">${s.items.length} producto(s)</span>
                     </div>
                 </div>
@@ -1004,8 +1077,9 @@ const SalesView = {
                         ${iconView}
                     </button>
                     ${PermissionService.can('sales.reprint') && !isCancelled ? `
-                    <button class="action-btn" onclick="SalesView.reprintSale(${s.id})" title="Reimprimir ticket" style="padding: 0.4rem; border-radius: 0.4rem; width: 34px; height: 34px; border: 1px solid transparent; background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(16, 185, 129, 0.1)'; this.style.color='#10b981';">
-                        ${iconPrint}
+                    <button type="button" class="btn btn-sm" onclick="SalesView.reprintSale(${s.id})" title="Reimprimir ticket térmico" style="display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 800; border-radius: 0.5rem; padding: 0.35rem 0.65rem; border: 1.5px solid #10b981; color: #047857; background: #ecfdf5; cursor: pointer; transition: all 0.2s; font-size: 0.78rem; height: 34px; box-sizing: border-box;" onmouseover="this.style.background='#d1fae5';" onmouseout="this.style.background='#ecfdf5';">
+                        <span>🖨️</span>
+                        <span>Ticket</span>
                     </button>` : ''}
                     ${PermissionService.can('sales.edit') && !isCancelled ? `
                     <button class="action-btn" onclick="SalesView.editSale(${s.id})" title="Corregir pago/venta" style="padding: 0.4rem; border-radius: 0.4rem; width: 34px; height: 34px; border: 1px solid transparent; background: transparent; color: var(--text-muted); cursor: pointer; transition: all 0.2s; display: flex; align-items: center; justify-content: center;" onmouseover="this.style.background='rgba(59, 130, 246, 0.1)'; this.style.color='#3b82f6';">
@@ -1210,7 +1284,7 @@ const SalesView = {
             <div style="margin-bottom: 1.5rem; padding: 1rem; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border-radius: 0.5rem; border-left: 4px solid var(--primary);">
                 <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 0.75rem;">
                     <div>
-                        <h3 style="margin: 0 0 0.5rem 0; font-size: 1.3rem; color: var(--primary);">Venta #${sale.saleNumber}</h3>
+                        <h3 style="margin: 0 0 0.5rem 0; font-size: 1.3rem; color: var(--primary);">Venta #${sale.terminal_id ? sale.terminal_id + '-' : ''}${sale.saleNumber}</h3>
                         <p style="margin: 0; color: var(--secondary); font-size: 0.9rem;"><strong>Fecha:</strong> ${formatDateTime(sale.date)}</p>
                     </div>
                     <div>
@@ -1307,7 +1381,7 @@ const SalesView = {
             ${PermissionService.can('sales.edit') && !isCancelled ? `<button class="btn btn-info" onclick="SalesView.editSale(${sale.id})" style="margin-left: 0.5rem;">✏️ Editar Venta</button>` : ''}
         `;
 
-        showModal(fullContent, { title: `Venta #${sale.saleNumber}`, footer, width: '700px' });
+        showModal(fullContent, { title: `Venta #${sale.terminal_id ? sale.terminal_id + '-' : ''}${sale.saleNumber}`, footer, width: '700px' });
     },
 
     /**
@@ -1322,7 +1396,7 @@ const SalesView = {
 
         let customer = null;
         if (sale.customerId && sale.customerId !== 'null' && sale.customerId !== 'undefined') {
-            try { customer = await Customer.getById(sale.customerId); } catch (_) {}
+            try { customer = await Customer.getById(sale.customerId); } catch (_) { }
         }
 
         const bizName = localStorage.getItem('BUSINESS_NAME') || 'Mi Negocio';
@@ -1345,7 +1419,7 @@ const SalesView = {
                     <div style="margin: 0.5rem 0; padding: 0.25rem 0.5rem; background: #fef3c7; border: 1px solid #fde68a; border-radius: 0.35rem; font-weight: 900; font-size: 0.8rem; color: #92400e; text-align: center;">
                         ⚠️ COPIA / REIMPRESIÓN
                     </div>
-                    <div style="font-weight: 800; font-size: 0.95rem;">COMPROBANTE #${sale.saleNumber || sale.id}</div>
+                    <div style="font-weight: 800; font-size: 0.95rem;">COMPROBANTE #${sale.terminal_id ? sale.terminal_id + '-' : ''}${sale.saleNumber || sale.id}</div>
                     <div style="font-size: 0.8rem; color: #64748b;">${formatDateTime(sale.date)}</div>
                 </div>
 
@@ -1422,7 +1496,7 @@ const SalesView = {
             </button>
         `;
 
-        showModal(content, { title: `🖨️ Reimpresión Ticket #${sale.saleNumber || sale.id}`, footer, width: '420px' });
+        showModal(content, { title: `🖨️ Reimpresión Ticket #${sale.terminal_id ? sale.terminal_id + '-' : ''}${sale.saleNumber || sale.id}`, footer, width: '420px' });
     },
 
     printReceiptElement() {
@@ -1585,6 +1659,9 @@ const SalesView = {
 
         // Clonar la venta para editar localmente
         this._tempEditingSale = JSON.parse(JSON.stringify(sale));
+        if (!this._tempEditingSale.documentType) {
+            this._tempEditingSale.documentType = (this._tempEditingSale.tax_amount > 0 || this._tempEditingSale.tax > 0) ? 'boleta' : 'sin_boleta';
+        }
         const allCustomers = await Customer.getAll();
 
         this._currentModalRefresh = () => {
@@ -1621,7 +1698,7 @@ const SalesView = {
                 <div class="edit-sale-container" style="background: var(--bg-color); border-radius: 0.5rem; overflow: hidden;">
                     
                     <!-- Top Section: Info -->
-                    <div style="display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 1.5rem; padding: 1.5rem; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <div style="display: grid; grid-template-columns: 1.2fr 0.8fr 1fr; gap: 1rem; padding: 1.25rem 1.5rem; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.05); align-items: flex-end;">
                         <div class="form-group" style="margin: 0;">
                             <label style="color: var(--secondary); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Cliente Asignado</label>
                             <div style="display: flex; gap: 0.5rem; margin-top: 0.25rem;">
@@ -1639,6 +1716,25 @@ const SalesView = {
                         <div class="form-group" style="margin: 0;">
                             <label style="color: var(--secondary); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Fecha y Hora</label>
                             <input type="datetime-local" class="form-control" style="background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.1); color: var(--text-color); margin-top: 0.25rem;" value="${s.date.slice(0, 19)}" onchange="SalesView._tempEditingSale.date = this.value" onkeydown="if(event.key==='Enter') event.preventDefault()">
+                        </div>
+                        <div class="form-group" style="margin: 0;">
+                            <label style="color: var(--secondary); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Tipo de Venta</label>
+                            <div style="display: flex; gap: 0.35rem; margin-top: 0.25rem;">
+                                <button type="button" 
+                                        class="btn ${s.documentType === 'boleta' ? 'btn-primary' : 'btn-secondary'}" 
+                                        onclick="SalesView._tempEditingSale.documentType = 'boleta'; SalesView._currentModalRefresh();"
+                                        style="flex: 1; padding: 0.45rem 0.35rem; font-size: 0.8rem; font-weight: 700; border-radius: 0.375rem; display: flex; align-items: center; justify-content: center; gap: 0.2rem; cursor: pointer;"
+                                        title="Venta Fiscal con Boleta (Afecta a IVA 19%)">
+                                    📄 Boleta (IVA)
+                                </button>
+                                <button type="button" 
+                                        class="btn ${s.documentType !== 'boleta' ? 'btn-primary' : 'btn-secondary'}" 
+                                        onclick="SalesView._tempEditingSale.documentType = 'sin_boleta'; SalesView._currentModalRefresh();"
+                                        style="flex: 1; padding: 0.45rem 0.35rem; font-size: 0.8rem; font-weight: 700; border-radius: 0.375rem; display: flex; align-items: center; justify-content: center; gap: 0.2rem; cursor: pointer;"
+                                        title="Comprobante Interno (Sin IVA / Exento)">
+                                    🏠 Interno
+                                </button>
+                            </div>
                         </div>
                     </div>
 
@@ -1707,6 +1803,11 @@ const SalesView = {
                             <div style="text-align: right;">
                                 <div style="font-size: 0.85rem; color: var(--secondary); text-transform: uppercase; letter-spacing: 0.05em;">Total Venta</div>
                                 <div style="font-size: 1.5rem; font-weight: 700; color: var(--text-color);">${formatCLP(s.total)}</div>
+                                <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.15rem;">
+                                    ${s.documentType === 'boleta'
+                    ? `Neto: ${formatCLP(Math.round(s.total / 1.19))} | IVA (19%): ${formatCLP(s.total - Math.round(s.total / 1.19))}`
+                    : `<span>Exento / Sin IVA (Venta Interna)</span>`}
+                                </div>
                             </div>
                         </div>
 
@@ -2080,9 +2181,19 @@ const SalesView = {
         const oldSale = await Sale.getById(s.id);
         const diff = paidAmount - (oldSale.paidAmount || 0);
 
+        const docType = s.documentType || 'boleta';
+        let fiscal = { base_amount: total, tax_amount: 0, commission_amount: 0 };
+        if (typeof Sale.computeFiscalFromTotal === 'function') {
+            fiscal = Sale.computeFiscalFromTotal(total, docType);
+        }
+
         const updateData = {
             customerId: s.customerId ? parseInt(s.customerId) : null,
             date: s.date,
+            documentType: docType,
+            base_amount: fiscal.base_amount,
+            tax_amount: fiscal.tax_amount,
+            commission_amount: fiscal.commission_amount,
             items: s.items,
             subtotal: s.total,
             total: s.total,
@@ -2571,6 +2682,285 @@ const SalesView = {
                 }
             }
         );
+    },
+
+    async downloadSalePDF(saleId) {
+        try {
+            const jsPDF = window.jspdf ? window.jspdf.jsPDF : null;
+            if (!jsPDF) {
+                showNotification('Módulo PDF no disponible', 'warning');
+                return;
+            }
+
+            const sale = await Sale.getById(saleId);
+            if (!sale) {
+                showNotification('Venta no encontrada', 'error');
+                return;
+            }
+
+            let customer = null;
+            if (sale.customerId && sale.customerId !== 'null' && sale.customerId !== 'undefined') {
+                try { customer = await Customer.getById(sale.customerId); } catch (_) { }
+            }
+
+            const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+            const bizName = localStorage.getItem('BUSINESS_NAME') || 'Mi Negocio';
+            const bizRut = localStorage.getItem('BUSINESS_RUT') || '';
+            const bizAddress = localStorage.getItem('BUSINESS_ADDRESS') || '';
+            const bizPhone = localStorage.getItem('BUSINESS_PHONE') || '';
+
+            // Header Banner
+            doc.setFillColor(30, 41, 59);
+            doc.rect(0, 0, 595, 70, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            doc.text(bizName.toUpperCase(), 40, 36);
+
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            const subTitle = [bizRut ? `RUT: ${bizRut}` : null, bizAddress, bizPhone].filter(Boolean).join(' | ');
+            if (subTitle) doc.text(subTitle, 40, 52);
+
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`COMPROBANTE DE VENTA`, 415, 32);
+            doc.setFontSize(13);
+            doc.setTextColor(59, 130, 246);
+            const folio = `#${sale.terminal_id ? sale.terminal_id + '-' : ''}${sale.saleNumber || sale.id}`;
+            doc.text(folio, 415, 50);
+
+            // Metadata Box
+            let y = 90;
+            doc.setFillColor(248, 250, 252);
+            doc.rect(40, y, 515, 52, 'F');
+            doc.setDrawColor(203, 213, 225);
+            doc.rect(40, y, 515, 52, 'D');
+
+            doc.setTextColor(30, 41, 59);
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'bold');
+            doc.text(`Fecha y Hora:`, 50, y + 18);
+            doc.setFont('helvetica', 'normal');
+            doc.text(formatDateTime(sale.date || new Date()), 120, y + 18);
+
+            doc.setFont('helvetica', 'bold');
+            doc.text(`Atendido por:`, 50, y + 36);
+            doc.setFont('helvetica', 'normal');
+            doc.text(sale.userName || 'Cajero', 120, y + 36);
+
+            doc.setFont('helvetica', 'bold');
+            doc.text(`Cliente:`, 310, y + 18);
+            doc.setFont('helvetica', 'normal');
+            doc.text(customer ? `${customer.name} ${customer.rut ? `(${customer.rut})` : ''}` : 'Cliente General', 360, y + 18);
+
+            doc.setFont('helvetica', 'bold');
+            doc.text(`Medio de Pago:`, 310, y + 36);
+            doc.setFont('helvetica', 'normal');
+            doc.text(this.getPaymentMethodName(sale.paymentMethod) || 'Efectivo', 390, y + 36);
+
+            // Items Table
+            const items = sale.items || [];
+            const itemRows = items.map(it => [
+                it.barcode || '—',
+                it.name || 'Producto',
+                it.quantity || 1,
+                formatCLP(it.price || 0),
+                formatCLP((it.quantity || 1) * (it.price || 0))
+            ]);
+
+            if (doc.autoTable) {
+                doc.autoTable({
+                    startY: y + 65,
+                    head: [['Código', 'Descripción del Producto', 'Cant.', 'Precio Unit.', 'Subtotal']],
+                    body: itemRows,
+                    theme: 'striped',
+                    headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+                    bodyStyles: { fontSize: 8.5, textColor: [15, 23, 42] },
+                    columnStyles: {
+                        0: { cellWidth: 70 },
+                        2: { halign: 'center', cellWidth: 40 },
+                        3: { halign: 'right', cellWidth: 75 },
+                        4: { halign: 'right', cellWidth: 80 }
+                    },
+                    margin: { left: 40, right: 40 }
+                });
+                y = doc.lastAutoTable.finalY + 15;
+            } else {
+                y += 120;
+            }
+
+            // Totals Box
+            const net = Math.round((sale.total || 0) / 1.19);
+            const iva = (sale.total || 0) - net;
+
+            doc.setFillColor(248, 250, 252);
+            doc.rect(340, y, 215, 75, 'F');
+            doc.setDrawColor(203, 213, 225);
+            doc.rect(340, y, 215, 75, 'D');
+
+            doc.setFontSize(9);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(71, 85, 105);
+            doc.text(`Subtotal Neto:`, 355, y + 20);
+            doc.text(formatCLP(net), 535, y + 20, { align: 'right' });
+
+            doc.text(`IVA (19%):`, 355, y + 38);
+            doc.text(formatCLP(iva), 535, y + 38, { align: 'right' });
+
+            doc.setFontSize(11);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(15, 23, 42);
+            doc.text(`TOTAL:`, 355, y + 60);
+            doc.setTextColor(16, 185, 129);
+            doc.text(formatCLP(sale.total || 0), 535, y + 60, { align: 'right' });
+
+            // Footer note
+            doc.setFontSize(8);
+            doc.setTextColor(148, 163, 184);
+            doc.text(`Documento generado por Caja Fácil POS · ${new Date().toLocaleDateString('es-CL')}`, 40, 780);
+
+            const fileName = `venta_${sale.saleNumber || sale.id}.pdf`;
+            doc.save(fileName);
+            showNotification('Comprobante PDF generado con éxito', 'success');
+        } catch (e) {
+            console.error('Error al generar PDF de la venta:', e);
+            showNotification('Error al exportar la venta en PDF', 'error');
+        }
+    },
+
+    async exportSalesPDF() {
+        try {
+            const jsPDF = window.jspdf ? window.jspdf.jsPDF : null;
+            if (!jsPDF) {
+                showNotification('Módulo PDF no disponible', 'warning');
+                return;
+            }
+
+            const sales = this.allSales || [];
+            if (sales.length === 0) {
+                showNotification('No hay ventas en la lista actual para exportar', 'warning');
+                return;
+            }
+
+            const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+            const bizName = localStorage.getItem('BUSINESS_NAME') || 'Mi Negocio';
+            const bizRut = localStorage.getItem('BUSINESS_RUT') || '';
+            const now = new Date();
+            const total = sales.reduce((acc, s) => acc + (parseFloat(s.total) || 0), 0);
+
+            // Banner superior
+            doc.setFillColor(30, 41, 59);
+            doc.rect(0, 0, 595, 65, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            doc.text(bizName.toUpperCase(), 40, 38);
+
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text('REPORTE DE VENTAS (HISTORIAL)', 380, 38);
+
+            // Subheader
+            let y = 90;
+            doc.setTextColor(30, 41, 59);
+            doc.setFontSize(9);
+            if (bizRut) { doc.text(`RUT Comercio: ${bizRut}`, 40, y); y += 13; }
+            const dateRangeLabel = this.dateFrom
+                ? (this.dateTo ? `Período: ${this.dateFrom} al ${this.dateTo}` : `Fecha: ${this.dateFrom}`)
+                : 'Todas las fechas';
+            doc.text(`${dateRangeLabel}  |  Registros: ${sales.length}  |  Emisión: ${now.toLocaleDateString('es-CL')} ${now.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`, 40, y);
+
+            // Box Total
+            y += 18;
+            doc.setFillColor(240, 253, 244);
+            doc.rect(40, y, 515, 32, 'F');
+            doc.setDrawColor(187, 247, 208);
+            doc.rect(40, y, 515, 32, 'D');
+
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(11);
+            doc.setTextColor(21, 128, 61);
+            doc.text(`MONTO TOTAL VENDIDO: ${formatCLP(total)}`, 50, y + 20);
+
+            // Table with autoTable
+            const rows = sales.map(s => {
+                const dateStr = s.date ? new Date(s.date).toLocaleDateString('es-CL') : '—';
+                const timeStr = s.date ? new Date(s.date).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '';
+                const folio = `#${s.terminal_id ? s.terminal_id + '-' : ''}${s.saleNumber || s.id}`;
+                const client = s.customerName || (s.customerId ? 'Cliente Registrado' : 'General');
+                const payment = this.getPaymentMethodName(s.paymentMethod) || 'Efectivo';
+                const status = s.status === 'cancelled' ? 'Anulada' : 'Completada';
+                return [
+                    folio,
+                    `${dateStr} ${timeStr}`,
+                    client,
+                    payment,
+                    status,
+                    formatCLP(s.total || 0)
+                ];
+            });
+
+            if (doc.autoTable) {
+                doc.autoTable({
+                    startY: y + 45,
+                    head: [['Folio', 'Fecha y Hora', 'Cliente', 'Medio de Pago', 'Estado', 'Total']],
+                    body: rows,
+                    theme: 'striped',
+                    headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8.5 },
+                    bodyStyles: { fontSize: 8.5, textColor: [15, 23, 42] },
+                    margin: { left: 40, right: 40 }
+                });
+            }
+
+            const fileName = `resumen_ventas_${now.toISOString().slice(0, 10)}.pdf`;
+            doc.save(fileName);
+            showNotification('Resumen de ventas PDF generado con éxito', 'success');
+        } catch (e) {
+            console.error('Error al exportar ventas en PDF:', e);
+            showNotification('Error al exportar ventas en PDF', 'error');
+        }
+    },
+
+    async exportSalesExcel() {
+        try {
+            if (typeof XLSX === 'undefined') {
+                showNotification('Librería Excel no disponible', 'warning');
+                return;
+            }
+
+            const sales = this.allSales || [];
+            if (sales.length === 0) {
+                showNotification('No hay ventas en la lista actual para exportar', 'warning');
+                return;
+            }
+
+            const data = sales.map(s => {
+                const itemsStr = (s.items || []).map(i => `${i.name} (x${i.quantity})`).join(', ');
+                return {
+                    'Folio': `${s.terminal_id ? s.terminal_id + '-' : ''}${s.saleNumber || s.id}`,
+                    'Fecha': s.date ? new Date(s.date).toLocaleDateString('es-CL') : '',
+                    'Hora': s.date ? new Date(s.date).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' }) : '',
+                    'Cliente': s.customerName || (s.customerId ? 'Cliente Registrado' : 'Cliente General'),
+                    'Vendedor / Cajero': s.userName || '',
+                    'Medio de Pago': this.getPaymentMethodName(s.paymentMethod) || s.paymentMethod || 'Efectivo',
+                    'Estado': s.status === 'cancelled' ? 'Anulada' : 'Completada',
+                    'Total ($)': s.total || 0,
+                    'Cantidad Items': (s.items || []).length,
+                    'Detalle Productos': itemsStr
+                };
+            });
+
+            const ws = XLSX.utils.json_to_sheet(data);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, 'Historial Ventas');
+            const fileName = `ventas_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            showNotification('Planilla Excel de ventas exportada con éxito', 'success');
+        } catch (e) {
+            console.error('Error al exportar ventas a Excel:', e);
+            showNotification('Error al exportar Excel de ventas', 'error');
+        }
     }
 };
 

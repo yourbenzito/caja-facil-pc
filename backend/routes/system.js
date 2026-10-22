@@ -265,6 +265,17 @@ router.post('/api/migration/import', requireRole('owner', 'admin'), async (req, 
                     const it = { ...item };
                     // Forzar siempre business_id del negocio activo
                     it.business_id = defaultBid;
+                    it.is_synced = 0; // ponytail: Garantizar que todo quede listo para sincronizar a futuro y no falseado como sincronizado
+
+                    // Limpiar strings 'null' o 'undefined' que vienen en backups antiguos
+                    for (const k of Object.keys(it)) {
+                        if (it[k] === 'null' || it[k] === 'undefined') it[k] = null;
+                    }
+
+                    // Generar UUID único universal si el registro antiguo no lo tiene
+                    if (!it.uuid) {
+                        it.uuid = `${tableName.slice(0, 3)}_${defaultBid}_${it.id || Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+                    }
 
                     if (tableName === 'products') {
                         const priceVal = it.price !== undefined ? it.price : (it.salePrice !== undefined ? it.salePrice : 0);
@@ -279,26 +290,39 @@ router.post('/api/migration/import', requireRole('owner', 'admin'), async (req, 
                         if (!it.cloud_id && it.local_id) it.cloud_id = String(it.local_id);
                         if (it.isActive === undefined) it.isActive = it.is_deleted ? 0 : 1;
                         if (!it.category) it.category = 'General';
-                        it.is_synced = 0;
+                        if (it.expiryDate === null || it.expiryDate === 'null') it.expiryDate = null;
                     } else if (tableName === 'categories') {
                         if (!it.name) it.name = 'General';
                         it.name = String(it.name).trim();
                         if (!it.color) it.color = '#3b82f6';
-                        it.is_synced = 0;
                     } else if (tableName === 'customers') {
-                        if (it.debt === undefined && it.totalDebt !== undefined) it.debt = Number(it.totalDebt) || 0;
-                        if (it.credit_limit === undefined && it.creditLimit !== undefined) it.credit_limit = Number(it.creditLimit) || 0;
+                        it.debt = Number(it.debt !== undefined ? it.debt : (it.totalDebt || 0));
+                        it.credit_limit = Number(it.credit_limit !== undefined ? it.credit_limit : (it.creditLimit || 0));
+                        it.balanceCredit = Number(it.balanceCredit || 0);
                     } else if (tableName === 'sales') {
-                        if (!it.date && it.timestamp) it.date = it.timestamp;
-                        if (!it.date && it.sale_date) it.date = it.sale_date;
-                        if (!it.paymentMethod && it.payment_method) it.paymentMethod = it.payment_method;
+                        it.saleNumber = parseInt(it.saleNumber, 10) || it.id;
+                        it.terminal_id = it.terminal_id || 'PC-1';
+                        it.date = it.date || it.timestamp || it.sale_date || it.createdAt || new Date().toISOString();
+                        it.paymentMethod = it.paymentMethod || it.payment_method || 'cash';
                         if (!it.customerId && it.customer_id) it.customerId = it.customer_id;
                         if (typeof it.items === 'object' && it.items !== null) it.items = JSON.stringify(it.items);
-                        it.is_synced = 0;
+                        if (typeof it.paymentDetails === 'object' && it.paymentDetails !== null) it.paymentDetails = JSON.stringify(it.paymentDetails);
+                    } else if (tableName === 'cashRegisters') {
+                        it.terminal_id = it.terminal_id || 'PC-1';
+                        it.initialAmount = Number(it.initialAmount !== undefined ? it.initialAmount : (it.initialBalance || 0));
+                        it.finalAmount = Number(it.finalAmount !== undefined ? it.finalAmount : (it.finalBalance || 0));
+                    } else if (tableName === 'cashMovements') {
+                        it.terminal_id = it.terminal_id || 'PC-1';
+                        it.description = (it.description && it.description !== 'null') ? it.description : (it.reason || 'Movimiento de caja');
                     } else if (tableName === 'purchases') {
+                        it.terminal_id = it.terminal_id || 'PC-1';
                         if (!it.date && it.purchase_date) it.date = it.purchase_date;
                         if (!it.supplierId && it.supplier_id) it.supplierId = it.supplier_id;
                         if (typeof it.items === 'object' && it.items !== null) it.items = JSON.stringify(it.items);
+                    } else if (tableName === 'expenses') {
+                        it.terminal_id = it.terminal_id || 'PC-1';
+                        it.cashRegisterId = (it.cashRegisterId === 'null' || !it.cashRegisterId) ? null : Number(it.cashRegisterId);
+                        it.supplierId = (it.supplierId === 'null' || !it.supplierId) ? null : Number(it.supplierId);
                     }
 
                     return it;
@@ -328,7 +352,7 @@ router.post('/api/migration/import', requireRole('owner', 'admin'), async (req, 
                         if (itemColumns.length === 0) continue;
 
                         const placeholders = itemColumns.map(() => '?').join(',');
-                        const sql = `INSERT INTO ${table} (${itemColumns.join(',')}) VALUES (${placeholders})`;
+                        const sql = `INSERT OR REPLACE INTO ${table} (${itemColumns.join(',')}) VALUES (${placeholders})`;
 
                         for (const item of items) {
                             // Reasignar llaves foráneas si los padres fueron remapeados

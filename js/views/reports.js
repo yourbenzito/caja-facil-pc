@@ -2,6 +2,7 @@ const ReportsView = {
     currentReport: 'daily',
     selectedTerminal: 'all',
     selectedQuickPeriod: 'daily',
+    selectedBusinessId: 'all',
     _prevLightTheme: 'default',
     _dailyChartData: null,
     activeCharts: [],
@@ -151,6 +152,19 @@ const ReportsView = {
                         💻 PC 2
                     </button>
                 </div>
+
+                <!-- GRUPO 3: ACCIONES DE EXPORTACIÓN E IMPRESIÓN -->
+                <div class="reports-control-group" style="margin-left: auto; display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-sm" onclick="ReportsView.exportActiveReportPDF()" style="font-weight: 800; border-radius: 6px; padding: 0.35rem 0.65rem; font-size: 0.78rem; display: flex; align-items: center; gap: 0.3rem; background: #fef2f2; border: 1.5px solid #fecaca; color: #dc2626; cursor: pointer; transition: all 0.2s;" title="Descargar informe del reporte activo en PDF">
+                        <span>📄</span> <span>Informe PDF</span>
+                    </button>
+                    <button type="button" class="btn btn-sm" onclick="ReportsView.exportActiveReportExcel()" style="font-weight: 800; border-radius: 6px; padding: 0.35rem 0.65rem; font-size: 0.78rem; display: flex; align-items: center; gap: 0.3rem; background: #ecfdf5; border: 1.5px solid #a7f3d0; color: #047857; cursor: pointer; transition: all 0.2s;" title="Descargar planilla Excel con los datos del reporte activo">
+                        <span>📊</span> <span>Excel</span>
+                    </button>
+                    <button type="button" class="btn btn-sm" onclick="ReportsView.printActiveReport()" style="font-weight: 800; border-radius: 6px; padding: 0.35rem 0.65rem; font-size: 0.78rem; display: flex; align-items: center; gap: 0.3rem; background: #eff6ff; border: 1.5px solid #bfdbfe; color: #1d4ed8; cursor: pointer; transition: all 0.2s;" title="Imprimir reporte en papel o PDF">
+                        <span>🖨️</span> <span>Imprimir</span>
+                    </button>
+                </div>
             </div>
         `;
     },
@@ -178,6 +192,36 @@ const ReportsView = {
     setTerminalFilter(termId) {
         this.selectedTerminal = termId;
         this.showReport(this.currentReport);
+    },
+
+    setBusinessFilter(bizId) {
+        this.selectedBusinessId = bizId;
+        this.showReport(this.currentReport);
+    },
+
+    renderBusinessSelector() {
+        const businesses = (typeof AuthManager !== 'undefined' && typeof AuthManager.getCachedBusinesses === 'function')
+            ? AuthManager.getCachedBusinesses()
+            : [];
+        
+        return `
+            <div class="reports-biz-selector" style="display: flex; align-items: center; gap: 0.5rem; background: rgba(255,255,255,0.06); padding: 0.4rem 0.75rem; border-radius: 0.75rem; border: 1.5px solid rgba(255,255,255,0.12);">
+                <span style="font-size: 1.05rem;">🏪</span>
+                <label for="reportsBizSelect" style="font-size: 0.8rem; font-weight: 700; color: #cbd5e1; margin: 0; white-space: nowrap;">Sucursal:</label>
+                <select id="reportsBizSelect" 
+                        onchange="ReportsView.setBusinessFilter(this.value)"
+                        style="background: #1e293b; color: #ffffff; border: 1px solid #475569; border-radius: 0.5rem; padding: 0.35rem 0.65rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; outline: none;">
+                    <option value="all" ${this.selectedBusinessId === 'all' ? 'selected' : ''}>🌐 Todas las sucursales (Consolidado)</option>
+                    ${businesses.map(b => {
+                        const bId = String(b.local_id || b.id);
+                        const isSel = String(this.selectedBusinessId) === bId;
+                        const name = b.name || `Sucursal #${bId}`;
+                        const safeName = typeof safeHTML === 'function' ? safeHTML(name) : name;
+                        return `<option value="${bId}" ${isSel ? 'selected' : ''}>📍 ${safeName}</option>`;
+                    }).join('')}
+                </select>
+            </div>
+        `;
     },
 
     toggleTheme() {
@@ -223,6 +267,28 @@ const ReportsView = {
 
     async render() {
         this.destroy(); // Limpiar antes de renderizar
+
+        // Validación de permisos: Solo el Dueño (owner) o los roles expresamente autorizados por él
+        if (typeof PermissionService !== 'undefined' && typeof PermissionService.can === 'function') {
+            if (!PermissionService.can('nav.reports')) {
+                return `
+                    <div class="reports-shell" style="display: flex; justify-content: center; align-items: center; min-height: 480px; padding: 2rem;">
+                        <div style="background: #ffffff; border: 1.5px solid #cbd5e1; border-radius: 1.5rem; padding: 2.5rem; max-width: 520px; text-align: center; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);">
+                            <div style="font-size: 3.5rem; margin-bottom: 1rem;">🔒</div>
+                            <h2 style="font-size: 1.4rem; font-weight: 850; color: #0f172a; margin: 0 0 0.5rem 0;">Acceso Restringido a Reportes</h2>
+                            <p style="color: #64748b; font-size: 0.95rem; line-height: 1.5; margin: 0 0 1.25rem 0;">
+                                El módulo de análisis financiero, márgenes y balance contable está protegido y reservado por defecto para el <strong>Propietario / Dueño</strong> del negocio.
+                            </p>
+                            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 1rem; font-size: 0.85rem; color: #475569; line-height: 1.4; text-align: left;">
+                                💡 <strong>¿Necesitas revisar métricas de tu turno?</strong><br>
+                                Solicita al Propietario que habilite el permiso de <em>Reportes y Finanzas</em> para tu rol desde <strong>Configuración ➔ Personal y Permisos</strong>.
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
         const activeCategory = this.getCategoryForReport(this.currentReport);
         const currentBiz = (typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentBusiness === 'function') 
             ? AuthManager.getCurrentBusiness() 
@@ -243,9 +309,7 @@ const ReportsView = {
                         <p class="reports-subtitle">Supervisión estratégica de ventas, márgenes comerciales, inventario y auditoría contable en tiempo real.</p>
                     </div>
                     <div class="reports-header-right">
-                        <button class="btn btn-secondary btn-reports-refresh" onclick="ReportsView.showReport(ReportsView.currentReport)" title="Recargar datos actualizados">
-                            🔄 Actualizar
-                        </button>
+                        ${this.renderBusinessSelector()}
                     </div>
                 </div>
 
@@ -550,8 +614,16 @@ const ReportsView = {
         const startOfDay = new Date(`${dateStr}T00:00:00`);
         const endOfDay = new Date(`${dateStr}T23:59:59`);
 
-        // Filtro por Terminal (PC-1 / PC-2 / Todo el Negocio)
+        // Filtro por Sucursal / Negocio
         let activeSales = report.sales || [];
+        if (this.selectedBusinessId && this.selectedBusinessId !== 'all') {
+            activeSales = activeSales.filter(s => {
+                const bId = s.business_id || s.businessId || 1;
+                return String(bId) === String(this.selectedBusinessId);
+            });
+        }
+
+        // Filtro por Terminal (PC-1 / PC-2 / Todo el Negocio)
         if (this.selectedTerminal && this.selectedTerminal !== 'all') {
             activeSales = activeSales.filter(s => {
                 const tId = s.terminal_id || s.terminalId || s.terminal || 'PC-1';
@@ -563,7 +635,7 @@ const ReportsView = {
         this._lastDailyReportSales = activeSales;
         this._lastDailyDateStr = dateStr;
 
-        // Recalcular montos si hay filtro activo por terminal
+        // Recalcular montos si hay filtro activo por terminal o sucursal
         let totalAmountCalc = report.totalAmount || 0;
         let totalSalesCount = report.totalSales || 0;
         let totalNetoCalc = report.totalNeto || 0;
@@ -571,7 +643,7 @@ const ReportsView = {
         let totalCostNetCalc = report.totalCostNet || 0;
         let operationalExpensesCalc = report.operationalExpenses || 0;
 
-        if (this.selectedTerminal && this.selectedTerminal !== 'all') {
+        if ((this.selectedTerminal && this.selectedTerminal !== 'all') || (this.selectedBusinessId && this.selectedBusinessId !== 'all')) {
             totalAmountCalc = 0;
             totalNetoCalc = 0;
             ivaDebitoCalc = 0;
@@ -818,16 +890,48 @@ const ReportsView = {
                 <!-- KPI 1: TOTAL VENDIDO (BRUTO) -->
                 <div class="reports-kpi-card" style="border-top: 3.5px solid #3b82f6; cursor: pointer;" onclick="ReportsView.openKpiDrilldownModal('sales')" title="Total de dinero generado por las ventas antes de descontar costos de mercadería o gastos. Toca para ver cada ticket vendido.">
                     <div class="reports-kpi-top">
-                        <span class="reports-kpi-title">💰 Total Vendido (Bruto)</span>
+                        <span class="reports-kpi-title">💰 Total Vendido</span>
                         ${percBadgeHtml}
                     </div>
                     <div class="reports-kpi-value" style="color: #2563eb;">${formatCLP(totalAmountCalc)}</div>
                     <div class="reports-kpi-bottom">
-                        <span>${totalSalesCount} ventas registradas</span>
-                        <span>Ticket prom: <strong>${formatCLP(avgTicket)}</strong></span>
+                        <span>Ingreso bruto del día</span>
+                        <span><strong>${totalSalesCount}</strong> transacciones</span>
                     </div>
                     <div style="margin-top: 0.5rem; text-align: right;">
                         <span class="kpi-drilldown-hint">🔍 Clic para ver desglose</span>
+                    </div>
+                </div>
+
+                <!-- KPI: CUÁNTAS VENTAS HAGO (CANTIDAD TOTAL DE VENTAS) -->
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #0284c7; cursor: pointer;" onclick="ReportsView.openKpiDrilldownModal('sales')" title="Cantidad total de ventas registradas hoy. Toca para ver la lista de cada ticket vendido.">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">🧾 Ventas Realizadas</span>
+                        <span class="trend-badge neutral">${totalUnitsSold} unid. vendidas</span>
+                    </div>
+                    <div class="reports-kpi-value" style="color: #0284c7;">${totalSalesCount} <span style="font-size: 1rem; font-weight: 700; color: var(--secondary);">ventas</span></div>
+                    <div class="reports-kpi-bottom">
+                        <span>Canasta: <strong>${avgBasket} un/ticket</strong></span>
+                        <span style="color: #0284c7; font-weight: 700;">${cancelledCount > 0 ? `${cancelledCount} anulada(s)` : '100% efectivas'}</span>
+                    </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver tickets</span>
+                    </div>
+                </div>
+
+                <!-- KPI: TICKET PROMEDIO DE VENTA -->
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #6366f1; cursor: pointer;" onclick="ReportsView.openKpiDrilldownModal('sales')" title="Ticket promedio de venta: Monto medio gastado por cada cliente en cada compra realizada hoy.">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">🎯 Ticket Promedio</span>
+                        <span class="trend-badge positive">Por venta</span>
+                    </div>
+                    <div class="reports-kpi-value" style="color: #4f46e5;">${formatCLP(avgTicket)}</div>
+                    <div class="reports-kpi-bottom">
+                        <span>Promedio por cliente</span>
+                        <span>Ventas: <strong>${totalSalesCount}</strong></span>
+                    </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver tickets</span>
                     </div>
                 </div>
 
@@ -848,7 +952,7 @@ const ReportsView = {
                 </div>
 
                 <!-- KPI 3: FLUJO NETO EN CAJA -->
-                <div class="reports-kpi-card" style="border-top: 3.5px solid #8b5cf6;" title="Efectivo y pagos que realmente ingresaron a caja menos los retiros o gastos operativos del día.">
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #8b5cf6; cursor: pointer;" onclick="ReportsView.openKpiDrilldownModal('cashFlow')" title="Efectivo y pagos que realmente ingresaron a caja menos los retiros o gastos operativos del día. Toca para ver el balance de entradas y salidas.">
                     <div class="reports-kpi-top">
                         <span class="reports-kpi-title">💵 Flujo Neto en Caja</span>
                         <span class="trend-badge ${netCashBalance >= 0 ? 'positive' : 'negative'}">
@@ -861,7 +965,7 @@ const ReportsView = {
                         <span style="color: #dc2626;">Gastos: -${formatCLP(operationalExpensesCalc)}</span>
                     </div>
                     <div style="margin-top: 0.5rem; text-align: right;">
-                        <span class="kpi-drilldown-hint" onclick="event.stopPropagation(); App.navigate('cash');">🔍 Ir a módulo Caja</span>
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver desglose</span>
                     </div>
                 </div>
 
@@ -975,51 +1079,16 @@ const ReportsView = {
                         <small style="font-size: 0.7rem; color: var(--secondary);">Cuenta Bancaria</small>
                     </div>
 
-                    <!-- Fiados otorgados -->
-                    <div style="padding: 0.75rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 0.65rem;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 0.8rem; font-weight: 800; color: #b91c1c;">📓 FIADOS DEL DÍA</span>
-                        </div>
-                        <div style="font-size: 1.25rem; font-weight: 900; color: #b91c1c; margin-top: 0.2rem;">${formatCLP(paymentMethods.pending)}</div>
-                        <small style="font-size: 0.7rem; color: var(--secondary);">Ventas a crédito por cobrar</small>
-                    </div>
-
-                    <!-- Abonos cobrados -->
-                    <div style="padding: 0.75rem 1rem; background: rgba(16, 185, 129, 0.12); border: 1.5px solid rgba(16, 185, 129, 0.4); border-radius: 0.65rem;">
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                            <span style="font-size: 0.8rem; font-weight: 800; color: #047857;">🤝 ABONOS RECIBIDOS</span>
-                        </div>
-                        <div style="font-size: 1.25rem; font-weight: 900; color: #047857; margin-top: 0.2rem;">+${formatCLP(totalDebtPaymentsToday)}</div>
-                        <small style="font-size: 0.7rem; color: var(--secondary);">Cobro de deudas viejas</small>
-                    </div>
                 </div>
             </div>
 
-            <!-- FILA 3: CRÉDITOS, DEVOLUCIONES Y ALERTAS DE REPOSICIÓN -->
+            <!-- FILA 3: CONTROL OPERATIVO & ALERTAS -->
             <div style="margin-bottom: 1.25rem;">
                 <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem;">
-                    <h4 style="margin: 0 0 0.85rem 0; font-size: 0.95rem;">🤝 Movimientos Financieros Especiales & Alertas</h4>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem;">
-                        <!-- Clickeable: Fiados anotados hoy -->
-                        <div style="padding: 0.85rem 1rem; background: rgba(239, 68, 68, 0.08); border-radius: 0.75rem; border: 1.5px solid rgba(239, 68, 68, 0.25); cursor: pointer; display: flex; justify-content: space-between; align-items: center;" 
-                             onclick="ReportsView.showDailyFiadosModal('${dateStr}')" title="Ver deudas otorgadas hoy">
-                            <div>
-                                <div style="font-weight: 800; color: #dc2626; font-size: 0.85rem;">📝 Fiados Otorgados Hoy 🔍</div>
-                                <div style="font-size: 0.75rem; color: var(--secondary);">Ver qué clientes fiaron</div>
-                            </div>
-                            <div style="font-size: 1.25rem; font-weight: 900; color: #dc2626;">${formatCLP(paymentMethods.pending)}</div>
-                        </div>
-
-                        <!-- Clickeable: Abonos recibidos hoy -->
-                        <div style="padding: 0.85rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem; cursor: pointer; display: flex; justify-content: space-between; align-items: center;"
-                             onclick="ReportsView.showDailyPaymentsModal('${dateStr}')"
-                             title="Haz clic para ver qué clientes abonaron/pagaron deudas hoy">
-                            <div>
-                                <div style="font-weight: 800; color: #059669; font-size: 0.85rem;">🤝 Deudas Cobradas Hoy (${paymentsReceivedToday.length}) 🔍</div>
-                                <div style="font-size: 0.75rem; color: var(--secondary);">Ver quién vino a abonar</div>
-                            </div>
-                            <div style="font-size: 1.25rem; font-weight: 900; color: #059669;">+${formatCLP(totalDebtPaymentsToday)}</div>
-                        </div>
+                    <h4 style="margin: 0 0 0.85rem 0; font-size: 0.95rem; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem;">
+                        ⚠️ Control Operativo & Alertas de Tienda
+                    </h4>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 0.85rem;">
 
                         <!-- Devoluciones y Anulaciones -->
                         <div style="padding: 0.85rem 1rem; background: rgba(239, 68, 68, 0.05); border: 1px dashed rgba(239, 68, 68, 0.3); border-radius: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
@@ -1521,6 +1590,7 @@ const ReportsView = {
         const report = await ReportController.getWeeklySales(targetDate);
         this._lastWeeklyReportSales = report.sales || [];
         this._lastWeeklyDateStr = dateStr;
+        this._lastWeeklyReport = report;
 
         // 1. Comparativa vs Semana Anterior
         const prevWeekDate = new Date(targetDate.getTime() - (7 * 86400000));
@@ -1666,102 +1736,128 @@ const ReportsView = {
                 pdfAction: `ReportsView.exportToPDF('weekly', ${JSON.stringify(report).replace(/"/g, '&quot;')})`
             })}
 
-            <!-- SECCIÓN: COMPARATIVA DE RENDIMIENTO DEL NEGOCIO (ESTA SEMANA VS SEMANA PASADA) -->
-            <div class="card glass-panel" style="padding: 1.25rem; border-radius: 1rem; margin-bottom: 1.25rem; background: var(--surface-content, #ffffff); border: 1.5px solid var(--border);">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
-                    <div>
-                        <h4 style="margin: 0; font-size: 1.05rem; font-weight: 850; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem;">
-                            📊 Comparativa de Rendimiento (Esta Semana vs. Semana Anterior)
-                        </h4>
-                        <p style="margin: 0.2rem 0 0 0; font-size: 0.82rem; color: var(--secondary);">
-                            Evolución de tus ingresos, clientes atendidos y ganancia real respecto a los 7 días anteriores
-                        </p>
+            <!-- CUADRÍCULA DE KPIS SEMANALES CONSOLIDADA (INTERACTIVA CON MODALES DRILLDOWN) -->
+            <div class="reports-kpi-grid" style="margin-bottom: 1.25rem;">
+                <!-- KPI 1: TOTAL VENDIDO SEMANAL -->
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #3b82f6; cursor: pointer;" onclick="ReportsView.openWeeklyKpiDrilldown('sales')" title="Toca para ver el desglose de ventas día por día (Lunes a Domingo).">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">💰 Total Vendido Semanal</span>
+                        ${percBadgeHtml}
                     </div>
-                    <div>${percBadgeHtml}</div>
-                </div>
-
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.85rem;">
-                    <!-- Métrica 1: Ventas Brutas -->
-                    <div style="background: var(--surface, #f8fafc); border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.85rem 1rem;">
-                        <span style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">💰 Total Vendido</span>
-                        <div style="font-size: 1.35rem; font-weight: 950; color: #2563eb; margin: 0.2rem 0;">
-                            ${formatCLP(report.totalAmount)}
-                        </div>
-                        <div style="font-size: 0.75rem; color: ${diffAmount >= 0 ? '#059669' : '#dc2626'}; font-weight: 750;">
-                            ${diffAmount >= 0 ? '▲ +' : '▼ -'}${formatCLP(Math.abs(diffAmount))} vs semana pasada (${formatCLP(prevWeekReport.totalAmount)})
-                        </div>
+                    <div class="reports-kpi-value" style="color: #2563eb;">${formatCLP(report.totalAmount)}</div>
+                    <div class="reports-kpi-bottom">
+                        <span>${report.totalSales} transacciones</span>
+                        <span style="color: ${diffAmount >= 0 ? '#059669' : '#dc2626'}; font-weight: 700;">
+                            ${diffAmount >= 0 ? '▲ +' : '▼ -'}${formatCLP(Math.abs(diffAmount))} vs sem. anterior
+                        </span>
                     </div>
-
-                    <!-- Métrica 2: Cantidad de Ventas / Clientes -->
-                    <div style="background: var(--surface, #f8fafc); border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.85rem 1rem;">
-                        <span style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">🛒 Clientes Atendidos</span>
-                        <div style="font-size: 1.35rem; font-weight: 950; color: var(--text-main); margin: 0.2rem 0;">
-                            ${report.totalSales} ventas
-                        </div>
-                        <div style="font-size: 0.75rem; color: ${salesDiffCount >= 0 ? '#059669' : '#dc2626'}; font-weight: 750;">
-                            ${salesDiffCount >= 0 ? '▲ +' : '▼ '}${salesDiffCount} ventas vs semana pasada (${prevWeekReport.totalSales || 0})
-                        </div>
-                    </div>
-
-                    <!-- Métrica 3: Ganancia Comercial Limpia -->
-                    <div style="background: var(--surface, #f8fafc); border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.85rem 1rem;">
-                        <span style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">💎 Ganancia en el Bolsillo</span>
-                        <div style="font-size: 1.35rem; font-weight: 950; color: #059669; margin: 0.2rem 0;">
-                            ${formatCLP(commercialProfit)}
-                        </div>
-                        <div style="font-size: 0.75rem; color: ${profitDiff >= 0 ? '#059669' : '#dc2626'}; font-weight: 750;">
-                            ${profitDiff >= 0 ? '▲ +' : '▼ -'}${formatCLP(Math.abs(profitDiff))} vs semana pasada (${formatCLP(prevCommercialProfit)})
-                        </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver días</span>
                     </div>
                 </div>
-            </div>
 
-            <!-- FILA 1: TARJETAS PRINCIPALES SEMANALES (OPCIÓN A: UNIFORMES Y ELEGANTES) -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
-                <!-- Total Vendido Semanal -->
-                <div style="padding: 1rem; background: var(--surface-content, #ffffff); border: 1px solid var(--border); border-top: 3.5px solid #3b82f6; border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">Total Vendido Semanal</div>
-                    <div style="font-size: 1.35rem; font-weight: 900; color: #2563eb; margin: 0.2rem 0;">${formatCLP(report.totalAmount)}</div>
-                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">${report.totalSales} ventas | Ticket prom: ${formatCLP(avgTicket)}</div>
+                <!-- KPI: CUÁNTAS VENTAS HAGO EN LA SEMANA -->
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #0284c7; cursor: pointer;" onclick="ReportsView.openWeeklyKpiDrilldown('sales')" title="Total de ventas registradas en la semana. Toca para ver el desglose día por día.">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">🧾 Ventas de la Semana</span>
+                        <span class="trend-badge ${salesDiffCount >= 0 ? 'positive' : 'negative'}">
+                            ${salesDiffCount >= 0 ? `▲ +${salesDiffCount}` : `▼ ${salesDiffCount}`} vs sem. ant.
+                        </span>
+                    </div>
+                    <div class="reports-kpi-value" style="color: #0284c7;">${report.totalSales} <span style="font-size: 1rem; font-weight: 700; color: var(--secondary);">ventas</span></div>
+                    <div class="reports-kpi-bottom">
+                        <span>Total de 7 días</span>
+                        <span><strong>${totalUnitsSold}</strong> unid. vendidas</span>
+                    </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver días</span>
+                    </div>
                 </div>
 
-                <!-- Ganancia Comercial Semanal -->
-                <div style="padding: 1rem; background: var(--surface-content, #ffffff); border: 1px solid var(--border); border-top: 3.5px solid #10b981; border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">💎 Ganancia Comercial</div>
-                    <div style="font-size: 1.35rem; font-weight: 900; color: #059669; margin: 0.2rem 0;">${formatCLP(commercialProfit)}</div>
-                    <div style="font-size: 0.72rem; color: #059669; font-weight: 750;">Margen 7 días: ${commercialMargin}%</div>
+                <!-- KPI: TICKET PROMEDIO SEMANAL -->
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #6366f1; cursor: pointer;" onclick="ReportsView.openWeeklyKpiDrilldown('sales')" title="Ticket promedio de venta: Monto medio cobrado por cada venta durante los 7 días.">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">🎯 Ticket Promedio</span>
+                        <span class="trend-badge positive">Semanal</span>
+                    </div>
+                    <div class="reports-kpi-value" style="color: #4f46e5;">${formatCLP(avgTicket)}</div>
+                    <div class="reports-kpi-bottom">
+                        <span>Canasta: <strong>${avgBasket} un/ticket</strong></span>
+                        <span>Prom. por compra</span>
+                    </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver días</span>
+                    </div>
                 </div>
 
-                <!-- Gastos Semanales -->
-                <div style="padding: 1rem; background: var(--surface-content, #ffffff); border: 1px solid var(--border); border-top: 3.5px solid #ef4444; border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">💸 Gastos Operativos</div>
-                    <div style="font-size: 1.35rem; font-weight: 900; color: #dc2626; margin: 0.2rem 0;">${formatCLP(report.operationalExpenses || 0)}</div>
-                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">Egresos de caja en 7 días</div>
+                <!-- KPI 2: GANANCIA COMERCIAL LIMPIA -->
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #10b981; cursor: pointer;" onclick="ReportsView.openWeeklyKpiDrilldown('profit')" title="Toca para ver los productos que generaron mayor ganancia en la semana.">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">💎 Ganancia Comercial</span>
+                        <span class="trend-badge positive">Margen ${commercialMargin}%</span>
+                    </div>
+                    <div class="reports-kpi-value" style="color: #059669;">${formatCLP(commercialProfit)}</div>
+                    <div class="reports-kpi-bottom">
+                        <span>Utilidad limpia de 7 días</span>
+                        <span style="color: ${profitDiff >= 0 ? '#059669' : '#dc2626'}; font-weight: 700;">
+                            ${profitDiff >= 0 ? '▲ +' : '▼ -'}${formatCLP(Math.abs(profitDiff))} vs sem. anterior
+                        </span>
+                    </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver por producto</span>
+                    </div>
                 </div>
 
-                <!-- Flujo Neto Semanal -->
-                <div style="padding: 1rem; background: var(--surface-content, #ffffff); border: 1px solid var(--border); border-top: 3.5px solid #8b5cf6; border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">💵 Flujo Neto en Caja</div>
-                    <div style="font-size: 1.35rem; font-weight: 900; color: #7c3aed; margin: 0.2rem 0;">${formatCLP(netCashBalance)}</div>
-                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">Entradas reales - Gastos</div>
+                <!-- KPI 3: GASTOS OPERATIVOS -->
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #ef4444; cursor: pointer;" onclick="ReportsView.openWeeklyKpiDrilldown('expenses')" title="Toca para ver la lista de gastos y retiros de la semana.">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">💸 Gastos Operativos</span>
+                        <span class="trend-badge ${report.operationalExpenses > 0 ? 'negative' : 'neutral'}">
+                            ${report.operationalExpenses > 0 ? '▼ Egresos' : '● Sin gastos'}
+                        </span>
+                    </div>
+                    <div class="reports-kpi-value" style="color: #dc2626;">-${formatCLP(report.operationalExpenses || 0)}</div>
+                    <div class="reports-kpi-bottom">
+                        <span>Cuentas, insumos y retiros</span>
+                        <span>7 días analizados</span>
+                    </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver gastos</span>
+                    </div>
                 </div>
 
-                <!-- Resumen Fiscal Semanal -->
-                <div style="padding: 1rem; background: var(--surface-content, #ffffff); border: 1px solid var(--border); border-top: 3.5px solid #f59e0b; border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">📑 Fiscal Semanal (IVA)</div>
-                    <div style="font-size: 0.85rem; font-weight: 800; color: #d97706; margin-top: 0.25rem;">Débito: <strong>${formatCLP(report.ivaDebito)}</strong></div>
-                    <div style="font-size: 0.85rem; font-weight: 800; color: #059669;">Crédito: <strong>${formatCLP(report.ivaCredito)}</strong></div>
+                <!-- KPI 4: FLUJO NETO EN CAJA -->
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #8b5cf6; cursor: pointer;" onclick="ReportsView.openWeeklyKpiDrilldown('cashFlow')" title="Toca para ver el balance entre recaudación real y egresos semanales.">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">💵 Flujo Neto en Caja</span>
+                        <span class="trend-badge ${netCashBalance >= 0 ? 'positive' : 'negative'}">
+                            ${netCashBalance >= 0 ? '▲ Superávit' : '▼ Déficit'}
+                        </span>
+                    </div>
+                    <div class="reports-kpi-value" style="color: #7c3aed;">${formatCLP(netCashBalance)}</div>
+                    <div class="reports-kpi-bottom">
+                        <span>Entradas: +${formatCLP(totalCashInflow)}</span>
+                        <span style="color: #dc2626;">Gastos: -${formatCLP(report.operationalExpenses || 0)}</span>
+                    </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver balance</span>
+                    </div>
                 </div>
 
-                <!-- Canasta y Descuentos -->
-                <div style="padding: 1rem; background: var(--surface-content, #ffffff); border: 1px solid var(--border); border-top: 3.5px solid #6366f1; border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">🛒 Canasta Semanal</div>
-                    <div style="font-size: 1.2rem; font-weight: 900; color: var(--text-main); margin: 0.2rem 0;">${avgBasket} un/ticket</div>
-                    <div style="font-size: 0.72rem; color: #db2777; font-weight: 700;">Desc: ${formatCLP(totalDiscountsWeek)}</div>
-                </div>
-            </div>               <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">🛒 Canasta Semanal</div>
-                    <div style="font-size: 1.2rem; font-weight: 900; color: var(--text-main); margin: 0.2rem 0;">${avgBasket} un/ticket</div>
-                    <div style="font-size: 0.72rem; color: #db2777; font-weight: 700;">Desc: ${formatCLP(totalDiscountsWeek)}</div>
+                <!-- KPI 5: CLIENTES Y CANASTA PROMEDIO -->
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #6366f1; cursor: pointer;" onclick="ReportsView.openWeeklyKpiDrilldown('basket')" title="Toca para ver el análisis de clientes y canasta promedio por día.">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">🛒 Clientes & Canasta</span>
+                        <span class="trend-badge neutral">Semanal</span>
+                    </div>
+                    <div class="reports-kpi-value" style="color: #4f46e5;">${avgBasket} <small style="font-size: 0.85rem; font-weight: 700; color: var(--secondary);">un/ticket</small></div>
+                    <div class="reports-kpi-bottom">
+                        <span>${report.totalSales} clientes atendidos</span>
+                        <span style="color: #db2777; font-weight: 700;">Desc: ${formatCLP(totalDiscountsWeek)}</span>
+                    </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver canasta</span>
+                    </div>
                 </div>
             </div>
 
@@ -1945,6 +2041,9 @@ const ReportsView = {
         const report = await ReportController.getMonthlySales(currentYear, currentMonth);
         this._lastMonthlyReportSales = report.sales || [];
         this._lastMonthlyDateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+        this._lastMonthlyReport = report;
+        this._lastMonthlyYear = currentYear;
+        this._lastMonthlyMonth = currentMonth;
 
         const startOfMonth = new Date(currentYear, currentMonth, 1);
         const endOfMonth = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59, 999);
@@ -2107,48 +2206,137 @@ const ReportsView = {
                 </div>
             </div>
 
-            <!-- FILA 1: TARJETAS PRINCIPALES DEL MES -->
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0.75rem; margin-bottom: 1.25rem;">
+            <!-- FILA 1: TARJETAS PRINCIPALES DEL MES (INTERACTIVAS CON MODALES DRILLDOWN) -->
+            <div class="reports-kpi-grid" style="margin-bottom: 1.25rem;">
                 <!-- Total Vendido Mes -->
-                <div style="padding: 0.85rem 1rem; background: rgba(59, 130, 246, 0.08); border: 1.5px solid rgba(59, 130, 246, 0.3); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.72rem; color: #2563eb; font-weight: 800; text-transform: uppercase;">Total Vendido Mes</div>
-                    <div style="font-size: 1.4rem; font-weight: 900; color: #2563eb; margin: 0.2rem 0;">${formatCLP(report.totalAmount)}</div>
-                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">${report.totalSales} ventas | Prom ${formatCLP(dailyAvg)}/día</div>
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #3b82f6; cursor: pointer;" onclick="ReportsView.openMonthlyKpiDrilldown('sales')" title="Toca para ver el desglose de ventas día por día en el mes.">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">💰 Total Vendido Mes</span>
+                        ${percBadgeHtml}
+                    </div>
+                    <div class="reports-kpi-value" style="color: #2563eb;">${formatCLP(report.totalAmount)}</div>
+                    <div class="reports-kpi-bottom">
+                        <span>Prom. diario: <strong>${formatCLP(dailyAvg)}/día</strong></span>
+                        <span>${daysInPeriod} días evaluados</span>
+                    </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver días</span>
+                    </div>
+                </div>
+
+                <!-- KPI: CUÁNTAS VENTAS HAGO EN EL MES -->
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #0284c7; cursor: pointer;" onclick="ReportsView.openMonthlyKpiDrilldown('sales')" title="Cantidad total de ventas registradas en el mes. Toca para ver el desglose diario.">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">🧾 Ventas del Mes</span>
+                        <span class="trend-badge neutral">${daysInPeriod} días</span>
+                    </div>
+                    <div class="reports-kpi-value" style="color: #0284c7;">${report.totalSales} <span style="font-size: 1rem; font-weight: 700; color: var(--secondary);">ventas</span></div>
+                    <div class="reports-kpi-bottom">
+                        <span>${daysInPeriod > 0 ? Math.round(report.totalSales / daysInPeriod) : 0} ventas/día prom.</span>
+                        <span><strong>${totalUnitsSold}</strong> unid. vendidas</span>
+                    </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver días</span>
+                    </div>
+                </div>
+
+                <!-- KPI: TICKET PROMEDIO MENSUAL -->
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #6366f1; cursor: pointer;" onclick="ReportsView.openMonthlyKpiDrilldown('sales')" title="Ticket promedio de venta: Monto medio cobrado por cada compra durante todo el mes.">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">🎯 Ticket Promedio</span>
+                        <span class="trend-badge positive">Mensual</span>
+                    </div>
+                    <div class="reports-kpi-value" style="color: #4f46e5;">${formatCLP(avgTicket)}</div>
+                    <div class="reports-kpi-bottom">
+                        <span>Canasta: <strong>${avgBasket} un/ticket</strong></span>
+                        <span>Prom. por compra</span>
+                    </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver días</span>
+                    </div>
                 </div>
 
                 <!-- Ganancia Comercial en Ventas -->
-                <div style="padding: 0.85rem 1rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid rgba(16, 185, 129, 0.3); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.72rem; color: #059669; font-weight: 800; text-transform: uppercase;">💎 Ganancia en Ventas</div>
-                    <div style="font-size: 1.4rem; font-weight: 900; color: #059669; margin: 0.2rem 0;">${formatCLP(commercialProfit)}</div>
-                    <div style="font-size: 0.72rem; color: #059669; font-weight: 700;">Margen comercial: ${commercialMargin}%</div>
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #10b981; cursor: pointer;" onclick="ReportsView.openMonthlyKpiDrilldown('profit')" title="Toca para ver el ranking de rentabilidad de productos del mes.">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">💎 Ganancia en Ventas</span>
+                        <span class="trend-badge positive">Margen ${commercialMargin}%</span>
+                    </div>
+                    <div class="reports-kpi-value" style="color: #059669;">${formatCLP(commercialProfit)}</div>
+                    <div class="reports-kpi-bottom">
+                        <span>Utilidad bruta comercial</span>
+                        <span>Costo: <strong>${formatCLP(report.totalCostNet || 0)}</strong></span>
+                    </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver por producto</span>
+                    </div>
                 </div>
 
                 <!-- Gastos del Mes -->
-                <div style="padding: 0.85rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1.5px solid rgba(239, 68, 68, 0.3); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.72rem; color: #dc2626; font-weight: 800; text-transform: uppercase;">💸 Gastos Totales Mes</div>
-                    <div style="font-size: 1.4rem; font-weight: 900; color: #dc2626; margin: 0.2rem 0;">${formatCLP(report.operationalExpenses || 0)}</div>
-                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">Egresos y costos fijos</div>
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #ef4444; cursor: pointer;" onclick="ReportsView.openMonthlyKpiDrilldown('expenses')" title="Toca para ver la lista de gastos operativos del mes.">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">💸 Gastos Totales Mes</span>
+                        <span class="trend-badge ${(report.operationalExpenses || 0) > 0 ? 'negative' : 'neutral'}">
+                            ${(report.operationalExpenses || 0) > 0 ? '▼ Egresos' : '● Sin gastos'}
+                        </span>
+                    </div>
+                    <div class="reports-kpi-value" style="color: #dc2626;">-${formatCLP(report.operationalExpenses || 0)}</div>
+                    <div class="reports-kpi-bottom">
+                        <span>Cuentas, insumos y retiros</span>
+                        <span>Mes completo</span>
+                    </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver gastos</span>
+                    </div>
                 </div>
 
                 <!-- Utilidad Neta Real -->
-                <div style="padding: 0.85rem 1rem; background: rgba(139, 92, 246, 0.08); border: 1.5px solid rgba(139, 92, 246, 0.3); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.72rem; color: #7c3aed; font-weight: 800; text-transform: uppercase;">💰 Utilidad Neta Real</div>
-                    <div style="font-size: 1.4rem; font-weight: 900; color: #7c3aed; margin: 0.2rem 0;">${formatCLP(pocketProfit)}</div>
-                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">Ganancia menos gastos</div>
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #7c3aed; cursor: pointer;" onclick="ReportsView.openMonthlyKpiDrilldown('netProfit')" title="Toca para ver el Estado de Resultados consolidado del mes.">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">🏆 Utilidad Neta Real</span>
+                        <span class="trend-badge ${pocketProfit >= 0 ? 'positive' : 'negative'}">
+                            ${pocketProfit >= 0 ? '▲ En Bolsillo' : '▼ Déficit'}
+                        </span>
+                    </div>
+                    <div class="reports-kpi-value" style="color: #7c3aed;">${formatCLP(pocketProfit)}</div>
+                    <div class="reports-kpi-bottom">
+                        <span>Ganancia limpia menos gastos</span>
+                        <span style="color: #059669; font-weight: 700;">Libre disponible</span>
+                    </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver balance</span>
+                    </div>
                 </div>
 
                 <!-- Pérdidas y Mermas -->
-                <div style="padding: 0.85rem 1rem; background: ${report.monthlyLoss > 0 ? 'rgba(245, 158, 11, 0.1)' : 'var(--surface-content)'}; border: 1.5px solid ${report.monthlyLoss > 0 ? 'var(--warning)' : 'var(--border)'}; border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.72rem; color: ${report.monthlyLoss > 0 ? '#d97706' : 'var(--secondary)'}; font-weight: 800; text-transform: uppercase;">📦 Mermas / Pérdidas</div>
-                    <div style="font-size: 1.4rem; font-weight: 900; color: ${report.monthlyLoss > 0 ? '#d97706' : 'var(--text-main)'}; margin: 0.2rem 0;">${formatCLP(report.monthlyLoss || 0)}</div>
-                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">Consumo: ${formatCLP(report.monthlyConsumption || 0)}</div>
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #f59e0b; cursor: pointer;" onclick="ReportsView.openMonthlyKpiDrilldown('losses')" title="Toca para ver los productos descontados por pérdida o consumo.">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">📦 Mermas / Pérdidas</span>
+                        <span class="trend-badge ${(report.monthlyLoss || 0) > 0 ? 'warning' : 'neutral'}">
+                            ${(report.monthlyLoss || 0) > 0 ? '⚠️ Control' : '● Sin mermas'}
+                        </span>
+                    </div>
+                    <div class="reports-kpi-value" style="color: #d97706;">${formatCLP(report.monthlyLoss || 0)}</div>
+                    <div class="reports-kpi-bottom">
+                        <span>Consumo interno: ${formatCLP(report.monthlyConsumption || 0)}</span>
+                        <span>Costo mercadería</span>
+                    </div>
+                    <div style="margin-top: 0.5rem; text-align: right;">
+                        <span class="kpi-drilldown-hint">🔍 Clic para ver detalle</span>
+                    </div>
                 </div>
 
                 <!-- Proyección de Cierre de Mes -->
-                <div style="padding: 0.85rem 1rem; background: var(--surface-content); border: 1px solid var(--border); border-radius: 0.75rem; text-align: center;">
-                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 800; text-transform: uppercase;">🔮 Proyección Cierre</div>
-                    <div style="font-size: 1.4rem; font-weight: 900; color: var(--primary); margin: 0.2rem 0;">${formatCLP(monthProjection)}</div>
-                    <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600;">Estimado al día ${totalDaysInMonth}</div>
+                <div class="reports-kpi-card" style="border-top: 3.5px solid #6366f1;">
+                    <div class="reports-kpi-top">
+                        <span class="reports-kpi-title">🔮 Proyección Cierre</span>
+                        <span class="trend-badge neutral">Día ${totalDaysInMonth}</span>
+                    </div>
+                    <div class="reports-kpi-value" style="color: #4f46e5;">${formatCLP(monthProjection)}</div>
+                    <div class="reports-kpi-bottom">
+                        <span>Ritmo actual: ${formatCLP(dailyAvg)}/día</span>
+                        <span>Estimado mensual</span>
+                    </div>
                 </div>
             </div>
 
@@ -2170,14 +2358,7 @@ const ReportsView = {
                         <span style="font-size: 0.75rem; font-weight: 800; color: #b45309;">🏦 TRANSFERENCIAS / QR</span>
                         <div style="font-size: 1.2rem; font-weight: 900; color: #b45309; margin-top: 0.2rem;">${formatCLP(paymentMethods.other + paymentMethods.qr)}</div>
                     </div>
-                    <div style="padding: 0.75rem 1rem; background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 0.65rem;">
-                        <span style="font-size: 0.75rem; font-weight: 800; color: #b91c1c;">📓 FIADOS DEL MES</span>
-                        <div style="font-size: 1.2rem; font-weight: 900; color: #b91c1c; margin-top: 0.2rem;">${formatCLP(paymentMethods.pending)}</div>
-                    </div>
-                    <div style="padding: 0.75rem 1rem; background: rgba(16, 185, 129, 0.12); border: 1.5px solid rgba(16, 185, 129, 0.4); border-radius: 0.65rem;">
-                        <span style="font-size: 0.75rem; font-weight: 800; color: #047857;">🤝 ABONOS COBRADOS</span>
-                        <div style="font-size: 1.2rem; font-weight: 900; color: #047857; margin-top: 0.2rem;">+${formatCLP(totalDebtPaymentsMonth)}</div>
-                    </div>
+
                 </div>
             </div>
 
@@ -5448,6 +5629,74 @@ const ReportsView = {
                 </div>
             `;
             showModal(html, { title: '📓 Detalle de Fiados y Abonos del Día', width: '700px' });
+        } else if (type === 'cashFlow') {
+            const startOfDay = new Date(`${dateStr}T00:00:00`);
+            const endOfDay = new Date(`${dateStr}T23:59:59`);
+            let operationalExpensesList = [];
+            try {
+                if (typeof CashExpense !== 'undefined' && typeof CashExpense.getByDateRange === 'function') {
+                    operationalExpensesList = await CashExpense.getByDateRange(startOfDay, endOfDay) || [];
+                }
+            } catch (_) {}
+
+            const totalExpenses = operationalExpensesList.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+            const validSales = sales.filter(s => s.status !== 'cancelled');
+            const totalRecaudado = validSales.reduce((sum, s) => sum + (parseFloat(s.paidAmount !== undefined ? s.paidAmount : s.total) || 0), 0);
+            const netBalance = totalRecaudado - totalExpenses;
+
+            const html = `
+                <div style="padding: 0.5rem 0;">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1.25rem;">
+                        <div style="background:rgba(16,185,129,0.08); padding:0.85rem 1rem; border-radius:0.75rem; border:1px solid rgba(16,185,129,0.25);">
+                            <div style="font-size:0.75rem; font-weight:800; color:#059669; text-transform:uppercase;">💵 Total Ingresos Cobrados</div>
+                            <div style="font-size:1.4rem; font-weight:900; color:#059669;">+${formatCLP(totalRecaudado)}</div>
+                            <small style="color:var(--secondary); font-size:0.72rem;">Recaudación real del día</small>
+                        </div>
+                        <div style="background:rgba(239,68,68,0.08); padding:0.85rem 1rem; border-radius:0.75rem; border:1px solid rgba(239,68,68,0.25);">
+                            <div style="font-size:0.75rem; font-weight:800; color:#dc2626; text-transform:uppercase;">💸 Total Gastos y Retiros</div>
+                            <div style="font-size:1.4rem; font-weight:900; color:#dc2626;">-${formatCLP(totalExpenses)}</div>
+                            <small style="color:var(--secondary); font-size:0.72rem;">${operationalExpensesList.length} egreso(s) registrado(s)</small>
+                        </div>
+                    </div>
+
+                    <div style="padding: 0.75rem 1rem; background: var(--surface); border-radius: 0.75rem; border: 1.5px solid var(--border); margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: 850; font-size: 0.95rem; color: var(--text-main);">⚖️ Balance Neto en Mano:</span>
+                        <span style="font-size: 1.3rem; font-weight: 950; color: ${netBalance >= 0 ? '#059669' : '#dc2626'};">
+                            ${netBalance >= 0 ? '+' : ''}${formatCLP(netBalance)}
+                        </span>
+                    </div>
+
+                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.95rem; color: var(--text-main);">Detalle de Gastos / Retiros del Día:</h4>
+                    <div style="max-height: 40vh; overflow-y: auto; border: 1px solid var(--border); border-radius: 0.65rem;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                            <thead style="background: var(--surface);">
+                                <tr>
+                                    <th style="padding: 0.5rem 0.75rem; text-align: left;">Hora</th>
+                                    <th style="padding: 0.5rem 0.75rem; text-align: left;">Motivo / Descripción</th>
+                                    <th style="padding: 0.5rem 0.75rem; text-align: left;">Cajero</th>
+                                    <th style="padding: 0.5rem 0.75rem; text-align: right;">Monto</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${operationalExpensesList.length === 0 ? '<tr><td colspan="4" style="text-align:center; padding:1.5rem; color:var(--secondary);">No se registraron gastos operativos en esta jornada.</td></tr>' : ''}
+                                ${operationalExpensesList.map((e, idx) => {
+                                    const d = new Date(e.createdAt || e.date);
+                                    const timeStr = !isNaN(d.getTime()) ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '--:--';
+                                    return `
+                                        <tr style="border-bottom: 1px solid var(--border); background: ${idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.02)'};">
+                                            <td style="padding: 0.5rem 0.75rem; font-weight: 750;">${timeStr}</td>
+                                            <td style="padding: 0.5rem 0.75rem; font-weight: 700; color: var(--text-main);">${safeHTML(e.reason || e.description || 'Gasto operativo')}</td>
+                                            <td style="padding: 0.5rem 0.75rem; color: var(--secondary);">${safeHTML(e.username || e.user || 'Admin')}</td>
+                                            <td style="padding: 0.5rem 0.75rem; text-align: right; font-weight: 900; color: #dc2626;">-${formatCLP(e.amount)}</td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            showModal(html, { title: '💵 Balance y Flujo de Caja del Día', width: '680px' });
         } else if (type === 'supplierPayments') {
             const payments = this._lastSupplierPaymentsToday || [];
             const totalPaid = this._lastTotalSupplierPaidToday || 0;
@@ -5704,6 +5953,566 @@ const ReportsView = {
         showModal(content, { title, width: '700px' });
     },
 
+    async openWeeklyKpiDrilldown(type) {
+        const report = this._lastWeeklyReport || {};
+        const sales = this._lastWeeklyReportSales || (report.sales || []);
+        const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+        if (type === 'sales') {
+            const dailyBreakdown = report.dailyBreakdown || {};
+            const dailyList = Object.entries(dailyBreakdown).map(([key, data]) => {
+                const d = new Date(key + 'T12:00:00');
+                return {
+                    key,
+                    dayName: dayNames[d.getDay()],
+                    dateFormatted: `${d.getDate()}/${d.getMonth() + 1}`,
+                    ...data
+                };
+            });
+
+            const totalWeek = report.totalAmount || 1;
+            const html = `
+                <div style="padding: 0.5rem 0;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; padding:0.75rem 1rem; background:rgba(59,130,246,0.08); border-radius:0.75rem; border:1px solid rgba(59,130,246,0.25);">
+                        <div>
+                            <div style="font-size:0.75rem; color:#2563eb; font-weight:800; text-transform:uppercase;">Ventas Totales de la Semana</div>
+                            <div style="font-size:1.4rem; font-weight:900; color:#2563eb;">${formatCLP(report.totalAmount || 0)}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <span class="badge badge-primary" style="font-size:0.85rem;">${report.totalSales || 0} tickets emitidos</span>
+                        </div>
+                    </div>
+                    <div style="max-height: 55vh; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem;">
+                            <thead>
+                                <tr style="border-bottom: 2px solid var(--border); text-align: left; color: var(--secondary);">
+                                    <th style="padding: 0.6rem 0.75rem;">Día</th>
+                                    <th style="padding: 0.6rem 0.75rem;">Fecha</th>
+                                    <th style="padding: 0.6rem 0.75rem; text-align: center;">Tickets</th>
+                                    <th style="padding: 0.6rem 0.75rem; text-align: right;">Total Vendido</th>
+                                    <th style="padding: 0.6rem 0.75rem; text-align: center;">% Semana</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${dailyList.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--secondary);">Sin ventas registradas en la semana.</td></tr>' : ''}
+                                ${dailyList.map((d, idx) => {
+                                    const perc = totalWeek > 0 ? Math.round((d.total / totalWeek) * 100) : 0;
+                                    return `
+                                        <tr style="border-bottom: 1px solid var(--border); background: ${idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.02)'};">
+                                            <td style="padding: 0.65rem 0.75rem; font-weight: 850; color: var(--text-main);">${d.dayName}</td>
+                                            <td style="padding: 0.65rem 0.75rem; color: var(--secondary);">${d.dateFormatted}</td>
+                                            <td style="padding: 0.65rem 0.75rem; text-align: center; font-weight: 750;">${d.count || 0}</td>
+                                            <td style="padding: 0.65rem 0.75rem; text-align: right; font-weight: 900; color: #2563eb;">${formatCLP(d.total || 0)}</td>
+                                            <td style="padding: 0.65rem 0.75rem; text-align: center;">
+                                                <span class="badge ${perc >= 20 ? 'badge-success' : 'badge-secondary'}" style="font-size:0.75rem;">${perc}%</span>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            showModal(html, { title: '📊 Desglose de Ventas por Día (Semana)', width: '680px' });
+        } else if (type === 'profit') {
+            const productMap = new Map();
+            sales.filter(s => s.status !== 'cancelled').forEach(s => {
+                (s.items || []).forEach(it => {
+                    const key = it.productId || it.name || 'Producto';
+                    const qty = parseFloat(it.quantity) || 1;
+                    const price = parseFloat(it.unitPrice || it.price) || 0;
+                    const cost = parseFloat(it.costAtSale || it.cost) || 0;
+                    const totalSale = price * qty;
+                    const totalCost = cost * qty;
+                    const profit = totalSale - totalCost;
+
+                    const cur = productMap.get(key) || { name: it.name || 'Producto', qty: 0, sale: 0, cost: 0, profit: 0 };
+                    cur.qty += qty;
+                    cur.sale += totalSale;
+                    cur.cost += totalCost;
+                    cur.profit += profit;
+                    productMap.set(key, cur);
+                });
+            });
+
+            const list = Array.from(productMap.values()).sort((a, b) => b.profit - a.profit);
+            const totalProfit = list.reduce((sum, i) => sum + i.profit, 0);
+
+            const html = `
+                <div style="padding: 0.5rem 0;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; padding:0.75rem 1rem; background:rgba(16,185,129,0.08); border-radius:0.75rem; border:1px solid rgba(16,185,129,0.25);">
+                        <div>
+                            <div style="font-size:0.75rem; color:#059669; font-weight:800; text-transform:uppercase;">Ganancia Comercial Semanal</div>
+                            <div style="font-size:1.4rem; font-weight:900; color:#059669;">${formatCLP(totalProfit)}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <span class="badge badge-success">${list.length} productos vendidos</span>
+                        </div>
+                    </div>
+                    <div style="max-height: 55vh; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.86rem;">
+                            <thead>
+                                <tr style="border-bottom: 2px solid var(--border); text-align: left; color: var(--secondary);">
+                                    <th style="padding: 0.6rem 0.75rem;">Producto</th>
+                                    <th style="padding: 0.6rem 0.75rem; text-align: center;">Unidades</th>
+                                    <th style="padding: 0.6rem 0.75rem; text-align: right;">Total Vendido</th>
+                                    <th style="padding: 0.6rem 0.75rem; text-align: right;">Costo</th>
+                                    <th style="padding: 0.6rem 0.75rem; text-align: right;">Ganancia Limpia</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${list.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--secondary);">Sin productos para desglosar.</td></tr>' : ''}
+                                ${list.map((it, idx) => `
+                                    <tr style="border-bottom: 1px solid var(--border); background: ${idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.02)'};">
+                                        <td style="padding: 0.6rem 0.75rem; font-weight: 750;">${safeHTML(it.name)}</td>
+                                        <td style="padding: 0.6rem 0.75rem; text-align: center; font-weight: 800;">${it.qty}</td>
+                                        <td style="padding: 0.6rem 0.75rem; text-align: right;">${formatCLP(it.sale)}</td>
+                                        <td style="padding: 0.6rem 0.75rem; text-align: right; color: var(--secondary);">${formatCLP(it.cost)}</td>
+                                        <td style="padding: 0.6rem 0.75rem; text-align: right; font-weight: 900; color: #059669;">+${formatCLP(it.profit)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            showModal(html, { title: '💎 Ganancia Semanal por Producto', width: '720px' });
+        } else if (type === 'expenses') {
+            const expAmount = report.operationalExpenses || 0;
+            const html = `
+                <div style="padding: 0.5rem 0;">
+                    <div style="background:rgba(239,68,68,0.08); padding:0.85rem 1rem; border-radius:0.75rem; border:1px solid rgba(239,68,68,0.25); margin-bottom:1rem;">
+                        <div style="font-size:0.75rem; font-weight:800; color:#dc2626; text-transform:uppercase;">💸 Total Gastos de la Semana</div>
+                        <div style="font-size:1.4rem; font-weight:900; color:#dc2626;">-${formatCLP(expAmount)}</div>
+                        <small style="color:var(--secondary); font-size:0.72rem;">Egresos de caja en el período de 7 días</small>
+                    </div>
+                    <p style="color:var(--secondary); font-size:0.85rem; line-height:1.5;">
+                        Los gastos operativos incluyen retiros para pago de cuentas, arriendo, insumos y compras menores registradas directamente en los turnos de caja de la semana.
+                    </p>
+                    <div style="text-align:right; margin-top:1rem;">
+                        <button class="btn btn-primary" onclick="App.navigate('cash')">Abrir Módulo de Caja →</button>
+                    </div>
+                </div>
+            `;
+            showModal(html, { title: '💸 Gastos Operativos de la Semana', width: '550px' });
+        } else if (type === 'cashFlow') {
+            const expAmount = report.operationalExpenses || 0;
+            const totalInflow = (report.totalAmount || 0);
+            const netCash = totalInflow - expAmount;
+            const html = `
+                <div style="padding: 0.5rem 0;">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+                        <div style="background:rgba(16,185,129,0.08); padding:0.85rem 1rem; border-radius:0.75rem; border:1px solid rgba(16,185,129,0.25);">
+                            <div style="font-size:0.75rem; font-weight:800; color:#059669; text-transform:uppercase;">Ingresos de la Semana</div>
+                            <div style="font-size:1.35rem; font-weight:900; color:#059669;">+${formatCLP(totalInflow)}</div>
+                        </div>
+                        <div style="background:rgba(239,68,68,0.08); padding:0.85rem 1rem; border-radius:0.75rem; border:1px solid rgba(239,68,68,0.25);">
+                            <div style="font-size:0.75rem; font-weight:800; color:#dc2626; text-transform:uppercase;">Gastos de la Semana</div>
+                            <div style="font-size:1.35rem; font-weight:900; color:#dc2626;">-${formatCLP(expAmount)}</div>
+                        </div>
+                    </div>
+                    <div style="padding:0.85rem 1rem; background:var(--surface); border-radius:0.75rem; border:1.5px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                        <strong style="color:var(--text-main);">💵 Balance Neto Semanal:</strong>
+                        <strong style="font-size:1.3rem; color:${netCash >= 0 ? '#059669' : '#dc2626'};">${netCash >= 0 ? '+' : ''}${formatCLP(netCash)}</strong>
+                    </div>
+                </div>
+            `;
+            showModal(html, { title: '💵 Balance y Flujo de Caja Semanal', width: '580px' });
+        } else if (type === 'basket') {
+            const totalTickets = report.totalSales || 1;
+            const totalUnits = sales.reduce((sum, s) => sum + (s.items || []).reduce((isum, it) => isum + (parseFloat(it.quantity) || 0), 0), 0);
+            const avgBasket = (totalUnits / totalTickets).toFixed(1);
+            const avgTicket = Math.round((report.totalAmount || 0) / totalTickets);
+
+            const html = `
+                <div style="padding: 0.5rem 0;">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+                        <div style="background:rgba(99,102,241,0.08); padding:0.85rem 1rem; border-radius:0.75rem; border:1px solid rgba(99,102,241,0.25);">
+                            <div style="font-size:0.75rem; font-weight:800; color:#4f46e5; text-transform:uppercase;">🛒 Unidades por Ticket</div>
+                            <div style="font-size:1.4rem; font-weight:900; color:#4f46e5;">${avgBasket} un/compra</div>
+                            <small style="color:var(--secondary); font-size:0.72rem;">${totalUnits} unidades totales vendidas</small>
+                        </div>
+                        <div style="background:rgba(59,130,246,0.08); padding:0.85rem 1rem; border-radius:0.75rem; border:1px solid rgba(59,130,246,0.25);">
+                            <div style="font-size:0.75rem; font-weight:800; color:#2563eb; text-transform:uppercase;">🎫 Gasto Promedio (Ticket)</div>
+                            <div style="font-size:1.4rem; font-weight:900; color:#2563eb;">${formatCLP(avgTicket)}</div>
+                            <small style="color:var(--secondary); font-size:0.72rem;">${totalTickets} clientes atendidos</small>
+                        </div>
+                    </div>
+                    <p style="color:var(--secondary); font-size:0.85rem; line-height:1.5;">
+                        Esta métrica muestra la efectividad de venta en caja: un mayor número de unidades por ticket indica que tus clientes compran más de un artículo por visita.
+                    </p>
+                </div>
+            `;
+            showModal(html, { title: '🛒 Análisis de Clientes y Canasta Promedio', width: '580px' });
+        }
+    },
+
+    async openMonthlyKpiDrilldown(type) {
+        const report = this._lastMonthlyReport || {};
+        const sales = this._lastMonthlyReportSales || (report.sales || []);
+        const year = this._lastMonthlyYear;
+        const month = this._lastMonthlyMonth;
+
+        if (type === 'sales') {
+            const html = `
+                <div style="padding: 0.5rem 0;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; padding:0.75rem 1rem; background:rgba(59,130,246,0.08); border-radius:0.75rem; border:1px solid rgba(59,130,246,0.25);">
+                        <div>
+                            <div style="font-size:0.75rem; color:#2563eb; font-weight:800; text-transform:uppercase;">Total Vendido en el Mes</div>
+                            <div style="font-size:1.4rem; font-weight:900; color:#2563eb;">${formatCLP(report.totalAmount || 0)}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <span class="badge badge-primary">${report.totalSales || 0} ventas totales</span>
+                        </div>
+                    </div>
+                    <p style="color:var(--secondary); font-size:0.85rem; margin-bottom:1rem;">
+                        El acumulado mensual integra todas las transacciones emitidas entre el 1° y el último día del mes seleccionado.
+                    </p>
+                </div>
+            `;
+            showModal(html, { title: '🗓️ Desglose Mensual de Ventas', width: '600px' });
+        } else if (type === 'profit') {
+            const productMap = new Map();
+            sales.filter(s => s.status !== 'cancelled').forEach(s => {
+                (s.items || []).forEach(it => {
+                    const key = it.productId || it.name || 'Producto';
+                    const qty = parseFloat(it.quantity) || 1;
+                    const price = parseFloat(it.unitPrice || it.price) || 0;
+                    const cost = parseFloat(it.costAtSale || it.cost) || 0;
+                    const totalSale = price * qty;
+                    const totalCost = cost * qty;
+                    const profit = totalSale - totalCost;
+
+                    const cur = productMap.get(key) || { name: it.name || 'Producto', qty: 0, sale: 0, cost: 0, profit: 0 };
+                    cur.qty += qty;
+                    cur.sale += totalSale;
+                    cur.cost += totalCost;
+                    cur.profit += profit;
+                    productMap.set(key, cur);
+                });
+            });
+
+            const list = Array.from(productMap.values()).sort((a, b) => b.profit - a.profit);
+            const totalProfit = list.reduce((sum, i) => sum + i.profit, 0);
+
+            const html = `
+                <div style="padding: 0.5rem 0;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; padding:0.75rem 1rem; background:rgba(16,185,129,0.08); border-radius:0.75rem; border:1px solid rgba(16,185,129,0.25);">
+                        <div>
+                            <div style="font-size:0.75rem; color:#059669; font-weight:800; text-transform:uppercase;">Ganancia Comercial Mensual</div>
+                            <div style="font-size:1.4rem; font-weight:900; color:#059669;">${formatCLP(totalProfit)}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <span class="badge badge-success">${list.length} productos con utilidad</span>
+                        </div>
+                    </div>
+                    <div style="max-height: 55vh; overflow-y: auto;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.86rem;">
+                            <thead>
+                                <tr style="border-bottom: 2px solid var(--border); text-align: left; color: var(--secondary);">
+                                    <th style="padding: 0.6rem 0.75rem;">Producto</th>
+                                    <th style="padding: 0.6rem 0.75rem; text-align: center;">Unidades</th>
+                                    <th style="padding: 0.6rem 0.75rem; text-align: right;">Total Vendido</th>
+                                    <th style="padding: 0.6rem 0.75rem; text-align: right;">Costo</th>
+                                    <th style="padding: 0.6rem 0.75rem; text-align: right;">Ganancia</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${list.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding:2rem; color:var(--secondary);">Sin productos vendidos en el mes.</td></tr>' : ''}
+                                ${list.map((it, idx) => `
+                                    <tr style="border-bottom: 1px solid var(--border); background: ${idx % 2 === 0 ? 'transparent' : 'rgba(0,0,0,0.02)'};">
+                                        <td style="padding: 0.6rem 0.75rem; font-weight: 750;">${safeHTML(it.name)}</td>
+                                        <td style="padding: 0.6rem 0.75rem; text-align: center; font-weight: 800;">${it.qty}</td>
+                                        <td style="padding: 0.6rem 0.75rem; text-align: right;">${formatCLP(it.sale)}</td>
+                                        <td style="padding: 0.6rem 0.75rem; text-align: right; color: var(--secondary);">${formatCLP(it.cost)}</td>
+                                        <td style="padding: 0.6rem 0.75rem; text-align: right; font-weight: 900; color: #059669;">+${formatCLP(it.profit)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+            showModal(html, { title: '💎 Rentabilidad de Productos del Mes', width: '720px' });
+        } else if (type === 'expenses') {
+            const expAmount = report.operationalExpenses || 0;
+            const html = `
+                <div style="padding: 0.5rem 0;">
+                    <div style="background:rgba(239,68,68,0.08); padding:0.85rem 1rem; border-radius:0.75rem; border:1px solid rgba(239,68,68,0.25); margin-bottom:1rem;">
+                        <div style="font-size:0.75rem; font-weight:800; color:#dc2626; text-transform:uppercase;">💸 Total Gastos del Mes</div>
+                        <div style="font-size:1.4rem; font-weight:900; color:#dc2626;">-${formatCLP(expAmount)}</div>
+                        <small style="color:var(--secondary); font-size:0.72rem;">Egresos operacionales consolidados</small>
+                    </div>
+                    <p style="color:var(--secondary); font-size:0.85rem; line-height:1.5;">
+                        Suma acumulada de retiros de caja y egresos registrados durante todo el mes analizado.
+                    </p>
+                </div>
+            `;
+            showModal(html, { title: '💸 Gastos Operativos del Mes', width: '550px' });
+        } else if (type === 'netProfit') {
+            const grossProfit = report.grossCommercialProfit !== undefined ? report.grossCommercialProfit : ((report.totalNeto || 0) - (report.totalCostNet || 0));
+            const expAmount = report.operationalExpenses || 0;
+            const netProfit = grossProfit - expAmount;
+
+            const html = `
+                <div style="padding: 0.5rem 0;">
+                    <div style="display:flex; flex-direction:column; gap:0.65rem; font-size:0.9rem; margin-bottom:1.25rem;">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="color:var(--secondary);">(+) Ganancia Comercial en Mercadería:</span>
+                            <strong style="color:#059669;">+${formatCLP(grossProfit)}</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="color:var(--secondary);">(-) Gastos Operativos del Negocio:</span>
+                            <strong style="color:#dc2626;">-${formatCLP(expAmount)}</strong>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:center; padding-top:0.75rem; border-top:2px solid var(--border);">
+                            <div>
+                                <strong style="color:var(--text-main); font-size:1.05rem;">🏆 Utilidad Libre en Bolsillo:</strong>
+                                <div style="font-size:0.75rem; color:var(--secondary);">Ganancia neta disponible</div>
+                            </div>
+                            <strong style="font-size:1.35rem; color:${netProfit >= 0 ? '#059669' : '#dc2626'};">
+                                ${netProfit >= 0 ? '+' : ''}${formatCLP(netProfit)}
+                            </strong>
+                        </div>
+                    </div>
+                </div>
+            `;
+            showModal(html, { title: '🏆 Estado de Utilidad Neta del Mes', width: '580px' });
+        } else if (type === 'losses') {
+            const lossAmount = report.monthlyLoss || 0;
+            const consumptionAmount = report.monthlyConsumption || 0;
+            const html = `
+                <div style="padding: 0.5rem 0;">
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:1rem; margin-bottom:1rem;">
+                        <div style="background:rgba(245,158,11,0.08); padding:0.85rem 1rem; border-radius:0.75rem; border:1px solid rgba(245,158,11,0.25);">
+                            <div style="font-size:0.75rem; font-weight:800; color:#d97706; text-transform:uppercase;">Mermas / Pérdidas</div>
+                            <div style="font-size:1.35rem; font-weight:900; color:#d97706;">${formatCLP(lossAmount)}</div>
+                            <small style="color:var(--secondary); font-size:0.72rem;">Productos vencidos o dañados</small>
+                        </div>
+                        <div style="background:rgba(99,102,241,0.08); padding:0.85rem 1rem; border-radius:0.75rem; border:1px solid rgba(99,102,241,0.25);">
+                            <div style="font-size:0.75rem; font-weight:800; color:#4f46e5; text-transform:uppercase;">Consumo Interno</div>
+                            <div style="font-size:1.35rem; font-weight:900; color:#4f46e5;">${formatCLP(consumptionAmount)}</div>
+                            <small style="color:var(--secondary); font-size:0.72rem;">Artículos consumidos en el negocio</small>
+                        </div>
+                    </div>
+                </div>
+            `;
+            showModal(html, { title: '📦 Mermas, Consumo y Pérdidas del Mes', width: '580px' });
+        }
+    },
+
+    _getCurrentReportTitle() {
+        for (const cat of this.CATEGORIES) {
+            const found = cat.reports.find(r => r.id === this.currentReport);
+            if (found) return found.label;
+        }
+        return 'Reporte de Negocio';
+    },
+
+    async exportActiveReportPDF() {
+        try {
+            const jsPDF = window.jspdf ? window.jspdf.jsPDF : null;
+            if (!jsPDF) {
+                showNotification('Módulo PDF no disponible', 'warning');
+                return;
+            }
+
+            const reportEl = document.getElementById('reportContent');
+            if (!reportEl) {
+                showNotification('No hay contenido para exportar', 'warning');
+                return;
+            }
+
+            const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+            const bizName = localStorage.getItem('BUSINESS_NAME') || 'Mi Negocio';
+            const bizRut = localStorage.getItem('BUSINESS_RUT') || '';
+            const reportTitle = this._getCurrentReportTitle();
+            const now = new Date();
+
+            // Header Banner
+            doc.setFillColor(30, 41, 59);
+            doc.rect(0, 0, 595, 65, 'F');
+            doc.setTextColor(255, 255, 255);
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            doc.text(bizName.toUpperCase(), 40, 38);
+
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'normal');
+            doc.text(reportTitle.toUpperCase(), 370, 38);
+
+            // Subheader
+            let y = 90;
+            doc.setTextColor(30, 41, 59);
+            doc.setFontSize(9);
+            if (bizRut) { doc.text(`RUT Comercio: ${bizRut}`, 40, y); y += 13; }
+            const terminalLabel = this.selectedTerminal === 'all' ? 'Todo el Negocio (Consolidado)' : `Terminal: ${this.selectedTerminal}`;
+            doc.text(`${terminalLabel}  |  Fecha Emisión: ${now.toLocaleDateString('es-CL')} ${now.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`, 40, y);
+            y += 20;
+
+            const tables = reportEl.querySelectorAll('table');
+            if (tables.length > 0 && doc.autoTable) {
+                tables.forEach((tbl) => {
+                    if (y > 700) {
+                        doc.addPage();
+                        y = 40;
+                    }
+                    doc.autoTable({
+                        html: tbl,
+                        startY: y,
+                        theme: 'striped',
+                        headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 8 },
+                        bodyStyles: { fontSize: 8, textColor: [15, 23, 42] },
+                        margin: { left: 40, right: 40 }
+                    });
+                    y = doc.lastAutoTable.finalY + 20;
+                });
+            } else {
+                const kpis = reportEl.querySelectorAll('[class*="card"], [style*="border-radius"], .kpi-card');
+                const kpiRows = [];
+                kpis.forEach(k => {
+                    const txt = k.innerText.trim().split('\n').filter(Boolean);
+                    if (txt.length >= 2) {
+                        kpiRows.push([txt[0], txt[1]]);
+                    }
+                });
+                if (kpiRows.length > 0 && doc.autoTable) {
+                    doc.autoTable({
+                        startY: y,
+                        head: [['Indicador / Métrica', 'Valor']],
+                        body: kpiRows.slice(0, 15),
+                        theme: 'striped',
+                        headStyles: { fillColor: [30, 41, 59], textColor: [255, 255, 255], fontStyle: 'bold', fontSize: 9 },
+                        bodyStyles: { fontSize: 9, textColor: [15, 23, 42] },
+                        margin: { left: 40, right: 40 }
+                    });
+                } else {
+                    doc.setFontSize(10);
+                    doc.text('Resumen del reporte generado correctamente.', 40, y);
+                }
+            }
+
+            const fileName = `reporte_${this.currentReport}_${now.toISOString().slice(0, 10)}.pdf`;
+            doc.save(fileName);
+            showNotification('Informe PDF generado con éxito', 'success');
+        } catch (e) {
+            console.error('Error al exportar reporte en PDF:', e);
+            showNotification('Error al exportar reporte en PDF', 'error');
+        }
+    },
+
+    async exportActiveReportExcel() {
+        try {
+            if (typeof XLSX === 'undefined') {
+                showNotification('Librería Excel no disponible', 'warning');
+                return;
+            }
+
+            const reportEl = document.getElementById('reportContent');
+            if (!reportEl) {
+                showNotification('No hay contenido para exportar', 'warning');
+                return;
+            }
+
+            const tables = reportEl.querySelectorAll('table');
+            const wb = XLSX.utils.book_new();
+
+            if (tables.length > 0) {
+                tables.forEach((tbl, idx) => {
+                    const sheetName = (tbl.getAttribute('data-sheet-name') || `${this.currentReport}_${idx + 1}`).substring(0, 31);
+                    const ws = XLSX.utils.table_to_sheet(tbl);
+                    XLSX.utils.book_append_sheet(wb, ws, sheetName);
+                });
+            } else {
+                const kpis = reportEl.querySelectorAll('[class*="card"], [style*="border-radius"], .kpi-card');
+                const data = [];
+                kpis.forEach(k => {
+                    const txt = k.innerText.trim().split('\n').filter(Boolean);
+                    if (txt.length >= 2) {
+                        data.push({ 'Indicador': txt[0], 'Valor': txt[1] });
+                    }
+                });
+                if (data.length > 0) {
+                    const ws = XLSX.utils.json_to_sheet(data);
+                    XLSX.utils.book_append_sheet(wb, ws, 'Resumen');
+                } else {
+                    showNotification('No se encontraron tablas de datos para exportar', 'warning');
+                    return;
+                }
+            }
+
+            const fileName = `reporte_${this.currentReport}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            showNotification('Reporte exportado a Excel con éxito', 'success');
+        } catch (e) {
+            console.error('Error al exportar reporte a Excel:', e);
+            showNotification('Error al exportar reporte a Excel', 'error');
+        }
+    },
+
+    printActiveReport() {
+        const reportEl = document.getElementById('reportContent');
+        if (!reportEl) return;
+
+        const bizName = localStorage.getItem('BUSINESS_NAME') || 'Mi Negocio';
+        const bizRut = localStorage.getItem('BUSINESS_RUT') || '';
+        const reportTitle = this._getCurrentReportTitle();
+        const now = new Date();
+
+        const iframe = document.createElement('iframe');
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0';
+        iframe.style.height = '0';
+        iframe.style.border = '0';
+        document.body.appendChild(iframe);
+
+        const doc = iframe.contentWindow.document;
+        doc.open();
+        doc.write(`
+            <html>
+                <head>
+                    <title>${reportTitle} - ${bizName}</title>
+                    <style>
+                        @page { margin: 12mm; size: auto; }
+                        body { font-family: system-ui, -apple-system, sans-serif; color: #0f172a; background: #fff; margin: 0; padding: 10px; font-size: 12px; }
+                        .print-header { border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 14px; }
+                        .print-header h1 { margin: 0; font-size: 16px; text-transform: uppercase; }
+                        .print-header .meta { font-size: 10px; color: #475569; margin-top: 3px; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                        th, td { border: 1px solid #cbd5e1; padding: 6px 8px; font-size: 11px; text-align: left; }
+                        th { background: #f1f5f9; font-weight: 700; }
+                        button, .no-print, .reports-control-bar, .reports-cat-nav, .reports-sub-nav { display: none !important; }
+                    </style>
+                </head>
+                <body>
+                    <div class="print-header">
+                        <h1>${bizName.toUpperCase()} — ${reportTitle.toUpperCase()}</h1>
+                        <div class="meta">
+                            ${bizRut ? `RUT: ${bizRut} | ` : ''}
+                            Emisión: ${now.toLocaleDateString('es-CL')} ${now.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                            | Terminal: ${this.selectedTerminal === 'all' ? 'Todo el Negocio' : this.selectedTerminal}
+                        </div>
+                    </div>
+                    <div>
+                        ${reportEl.innerHTML}
+                    </div>
+                </body>
+            </html>
+        `);
+        doc.close();
+
+        setTimeout(() => {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+            setTimeout(() => {
+                document.body.removeChild(iframe);
+            }, 1000);
+        }, 400);
+    },
+
     destroy() {
         if (this.activeCharts) {
             this.activeCharts.forEach(c => {
@@ -5711,196 +6520,5 @@ const ReportsView = {
             });
             this.activeCharts = [];
         }
-    },
-
-    handleCierresMonthChange(value) {
-        if (!value) return;
-        const [y, m] = value.split('-').map(Number);
-        ReportsView.cierresSelectedYear = y;
-        ReportsView.cierresSelectedMonth = m - 1;
-        ReportsView.showReport('cierres');
-    },
-
-    async renderCierresReport() {
-        // Obtener todos los registros de caja históricos
-        const allRegisters = await CashRegister.getAll();
-        
-        const now = new Date();
-        let year = ReportsView.cierresSelectedYear !== undefined ? ReportsView.cierresSelectedYear : now.getFullYear();
-        let month = ReportsView.cierresSelectedMonth !== undefined ? ReportsView.cierresSelectedMonth : now.getMonth();
-        
-        // Si es la primera vez que se carga y no hay filtros, usar el mes del registro más reciente
-        if (ReportsView.cierresSelectedYear === undefined) {
-            const closedRegistersOnly = allRegisters.filter(r => r.status === 'closed');
-            if (closedRegistersOnly.length > 0) {
-                const refDate = new Date(closedRegistersOnly[0].closeDate);
-                year = refDate.getFullYear();
-                month = refDate.getMonth();
-            }
-            ReportsView.cierresSelectedYear = year;
-            ReportsView.cierresSelectedMonth = month;
-        }
-
-        // Filtrar cajas cerradas por año y mes de la fecha de cierre
-        const closedRegisters = allRegisters.filter(r => {
-            if (r.status !== 'closed') return false;
-            const closeDate = new Date(r.closeDate);
-            return closeDate.getFullYear() === year && closeDate.getMonth() === month;
-        });
-
-        // Ordenar cierres por fecha de cierre descendente
-        closedRegisters.sort((a, b) => new Date(b.closeDate) - new Date(a.closeDate));
-
-        if (closedRegisters.length === 0) {
-            return `
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
-                    <div>
-                        <h3 style="color: #111827; margin: 0 0 0.25rem 0;">Historial de Cierres de Caja</h3>
-                        <p style="color: #4b5563; margin: 0; font-size: 0.9rem;">Consulta la utilidad de los turnos cerrados filtrando por mes.</p>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 0.5rem; background: #f3f4f6; padding: 0.5rem 1rem; border-radius: 0.5rem; border: 1px solid #e5e7eb;">
-                        <label for="cierresMonthPicker" style="font-size: 0.85rem; font-weight: 700; color: #4b5563;">Seleccionar Mes:</label>
-                        <input type="month" id="cierresMonthPicker" 
-                               value="${year}-${String(month + 1).padStart(2, '0')}" 
-                               onchange="ReportsView.handleCierresMonthChange(this.value)"
-                               style="background: transparent; border: none; font-weight: bold; color: #10b981; font-size: 0.95rem; cursor: pointer;">
-                    </div>
-                </div>
-                <div class="empty-state" style="padding: 3rem; text-align: center; background: white; border-radius: 1rem; border: 1.5px solid #d1d5db;">
-                    <div class="empty-state-icon" style="font-size: 3rem; margin-bottom: 1rem;">🔒</div>
-                    <h3 style="color: #4b5563; font-weight: 700;">Sin cierres de caja en este mes</h3>
-                    <p style="color: #6b7280; font-size: 0.9rem; margin-top: 0.5rem;">Prueba seleccionando otro mes en el calendario de arriba.</p>
-                </div>
-            `;
-        }
-
-        // Obtener resúmenes de cada caja y calcular acumulados
-        let totalSalesAccum = 0;
-        let totalExpensesAccum = 0;
-        let grossProfitAccum = 0;
-        let netProfitAccum = 0;
-
-        const enriched = [];
-        for (const reg of closedRegisters) {
-            try {
-                const summary = await CashRegister.getSummary(reg.id);
-                enriched.push(summary);
-                
-                totalSalesAccum += summary.totalSalesAmount || 0;
-                totalExpensesAccum += summary.totalExpenses || 0;
-                grossProfitAccum += summary.grossProfit || 0;
-                netProfitAccum += summary.netProfit || 0;
-            } catch (err) {
-                console.error(`Error al cargar resumen de caja #${reg.id}:`, err);
-                enriched.push({
-                    ...reg,
-                    totalSalesAmount: 0,
-                    totalExpenses: 0,
-                    grossProfit: 0,
-                    netProfit: 0
-                });
-            }
-        }
-
-        const rows = enriched.map(summary => {
-            const totalVentas = summary.totalSalesAmount || 0;
-            const gastos = summary.totalExpenses || 0;
-            const gBruta = summary.grossProfit || 0;
-            const gNeta = summary.netProfit || 0;
-
-            const netColor = gNeta >= 0 ? '#10b981' : '#ef4444';
-
-            return `
-                <tr style="border-bottom: 1px solid #e5e7eb; font-size: 0.875rem; color: #374151;">
-                    <td style="padding: 1rem 0.75rem;">
-                        <strong style="color: #111827;">#${summary.id}</strong>
-                    </td>
-                    <td style="padding: 1rem 0.75rem; line-height: 1.6;">
-                        <div style="font-size: 0.95rem; color: #1e293b; font-weight: 700; display: flex; align-items: center; gap: 0.35rem;">
-                            <span style="background: rgba(16, 185, 129, 0.12); color: #065f46; padding: 0.25rem 0.6rem; border-radius: 0.5rem; font-size: 0.7rem; font-weight: 800; border: 1px solid rgba(16, 185, 129, 0.2); letter-spacing: 0.5px;">🟢 APERTURA</span>
-                            ${formatDateTime(summary.openDate)}
-                        </div>
-                        <div style="font-size: 0.95rem; color: #1e293b; font-weight: 700; margin-top: 0.5rem; display: flex; align-items: center; gap: 0.35rem;">
-                            <span style="background: rgba(239, 68, 68, 0.12); color: #991b1b; padding: 0.25rem 0.6rem; border-radius: 0.5rem; font-size: 0.7rem; font-weight: 800; border: 1px solid rgba(239, 68, 68, 0.2); letter-spacing: 0.5px;">🔴 CIERRE</span>
-                            ${formatDateTime(summary.closeDate)}
-                        </div>
-                    </td>
-                    <td style="padding: 1rem 0.75rem; font-weight: 600; text-transform: capitalize;">${summary.username || 'Admin'}</td>
-                    <td style="padding: 1rem 0.75rem; font-weight: 700; color: #2563eb;">${formatCLP(totalVentas)}</td>
-                    <td style="padding: 1rem 0.75rem; font-weight: 700; color: #dc2626;">-${formatCLP(gastos)}</td>
-                    <td style="padding: 1rem 0.75rem; font-weight: 700; color: #10b981;">${formatCLP(gBruta)}</td>
-                    <td style="padding: 1rem 0.75rem; font-weight: 900; color: ${netColor}; font-size: 0.95rem;">${formatCLP(gNeta)}</td>
-                    <td style="padding: 1rem 0.75rem; text-align: right;">
-                        <button class="btn btn-sm btn-primary" onclick="CashView.showCashHistory(${summary.id})" style="border-radius: 0.5rem; font-weight: 700; padding: 0.4rem 0.75rem;">
-                            📋 Detalle Ventas
-                        </button>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-
-        return `
-            <!-- Filtro y Calendarios -->
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
-                <div>
-                    <h3 style="color: #111827; margin: 0 0 0.25rem 0;">Historial de Cierres de Caja</h3>
-                    <p style="color: #4b5563; margin: 0; font-size: 0.9rem;">Consulta la utilidad de los turnos cerrados filtrando por mes.</p>
-                </div>
-                <div style="display: flex; align-items: center; gap: 0.5rem; background: #f3f4f6; padding: 0.5rem 1rem; border-radius: 0.5rem; border: 1px solid #e5e7eb;">
-                    <label for="cierresMonthPicker" style="font-size: 0.85rem; font-weight: 700; color: #4b5563;">Seleccionar Mes:</label>
-                    <input type="month" id="cierresMonthPicker" 
-                           value="${year}-${String(month + 1).padStart(2, '0')}" 
-                           onchange="ReportsView.handleCierresMonthChange(this.value)"
-                           style="background: transparent; border: none; font-weight: bold; color: #10b981; font-size: 0.95rem; cursor: pointer;">
-                </div>
-            </div>
-
-            <!-- Tarjetas de Resumen Acumulado -->
-            <div class="grid grid-4" style="margin-bottom: 2rem; gap: 1rem;">
-                <div class="stat-card" style="background: white; border: 1.5px solid #d1d5db; padding: 1.25rem; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.75rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.5px; font-weight: 800;">💰 Total Vendido (Bruto)</h4>
-                    <div style="font-size: 1.5rem; font-weight: 900; color: #1e293b;">${formatCLP(totalSalesAccum)}</div>
-                    <small style="color: #64748b; font-size: 0.75rem;">Suma total del periodo</small>
-                </div>
-                <div class="stat-card" style="background: white; border: 1.5px solid #d1d5db; padding: 1.25rem; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.75rem; text-transform: uppercase; color: #10b981; letter-spacing: 0.5px; font-weight: 800;">📈 Ganancia Bruta Acumulada</h4>
-                    <div style="font-size: 1.5rem; font-weight: 900; color: #10b981;">${formatCLP(grossProfitAccum)}</div>
-                    <small style="color: #64748b; font-size: 0.75rem;">Sin restar gastos operativos</small>
-                </div>
-                <div class="stat-card" style="background: white; border: 1.5px solid #d1d5db; padding: 1.25rem; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
-                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.75rem; text-transform: uppercase; color: #ef4444; letter-spacing: 0.5px; font-weight: 800;">💸 Gastos Operacionales Totales</h4>
-                    <div style="font-size: 1.5rem; font-weight: 900; color: #ef4444;">-${formatCLP(totalExpensesAccum)}</div>
-                    <small style="color: #64748b; font-size: 0.75rem;">Suma de egresos/gastos de cajas</small>
-                </div>
-                <div class="stat-card" style="background: white; border: 1.5px solid #d1d5db; padding: 1.25rem; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); border-left: 4px solid #6366f1;">
-                    <h4 style="margin: 0 0 0.5rem 0; font-size: 0.75rem; text-transform: uppercase; color: #6366f1; letter-spacing: 0.5px; font-weight: 900;">💎 Utilidad Real Final</h4>
-                    <div style="font-size: 1.5rem; font-weight: 900; color: #6366f1;">${formatCLP(netProfitAccum)}</div>
-                    <small style="color: #64748b; font-size: 0.75rem;">Ganancia bruta menos gastos</small>
-                </div>
-            </div>
-
-            <div class="table-container card glass-panel" style="padding: 1rem; border-radius: 1.25rem;">
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="border-bottom: 2px solid #e5e7eb; text-align: left; font-size: 0.8rem; color: #4b5563; text-transform: uppercase; font-weight: 800;">
-                            <th style="padding: 0.75rem;">Turno</th>
-                            <th style="padding: 0.75rem;">Fecha y Horario</th>
-                            <th style="padding: 0.75rem;">Cajero</th>
-                            <th style="padding: 0.75rem;">Ventas (Bruto)</th>
-                            <th style="padding: 0.75rem;">Gastos</th>
-                            <th style="padding: 0.75rem;">Ganancia Bruta</th>
-                            <th style="padding: 0.75rem; white-space: nowrap;">
-                                Ganancia Neta
-                                <span class="info-help-btn" data-help="cierres" style="cursor: pointer; font-size: 0.85rem; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7">ℹ️</span>
-                            </th>
-                            <th style="padding: 0.75rem; text-align: right;">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${rows}
-                    </tbody>
-                </table>
-            </div>
-        `;
     }
 };

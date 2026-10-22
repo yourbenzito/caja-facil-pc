@@ -97,9 +97,12 @@ const app = {
 
             AuthManager.addLogoutButton();
 
-            // Iniciar Licencias y Sincronización con Supabase Cloud
+            // Iniciar Licencias, Notas y Sincronización con Supabase Cloud
             if (typeof LicenseService !== 'undefined') {
                 await LicenseService.init();
+            }
+            if (typeof NotesService !== 'undefined' && typeof NotesService.init === 'function') {
+                await NotesService.init();
             }
             if (typeof SyncService !== 'undefined') {
                 SyncService.init();
@@ -136,7 +139,13 @@ const app = {
         const splash = document.getElementById('splash-screen');
         const appDiv = document.getElementById('app');
         if (splash) {
-            splash.style.display = 'none';
+            splash.style.transition = 'opacity 0.4s cubic-bezier(0.16, 1, 0.3, 1), transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)';
+            splash.style.opacity = '0';
+            splash.style.transform = 'scale(1.02)';
+            splash.style.pointerEvents = 'none';
+            setTimeout(() => {
+                if (splash) splash.style.display = 'none';
+            }, 420);
         }
         if (appDiv) {
             appDiv.style.display = 'flex';
@@ -284,9 +293,26 @@ const app = {
         this.applyPermissionsToSidebar();
     },
 
+    openNotesModal(tab = 'all', filterCustomer = '') {
+        if (typeof NotesModal !== 'undefined' && typeof NotesModal.open === 'function') {
+            NotesModal.open(tab, filterCustomer);
+        } else if (typeof CashView !== 'undefined' && typeof CashView.openNotesModal === 'function') {
+            CashView.openNotesModal();
+        }
+    },
+
     async navigate(viewName) {
+        if (viewName === 'notes') {
+            this.openNotesModal();
+            return;
+        }
         console.log(`📍 [App] Navegando a: ${viewName}`);
         
+        // Cerrar limpiamente cualquier ventana modal que estuviera abierta antes de cambiar de módulo
+        if (typeof closeAllModals === 'function') {
+            closeAllModals();
+        }
+
         // Quitar pantalla de login si el usuario ya está autenticado
         if (typeof AuthManager !== 'undefined' && typeof AuthManager.isAuthenticated === 'function' && AuthManager.isAuthenticated()) {
             const loginScreen = document.getElementById('login-screen');
@@ -348,6 +374,9 @@ const app = {
             if (view.init) {
                 console.log(`⚙️ [App] Inicializando vista: ${viewName}`);
                 await view.init();
+            }
+            if (typeof NotesService !== 'undefined' && typeof NotesService.updateAllBadges === 'function') {
+                NotesService.updateAllBadges();
             }
             console.log(`✅ [App] Vista ${viewName} lista`);
         } catch (error) {

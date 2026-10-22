@@ -15,6 +15,18 @@ window.safeHTML = (str) => {
 const safeHTML = window.safeHTML;
 window.escapeHTML = window.safeHTML;
 const escapeHTML = window.escapeHTML;
+window.escapeHtml = window.safeHTML;
+const escapeHtml = window.escapeHtml;
+
+window.safeAttr = (str) => {
+    if (str === null || str === undefined) return '';
+    if (typeof str !== 'string') str = String(str);
+    return str
+        .replace(/\\/g, "\\\\")
+        .replace(/'/g, "\\'")
+        .replace(/"/g, "&quot;");
+};
+const safeAttr = window.safeAttr;
 
 const formatCLP = (amount, skipRounding = false, decimals = 0) => {
     const value = parseFloat(amount);

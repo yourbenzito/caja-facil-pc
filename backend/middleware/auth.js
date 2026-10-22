@@ -31,9 +31,19 @@ const authMiddleware = async (req, res, next) => {
         '/api/businesses/create',
         '/api/businesses/join',
         '/api/businesses/check-local-data',
-        '/api/businesses/link-local'
+        '/api/businesses/link-local',
+        '/api/auth/verify-owner-password',
+        '/api/auth/update-display-name'
     ];
+
+    const rawUsernameHeader = req.headers['x-username'];
+    let headerUsername = null;
+    if (rawUsernameHeader) {
+        try { headerUsername = decodeURIComponent(rawUsernameHeader); } catch (_) { headerUsername = rawUsernameHeader; }
+    }
+
     if (publicPaths.some(p => rPath === p.toLowerCase()) || rPath.startsWith('/api/businesses/by-code')) {
+        req.username = headerUsername;
         const token = req.headers['authorization']?.split(' ')[1];
         if (token) {
             try {
@@ -41,6 +51,7 @@ const authMiddleware = async (req, res, next) => {
                 req.userId = decoded.userId || decoded.id;
                 req.supabaseUserId = decoded.supabaseUserId || null;
                 req.userRole = decoded.role || 'cashier';
+                req.username = decoded.username || decoded.name || headerUsername || null;
 
                 if (req.userRole === 'employee' || req.userRole === 'cashier') {
                     req.business_id = decoded.business_id || 1;
@@ -69,6 +80,7 @@ const authMiddleware = async (req, res, next) => {
         req.userId = decoded.userId || decoded.id;
         req.supabaseUserId = decoded.supabaseUserId || null;
         req.userRole = decoded.role || 'cashier';
+        req.username = decoded.username || decoded.name || headerUsername || null;
 
         // Candado estricto de roles: Un empleado/cajero nunca puede alterar la sucursal
         if (req.userRole === 'employee' || req.userRole === 'cashier') {

@@ -38,10 +38,19 @@ class SupplierPaymentService {
         }
 
         if (db.mode === 'sqlite') {
+            let activeUsername = null;
+            try {
+                if (typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function') {
+                    const u = AuthManager.getCurrentUser();
+                    if (u) activeUsername = u.username || u.name || null;
+                }
+            } catch (_) {}
+
             const result = await ApiClient.post('complex/supplier-payment', {
                 payment: {
                     ...payment,
                     createdBy: typeof AuditLogService !== 'undefined' ? AuditLogService.getCurrentUserId() : null,
+                    username: activeUsername,
                     cashRegisterId: currentRegister ? currentRegister.id : null
                 },
                 deductFromCashRegister: data.deductFromCashRegister === true,
@@ -56,6 +65,17 @@ class SupplierPaymentService {
                 db.clearCache('auditLogs');
             }
             this._summaryCache = null;
+
+            // ponytail: Invalida el buffer de compras para que se reflejen los pagos inmediatamente sin recargar
+            if (typeof PurchasesView !== 'undefined') {
+                PurchasesView.allPurchases = [];
+                PurchasesView.offset = 0;
+                PurchasesView.hasMore = true;
+                if (typeof PurchasesView.refresh === 'function' && document.getElementById('purchasesSectionContent')) {
+                    PurchasesView.refresh().catch(e => console.warn('Error refrescando PurchasesView:', e));
+                }
+            }
+
             return result.id;
         }
 

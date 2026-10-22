@@ -27,14 +27,39 @@ class SupplierPayment {
         const id = await this._repository.create(record);
 
         // C2: Audit log
+        let supplierName = `#${data.supplierId}`;
+        try {
+            if (typeof Supplier !== 'undefined' && Supplier.getById) {
+                const s = await Supplier.getById(data.supplierId);
+                if (s && s.name) supplierName = s.name;
+            }
+        } catch (_) {}
+
+        const methodMap = {
+            cash: 'Efectivo',
+            efectivo: 'Efectivo',
+            card: 'Tarjeta Débito/Crédito',
+            tarjeta: 'Tarjeta Débito/Crédito',
+            transfer: 'Transferencia Bancaria',
+            transferencia: 'Transferencia Bancaria',
+            credit: 'Crédito',
+            otro: 'Otro Medio'
+        };
+        const methodDisplay = methodMap[(record.method || '').toLowerCase()] || record.method || 'Efectivo';
+        const formattedAmount = (typeof record.amount === 'number' || !isNaN(record.amount)) ? `$${Math.round(record.amount).toLocaleString('es-CL')}` : `$${record.amount}`;
+        const purchaseInfo = data.purchaseId ? ` (Compra #${data.purchaseId})` : '';
+
         AuditLogService.log({
-            entity: 'supplierPayment', entityId: id, action: 'create',
-            summary: `Pago a proveedor #${data.supplierId} registrado — ${record.amount} (${record.method})`,
+            entity: 'supplierPayment', 
+            entityId: id, 
+            action: 'create',
+            summary: `Pago a proveedor ${supplierName} por ${formattedAmount} en ${methodDisplay}${purchaseInfo}`,
             metadata: {
                 supplierId: data.supplierId,
+                supplierName: supplierName,
                 purchaseId: data.purchaseId || null,
                 amount: record.amount,
-                method: record.method,
+                method: methodDisplay,
                 reference: record.reference
             }
         });

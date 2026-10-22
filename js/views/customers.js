@@ -106,17 +106,83 @@ const CustomersView = {
                     </div>
                 </div>
             </div>
-                   <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
-                ${topCustomers.map((c, i) => `
-                    <div style="background: #ffffff; border: 1.5px solid ${['#fde68a','#e2e8f0','#fecaca'][i]}; border-left: 5px solid ${['#f59e0b','#94a3b8','#f87171'][i]}; border-radius: 1.25rem; padding: 1.5rem; position: relative; overflow: hidden; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 2px 10px rgba(0,0,0,0.05);" onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 12px 28px rgba(0,0,0,0.1)'" onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 2px 10px rgba(0,0,0,0.05)'">
-                        <div style="position: absolute; right: 1rem; top: 0.5rem; font-size: 4rem; opacity: 0.08; font-weight: 900; color: #111827;">${i + 1}</div>
-                        <div style="font-size: 2.5rem; margin-bottom: 0.5rem;">${['\ud83e\udd47', '\ud83e\udd48', '\ud83e\udd49'][i]}</div>
-                        <h3 style="margin:0; font-size: 1.05rem; color: #111827; font-weight: 800; text-transform: capitalize;">${safeHTML(c.name)}</h3>
-                        <p style="color: ${['#b45309','#475569','#f87171'][i]}; font-weight: 800; font-size: 1.2rem; margin: 0.25rem 0;">${isPrivacyActive ? '$ ••••' : formatCLP(volumeMap[c.id])}</p>
-                        <span style="font-size: 0.7rem; color: #6b7280; text-transform: uppercase; font-weight: 700;">Volumen Total Compras</span>
+            <!-- Podio de Clientes Estrella (Limpio y Elegante) -->
+            <div style="margin-bottom: 2rem;">
+                <div style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 0.5rem;">
+                    <div>
+                        <h2 style="margin: 0; font-size: 1.25rem; font-weight: 850; color: #0f172a; display: flex; align-items: center; gap: 0.5rem;">
+                            🏆 Podio de Clientes Estrella
+                            <span style="font-size: 0.72rem; background: #fef3c7; color: #92400e; padding: 0.15rem 0.55rem; border-radius: 1rem; font-weight: 800; border: 1px solid #fde68a;">Últimos 30 días</span>
+                        </h2>
+                        <p style="margin: 0.2rem 0 0 0; font-size: 0.8rem; color: #64748b;">
+                            Clientes con mayor volumen de compra. Toca cualquier tarjeta para analizar su velocidad de pago, fiados y puntualidad.
+                        </p>
                     </div>
-                `).join('')}
-                ${topCustomers.length === 0 ? '<div style="background: #f9fafb; border: 1.5px dashed #d1d5db; border-radius: 1.25rem; padding: 2rem; text-align: center; color: #9ca3af; font-style: italic;">No hay actividad de clientes aún</div>' : ''}
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem;">
+                    ${topCustomers.map((c, i) => {
+                        const pal = [
+                            { border: '#f59e0b', bgBorder: '#fde68a', text: '#b45309', label: '1° Lugar Oro', glow: 'rgba(245, 158, 11, 0.08)' },
+                            { border: '#64748b', bgBorder: '#e2e8f0', text: '#334155', label: '2° Lugar Plata', glow: 'rgba(100, 116, 139, 0.08)' },
+                            { border: '#ea580c', bgBorder: '#ffedd5', text: '#c2410c', label: '3° Lugar Bronce', glow: 'rgba(234, 88, 12, 0.08)' }
+                        ][i];
+                        const cDebt = debtMap[c.id] || 0;
+                        const medal = ['🥇', '🥈', '🥉'][i];
+
+                        return `
+                            <div class="top-customer-card" 
+                                 onclick="CustomersView.showCustomerStatsModal(${c.id})"
+                                 style="background: #ffffff; border: 1.5px solid ${pal.bgBorder}; border-left: 5.5px solid ${pal.border}; border-radius: 1.25rem; padding: 1.25rem 1.4rem; position: relative; overflow: hidden; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 14px rgba(0,0,0,0.04);"
+                                 onmouseover="this.style.transform='translateY(-4px)';this.style.boxShadow='0 12px 24px ${pal.glow}';this.style.borderColor='${pal.border}';"
+                                 onmouseout="this.style.transform='translateY(0)';this.style.boxShadow='0 4px 14px rgba(0,0,0,0.04)';this.style.borderColor='${pal.bgBorder}';"
+                                 title="Toca para ver estadísticas de crédito, fiados y puntualidad de ${safeHTML(c.name)}">
+                                
+                                <div style="position: absolute; right: 1rem; top: 0.25rem; font-size: 4rem; opacity: 0.06; font-weight: 950; color: #0f172a; pointer-events: none; user-select: none;">
+                                    ${i + 1}
+                                </div>
+
+                                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem;">
+                                    <span style="font-size: 2.2rem; line-height: 1;">${medal}</span>
+                                    <span style="font-size: 0.7rem; font-weight: 800; color: ${pal.text}; background: #ffffff; padding: 0.15rem 0.5rem; border-radius: 0.5rem; border: 1px solid ${pal.bgBorder};">
+                                        ${pal.label}
+                                    </span>
+                                </div>
+
+                                <h3 style="margin: 0; font-size: 1.1rem; color: #0f172a; font-weight: 850; text-transform: capitalize; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    ${safeHTML(c.name)}
+                                </h3>
+
+                                <div style="margin: 0.35rem 0 0.2rem 0;">
+                                    <span class="privacy-balance" data-real="${formatCLP(volumeMap[c.id])}" data-zero="false" style="color: ${pal.text}; font-weight: 900; font-size: 1.35rem; letter-spacing: -0.02em;">
+                                        ${isPrivacyActive ? '$ ••••' : formatCLP(volumeMap[c.id])}
+                                    </span>
+                                </div>
+                                <div style="font-size: 0.68rem; color: #64748b; text-transform: uppercase; font-weight: 750; letter-spacing: 0.04em;">
+                                    Compras en 30 días
+                                </div>
+
+                                <!-- Insignia de Estado de Crédito Limpia -->
+                                <div style="margin-top: 0.75rem; padding-top: 0.65rem; border-top: 1px dashed #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+                                    ${cDebt > 0 ? `
+                                        <span style="font-size: 0.72rem; font-weight: 800; color: #b45309; background: #fef3c7; border: 1px solid #fde68a; padding: 0.15rem 0.45rem; border-radius: 0.35rem; display: inline-flex; align-items: center; gap: 0.25rem;">
+                                            <span>⚠️</span> <span class="privacy-balance" data-real="${formatCLP(cDebt)}" data-zero="false">Deuda: ${isPrivacyActive ? '$ ••••' : formatCLP(cDebt)}</span>
+                                        </span>
+                                    ` : `
+                                        <span style="font-size: 0.72rem; font-weight: 800; color: #065f46; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 0.15rem 0.45rem; border-radius: 0.35rem; display: inline-flex; align-items: center; gap: 0.25rem;">
+                                            <span>✅</span> <span>Al día</span>
+                                        </span>
+                                    `}
+                                    <span style="font-size: 0.75rem; font-weight: 800; color: #4338ca; display: flex; align-items: center; gap: 0.25rem;">
+                                        <span>📊 Analizar</span>
+                                        <span>→</span>
+                                    </span>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                    ${topCustomers.length === 0 ? '<div style="background: #f9fafb; border: 1.5px dashed #d1d5db; border-radius: 1.25rem; padding: 2rem; text-align: center; color: #9ca3af; font-style: italic; grid-column: 1 / -1;">No hay actividad de clientes en los últimos 30 días</div>' : ''}
+                </div>
             </div>
 
             <div class="card" style="padding: 1.5rem; background: #fff1f2; border: 3px solid #e11d48; box-shadow: 0 10px 25px rgba(225, 29, 72, 0.1);">
@@ -216,6 +282,9 @@ const CustomersView = {
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1.5rem; padding: 0.5rem 0;">
                 ${customers.map(c => {
             const debt = debtMap[c.id] || 0;
+            const clientNotes = (typeof NotesService !== 'undefined') ? NotesService.getByCustomer(c.id, c.name) : [];
+            const clientBottles = clientNotes.filter(n => !n.isCompleted && n.category === 'bottle');
+            const clientReservations = clientNotes.filter(n => !n.isCompleted && n.category === 'reservation');
             const credit = (c.balanceCredit != null) ? parseFloat(c.balanceCredit) || 0 : 0;
             const netDebt = Math.max(0, Math.round((debt - credit) * 100) / 100);
             const netCredit = Math.max(0, Math.round((credit - debt) * 100) / 100);
@@ -308,17 +377,42 @@ const CustomersView = {
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
                             <div style="background: ${!isPrivacyActive && netDebt > 0 ? '#fef2f2' : '#f9fafb'}; border: 1.5px solid ${!isPrivacyActive && netDebt > 0 ? '#fecaca' : '#e5e7eb'}; padding: 0.875rem; border-radius: 0.875rem; text-align: center;">
                                 <div style="font-size: 0.68rem; color: ${!isPrivacyActive && netDebt > 0 ? '#dc2626' : '#9ca3af'}; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 0.4rem;">🚨 DEUDA</div>
-                                <div style="font-weight: 900; font-size: 1.3rem; color: ${!isPrivacyActive && netDebt > 0 ? '#dc2626' : '#9ca3af'}; line-height: 1;">
+                                <div class="privacy-balance" data-real="${netDebt > 0 ? formatCLP(netDebt) : '$0'}" data-zero="${netDebt > 0 ? 'false' : 'true'}" style="font-weight: 900; font-size: 1.3rem; color: ${!isPrivacyActive && netDebt > 0 ? '#dc2626' : '#9ca3af'}; line-height: 1;">
                                     ${isPrivacyActive ? (netDebt > 0 ? '$ ••••' : '$0') : (netDebt > 0 ? formatCLP(netDebt) : '$0')}
                                 </div>
                             </div>
                             <div style="background: ${!isPrivacyActive && netCredit > 0 ? '#f0fdf4' : '#f9fafb'}; border: 1.5px solid ${!isPrivacyActive && netCredit > 0 ? '#bbf7d0' : '#e5e7eb'}; padding: 0.875rem; border-radius: 0.875rem; text-align: center;">
                                 <div style="font-size: 0.68rem; color: ${!isPrivacyActive && netCredit > 0 ? '#16a34a' : '#9ca3af'}; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; margin-bottom: 0.4rem;">💰 A FAVOR</div>
-                                <div style="font-weight: 900; font-size: 1.3rem; color: ${!isPrivacyActive && netCredit > 0 ? '#16a34a' : '#9ca3af'}; line-height: 1;">
+                                <div class="privacy-balance" data-real="${netCredit > 0 ? formatCLP(netCredit) : '$0'}" data-zero="${netCredit > 0 ? 'false' : 'true'}" style="font-weight: 900; font-size: 1.3rem; color: ${!isPrivacyActive && netCredit > 0 ? '#16a34a' : '#9ca3af'}; line-height: 1;">
                                     ${isPrivacyActive ? (netCredit > 0 ? '$ ••••' : '$0') : (netCredit > 0 ? formatCLP(netCredit) : '$0')}
                                 </div>
                             </div>
                         </div>
+
+                        <!-- Avisos de Envases y Reservas Pendientes -->
+                        ${clientBottles.length > 0 ? `
+                            <div style="background: #fffbeb; border: 1.5px solid #f59e0b; border-radius: 0.65rem; padding: 0.45rem 0.75rem; font-size: 0.78rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all 0.2s;" 
+                                 onclick="app.openNotesModal('bottle', '${safeHTML(c.name)}')"
+                                 title="Click para ver o gestionar devolución de envases">
+                                <div style="color: #b45309; font-weight: 850; display: flex; align-items: center; gap: 0.35rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    <span>🍾</span>
+                                    <span>Debe ${clientBottles.reduce((sum, b) => sum + (b.bottleCount || 1), 0)} envase(s): ${safeHTML(clientBottles[0].bottleDetail || clientBottles[0].text)}</span>
+                                </div>
+                                <span style="color: #d97706; font-weight: 900; font-size: 0.75rem; flex-shrink: 0; margin-left: 0.5rem;">Ver →</span>
+                            </div>
+                        ` : ''}
+
+                        ${clientReservations.length > 0 ? `
+                            <div style="background: #eff6ff; border: 1.5px solid #3b82f6; border-radius: 0.65rem; padding: 0.45rem 0.75rem; font-size: 0.78rem; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all 0.2s;" 
+                                 onclick="app.openNotesModal('reservation', '${safeHTML(c.name)}')"
+                                 title="Click para ver encargo de mercadería">
+                                <div style="color: #1d4ed8; font-weight: 850; display: flex; align-items: center; gap: 0.35rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    <span>🥖</span>
+                                    <span>Reserva: ${safeHTML(clientReservations[0].reservationDetail || clientReservations[0].text)}</span>
+                                </div>
+                                <span style="color: #2563eb; font-weight: 900; font-size: 0.75rem; flex-shrink: 0; margin-left: 0.5rem;">Ver →</span>
+                            </div>
+                        ` : ''}
 
                         <!-- Botones de Accón -->
                         <div style="display: flex; flex-direction: column; gap: 0.65rem; margin-top: 0.25rem;">
@@ -341,11 +435,16 @@ const CustomersView = {
                                 </button>
                             </div>
                             
-                            <div style="display: flex; justify-content: flex-end; gap: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #f3f4f6;">
-                                ${PermissionService.can('customers.edit') ? `
-                                <button class="btn btn-sm" style="background: #f9fafb; color: #374151; border: 1.5px solid #e5e7eb; width: 36px; height: 36px; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; padding: 0;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'" onclick="CustomersView.showCustomerForm('${c.id}')" title="Editar Datos">✏️</button>` : ''}
-                                ${PermissionService.can('customers.delete') ? `
-                                <button class="btn btn-sm" style="background: #fef2f2; color: #dc2626; border: 1.5px solid #fecaca; width: 36px; height: 36px; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; padding: 0;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'" onclick="CustomersView.deleteCustomer('${c.id}')" title="Desactivar Cliente">🗑️</button>` : ''}
+                            <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; padding-top: 0.5rem; border-top: 1px solid #f3f4f6;">
+                                <button class="btn btn-sm" style="background: #eef2ff; color: #4338ca; border: 1.5px solid #c7d2fe; padding: 0 0.65rem; height: 36px; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; gap: 0.35rem; font-weight: 750; font-size: 0.76rem;" onclick="CustomersView.showCustomerStatsModal('${c.id}')" title="Ver Estadísticas y Comportamiento Crediticio">
+                                    <span>📊</span> <span>Estadísticas</span>
+                                </button>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    ${PermissionService.can('customers.edit') ? `
+                                    <button class="btn btn-sm" style="background: #f9fafb; color: #374151; border: 1.5px solid #e5e7eb; width: 36px; height: 36px; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; padding: 0;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'" onclick="CustomersView.showCustomerForm('${c.id}')" title="Editar Datos">✏️</button>` : ''}
+                                    ${PermissionService.can('customers.delete') ? `
+                                    <button class="btn btn-sm" style="background: #fef2f2; color: #dc2626; border: 1.5px solid #fecaca; width: 36px; height: 36px; border-radius: 0.5rem; display: flex; align-items: center; justify-content: center; padding: 0;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='#fef2f2'" onclick="CustomersView.deleteCustomer('${c.id}')" title="Desactivar Cliente">🗑️</button>` : ''}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -408,32 +507,6 @@ const CustomersView = {
                     <label>Límite de crédito (opcional)</label>
                     <input type="number" name="creditLimit" class="form-control" value="${customer?.creditLimit ?? ''}" min="0" step="1" placeholder="Ej: 500000">
                     <small style="color: var(--secondary); display: block; margin-top: 0.25rem;">Si se define, no se podrá fiar por encima de este monto.</small>
-                </div>
-
-                <div class="form-group" style="margin-top: 1rem; padding: 1rem; background: #eff6ff; border: 1.5px solid #60a5fa; border-radius: 0.75rem;">
-                    <label style="color: #1e40af; font-weight: 800;">🗓️ Fecha Límite / Compromiso de Pago</label>
-                    <div style="display: flex; gap: 0.4rem; margin-top: 0.4rem; margin-bottom: 0.5rem; flex-wrap: wrap;">
-                        <input type="date" id="promiseDateInput" name="promiseDate" class="form-control" value="${customer?.promiseDate || ''}" style="border: 1.5px solid #3b82f6; font-weight: 700; flex: 1.5; min-width: 150px;">
-                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-weight: 700;" onclick="CustomersView.setQuickPromiseDate(1)">+1 Día</button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-weight: 700;" onclick="CustomersView.setQuickPromiseDate(2)">+2 Días</button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-weight: 700;" onclick="CustomersView.setQuickPromiseDate(3)">+3 Días</button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-weight: 700;" onclick="CustomersView.setQuickPromiseDate(5)">+5 Días</button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-weight: 700;" onclick="CustomersView.setQuickPromiseDate(7)">+7 Días (1 Sem)</button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-weight: 700;" onclick="CustomersView.setQuickPromiseDate(15)">+15 Días</button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-weight: 700;" onclick="CustomersView.setQuickPromiseDate('endOfMonth')">Fin de Mes</button>
-                        <button type="button" class="btn btn-sm btn-outline-danger" style="font-weight: 700;" onclick="CustomersView.setQuickPromiseDate(null)" title="Limpiar fecha">✕</button>
-                    </div>
-                    <small style="color: #1e40af; display: block; font-weight: 600;">
-                        Define la fecha exacta o relativa acordada para el cobro. El sistema te mostrará alertas automáticas cuando se venza la fecha.
-                    </small>
-                </div>
-
-                <div class="form-group" style="margin-top: 0.75rem; padding: 0.85rem; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 0.5rem;">
-                    <label style="color: #166534; font-weight: 700;">📅 Día Fijo del Mes (Opcional)</label>
-                    <input type="number" name="paymentDay" class="form-control" value="${customer?.paymentDay ?? '0'}" min="0" max="31" placeholder="Ej: 15" style="border: 1px solid #166534;">
-                    <small style="color: #166534; display: block; margin-top: 0.25rem;">
-                        Indica si paga un día fijo todos los meses (1-31). (0 = Sin día fijo)
-                    </small>
                 </div>
             </form>
         `;
@@ -568,6 +641,55 @@ const CustomersView = {
                 if (!openCash) {
                     showNotification('Debes tener una caja registradora abierta para registrar ingresos de dinero a favor.', 'warning');
                     return;
+                }
+
+                // Verificar si el cliente tiene deuda pendiente para consultar si se abona o se guarda como saldo
+                try {
+                    const balance = await CustomerAccountService.getCustomerBalance(customerId);
+                    const currentDebt = balance ? (parseFloat(balance.totalDebt) || 0) : (parseFloat(customer.totalDebt) || 0);
+
+                    if (currentDebt > 0) {
+                        const userChoice = await new Promise((resolve) => {
+                            const choiceContent = `
+                                <div style="padding: 0.5rem; text-align: center; font-family: 'Outfit', sans-serif;">
+                                    <div style="font-size: 2.2rem; margin-bottom: 0.5rem;">⚖️</div>
+                                    <h3 style="margin: 0 0 0.5rem 0; font-weight: 900; color: #1e293b;">Cliente con Deuda Pendiente</h3>
+                                    <p style="color: #475569; font-size: 0.9rem; line-height: 1.5; margin-bottom: 1.25rem;">
+                                        <strong>${safeHTML(customer.name)}</strong> registra una deuda pendiente de <strong style="color: #dc2626;">${formatCLP(currentDebt)}</strong>.<br>
+                                        Estás ingresando <strong>${formatCLP(amount)}</strong>. ¿Cómo deseas procesar este dinero?
+                                    </p>
+                                    <div style="display: flex; flex-direction: column; gap: 0.65rem;">
+                                        <button type="button" id="btnChoiceAbono" class="btn" style="background: #10b981; color: white; padding: 0.85rem; border-radius: 0.75rem; font-weight: 800; font-size: 0.95rem; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                                            <span>💳</span> <span>Abonar a la Deuda Pendiente</span>
+                                        </button>
+                                        <button type="button" id="btnChoiceCredit" class="btn" style="background: #f8fafc; color: #334155; border: 1.5px solid #cbd5e1; padding: 0.85rem; border-radius: 0.75rem; font-weight: 800; font-size: 0.95rem; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                                            <span>💰</span> <span>Guardar como Saldo a Favor Independiente</span>
+                                        </button>
+                                        <button type="button" id="btnChoiceCancel" class="btn btn-ghost" style="padding: 0.5rem; color: #64748b; font-weight: 700; cursor: pointer;">
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                            showModal(choiceContent, { title: 'Decisión de Dinero a Favor', width: '460px' });
+                            document.getElementById('btnChoiceAbono')?.addEventListener('click', () => { closeModal(); resolve('abono'); });
+                            document.getElementById('btnChoiceCredit')?.addEventListener('click', () => { closeModal(); resolve('credit'); });
+                            document.getElementById('btnChoiceCancel')?.addEventListener('click', () => { closeModal(); resolve(null); });
+                        });
+
+                        if (!userChoice) {
+                            return; // Usuario canceló
+                        }
+
+                        if (userChoice === 'abono') {
+                            // Cerrar modal de saldo a favor y ejecutar el abono hacia la deuda
+                            closeModal();
+                            await CustomersView.payTotalDebt(customerId, amount, method, notes || 'Abono directo de saldo');
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Advertencia al consultar deuda del cliente:', e);
                 }
 
                 btnConfirm.disabled = true;
@@ -1594,8 +1716,12 @@ const CustomersView = {
     },
 
     async processPayment(saleId, customerId, amount) {
+        if (this._isProcessingSinglePayment) return;
+        this._isProcessingSinglePayment = true;
+
         const openCash = await CashRegister.getOpen();
         if (!openCash) {
+            this._isProcessingSinglePayment = false;
             showNotification('Abre la caja para registrar pagos de deuda.', 'warning');
             return;
         }
@@ -1604,6 +1730,7 @@ const CustomersView = {
         const notesElement = document.getElementById('paymentNotes');
 
         if (!paymentMethodSelect) {
+            this._isProcessingSinglePayment = false;
             showNotification('Error: No se encontró el selector de método de pago', 'error');
             return;
         }
@@ -1612,6 +1739,7 @@ const CustomersView = {
         const notes = notesElement ? notesElement.value.trim() : '';
 
         try {
+            closeModal();
             // Registrar el pago con el método de pago seleccionado
             await Payment.create({
                 saleId: saleId,
@@ -1645,12 +1773,18 @@ const CustomersView = {
         } catch (error) {
             showNotification('Error al registrar el pago: ' + error.message, 'error');
             console.error('Error al registrar pago:', error);
+        } finally {
+            this._isProcessingSinglePayment = false;
         }
     },
 
     async processPartialPayment(saleId, customerId, maxAmount) {
+        if (this._isProcessingPartialPayment) return;
+        this._isProcessingPartialPayment = true;
+
         const openCash = await CashRegister.getOpen();
         if (!openCash) {
+            this._isProcessingPartialPayment = false;
             showNotification('Abre la caja para registrar pagos de deuda.', 'warning');
             return;
         }
@@ -1660,11 +1794,13 @@ const CustomersView = {
         const notesElement = document.getElementById('paymentNotes');
 
         if (!amountInput) {
+            this._isProcessingPartialPayment = false;
             showNotification('Error: No se encontró el campo de monto', 'error');
             return;
         }
 
         if (!paymentMethodSelect) {
+            this._isProcessingPartialPayment = false;
             showNotification('Error: No se encontró el selector de método de pago', 'error');
             return;
         }
@@ -1674,16 +1810,19 @@ const CustomersView = {
         const notes = notesElement ? notesElement.value.trim() : '';
 
         if (!amount || amount <= 0) {
+            this._isProcessingPartialPayment = false;
             showNotification('Ingresa un monto válido', 'warning');
             return;
         }
 
         if (amount > maxAmount) {
+            this._isProcessingPartialPayment = false;
             showNotification(`El monto no puede ser mayor a ${formatCLP(maxAmount)}`, 'warning');
             return;
         }
 
         try {
+            closeModal();
             // Registrar el pago parcial con el método de pago seleccionado
             await Payment.create({
                 saleId: saleId,
@@ -1700,6 +1839,8 @@ const CustomersView = {
         } catch (error) {
             showNotification('Error al registrar el pago: ' + error.message, 'error');
             console.error('Error al registrar pago parcial:', error);
+        } finally {
+            this._isProcessingPartialPayment = false;
         }
     },
 
@@ -1895,8 +2036,12 @@ const CustomersView = {
     },
 
     async payTotalDebtMulti(customerId, payments, notes, discountInfo) {
+        if (this._isProcessingMultiDebtPayment) return;
+        this._isProcessingMultiDebtPayment = true;
+
         const openCash = await CashRegister.getOpen();
         if (!openCash) {
+            this._isProcessingMultiDebtPayment = false;
             showNotification('Abre la caja para registrar pagos.', 'warning');
             return;
         }
@@ -2068,12 +2213,18 @@ const CustomersView = {
         } catch (error) {
             showNotification('Error al procesar pago: ' + error.message, 'error');
             console.error(error);
+        } finally {
+            this._isProcessingMultiDebtPayment = false;
         }
     },
 
     async payTotalDebt(customerId, amountToPay, paymentMethodFromForm = null, notesFromForm = null, discountInfo = null) {
+        if (this._isProcessingSingleDebtPayment) return;
+        this._isProcessingSingleDebtPayment = true;
+
         const openCash = await CashRegister.getOpen();
         if (!openCash) {
+            this._isProcessingSingleDebtPayment = false;
             showNotification('Abre la caja para registrar pagos de deuda.', 'warning');
             return;
         }
@@ -2191,6 +2342,8 @@ const CustomersView = {
         } catch (error) {
             showNotification('Error al procesar el pago: ' + error.message, 'error');
             console.error('Error al pagar deuda total:', error);
+        } finally {
+            this._isProcessingSingleDebtPayment = false;
         }
     },
 
@@ -2288,15 +2441,23 @@ const CustomersView = {
 
     togglePrivacyMode() {
         const isPrivacyActive = localStorage.getItem('customers_privacy_mode') === 'true';
-        localStorage.setItem('customers_privacy_mode', !isPrivacyActive);
+        const newPrivacy = !isPrivacyActive;
+        localStorage.setItem('customers_privacy_mode', newPrivacy);
         
         const btn = document.getElementById('btnPrivacyMode');
         if (btn) {
-            btn.textContent = !isPrivacyActive ? '👁️‍🗨️ Mostrar Saldos' : '👁️ Ocultar Saldos';
+            btn.innerHTML = newPrivacy ? '👁️‍🗨️ Mostrar Saldos' : '👁️ Ocultar Saldos';
         }
-        if (typeof app !== 'undefined' && typeof app.navigate === 'function') {
-            app.navigate('customers');
-        }
+
+        // Actualización instantánea in situ: cero pestañeo, cero recarga y cero consultas a base de datos
+        document.querySelectorAll('.privacy-balance').forEach(el => {
+            const isZero = el.dataset.zero === 'true';
+            if (newPrivacy) {
+                el.textContent = isZero ? '$0' : '$ ••••';
+            } else {
+                el.textContent = el.dataset.real || '$0';
+            }
+        });
     },
 
     async showPaymentsHistoryModal() {
@@ -2759,5 +2920,475 @@ const CustomersView = {
             </html>
         `);
         doc.close();
+    },
+
+    async showCustomerStatsModal(customerId) {
+        try {
+            const customer = await Customer.getById(parseInt(customerId));
+            if (!customer) {
+                showNotification('Cliente no encontrado', 'error');
+                return;
+            }
+
+            // Cargar saldo, ventas y movimientos del cliente
+            let balance = { totalDebt: 0, balanceCredit: 0, pendingSales: [] };
+            let payments = [];
+            let allSales = [];
+
+            if (db.mode === 'sqlite') {
+                if (typeof CustomerAccountService !== 'undefined' && CustomerAccountService.getFullAccountStatus) {
+                    try {
+                        const fullStatus = await CustomerAccountService.getFullAccountStatus(customer.id);
+                        if (fullStatus) {
+                            balance = {
+                                totalDebt: fullStatus.summary?.totalDebt || 0,
+                                balanceCredit: fullStatus.summary?.balanceCredit || 0,
+                                pendingSales: fullStatus.pendingSales || []
+                            };
+                            payments = fullStatus.movements || [];
+                        }
+                    } catch (_) {}
+                }
+                try {
+                    const allSalesRaw = await Sale.getByCustomer(customer.id);
+                    allSales = (allSalesRaw || []).filter(s => s.status === 'completed' || s.status === 'paid');
+                } catch (_) {}
+            } else {
+                try {
+                    const rawBal = await Customer.getAccountBalance(customer.id);
+                    balance = {
+                        totalDebt: rawBal?.totalDebt || 0,
+                        balanceCredit: rawBal?.balanceCredit || 0,
+                        pendingSales: rawBal?.pendingSales || []
+                    };
+                } catch (_) {}
+                try {
+                    payments = (await Customer.getPaymentHistory(customer.id)) || [];
+                } catch (_) {}
+                try {
+                    const allSalesRaw = await Sale.getByCustomer(customer.id);
+                    allSales = (allSalesRaw || []).filter(s => s.status === 'completed' || s.status === 'paid');
+                } catch (_) {}
+            }
+
+            const allCustomerSales = [...allSales, ...(balance.pendingSales || [])];
+            allCustomerSales.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            // 1. CÁLCULO DE CRÉDITO DEL MES EN CURSO (Mes Calendario)
+            const now = new Date();
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59);
+            const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+            const currentMonthName = monthNames[now.getMonth()];
+
+            let creditSalesMonthCount = 0;
+            let creditAmountMonth = 0;
+            let totalSalesMonthAmount = 0;
+            let totalSalesMonthCount = 0;
+
+            allCustomerSales.forEach(s => {
+                const sDate = new Date(s.date);
+                if (sDate >= startOfMonth && sDate <= endOfMonth && s.status !== 'cancelled') {
+                    const total = parseFloat(s.total) || 0;
+                    const paid = parseFloat(s.paidAmount || s.paid) || 0;
+                    totalSalesMonthAmount += total;
+                    totalSalesMonthCount++;
+
+                    // Venta a crédito o con saldo fiado al momento de compra
+                    if (s.paymentMethod === 'credit' || s.isCredit || total > paid) {
+                        creditSalesMonthCount++;
+                        creditAmountMonth += total;
+                    }
+                }
+            });
+
+            // 2. VELOCIDAD DE PAGO (Días promedio en saldar desde que se fía)
+            let totalPayDays = 0;
+            let countPaidSales = 0;
+            payments.forEach(p => {
+                if (p.saleId) {
+                    const sale = allCustomerSales.find(s => (s.id || s.saleId) === p.saleId);
+                    if (sale && sale.date) {
+                        const payDate = new Date(p.date);
+                        const saleDate = new Date(sale.date);
+                        const diffDays = Math.max(0, Math.round((payDate - saleDate) / (1000 * 60 * 60 * 24)));
+                        totalPayDays += diffDays;
+                        countPaidSales++;
+                    }
+                }
+            });
+            const avgPayDays = countPaidSales > 0 ? Math.round(totalPayDays / countPaidSales) : null;
+
+            // 3. CUMPLIMIENTO DE FECHAS DE PAGO / PROMESAS
+            const netDebt = Math.max(0, (balance.totalDebt || 0) - (balance.balanceCredit || 0));
+            const netCredit = Math.max(0, (balance.balanceCredit || 0) - (balance.totalDebt || 0));
+
+            let promiseStatus = {
+                badge: 'Sin compromisos',
+                badgeStyle: 'background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1;',
+                icon: '🗓️',
+                text: 'El cliente no tiene fecha de pago agendada.'
+            };
+
+            if (netDebt <= 0) {
+                promiseStatus = {
+                    badge: 'Cuenta 100% al Día',
+                    badgeStyle: 'background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0;',
+                    icon: '✅',
+                    text: 'No mantiene deudas activas con el negocio.'
+                };
+            } else if (customer.promiseDate) {
+                const today = new Date(); today.setHours(0,0,0,0);
+                const pDate = new Date(customer.promiseDate + 'T00:00:00');
+                const diffDays = Math.round((pDate - today) / (1000 * 60 * 60 * 24));
+                const pDateStr = pDate.toLocaleDateString('es-CL');
+
+                if (diffDays < 0) {
+                    promiseStatus = {
+                        badge: `🚨 VENCIDO HACE ${Math.abs(diffDays)} DÍA(S)`,
+                        badgeStyle: 'background: #fee2e2; color: #991b1b; border: 1.5px solid #fca5a5;',
+                        icon: '🚨',
+                        text: `Fecha pactada era el ${pDateStr}. Se encuentra fuera de plazo.`
+                    };
+                } else if (diffDays === 0) {
+                    promiseStatus = {
+                        badge: '⏰ ¡COMPROMISO VENCE HOY!',
+                        badgeStyle: 'background: #fef2f2; color: #dc2626; border: 1.5px solid #f87171;',
+                        icon: '⏰',
+                        text: `El cliente agendó pagar hoy (${pDateStr}).`
+                    };
+                } else if (diffDays <= 7) {
+                    promiseStatus = {
+                        badge: `🗓️ VENCE EN ${diffDays} DÍA(S)`,
+                        badgeStyle: 'background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc;',
+                        icon: '🗓️',
+                        text: `Compromiso vigente para el ${pDateStr}.`
+                    };
+                } else {
+                    promiseStatus = {
+                        badge: `🗓️ PAGA EL ${pDateStr}`,
+                        badgeStyle: 'background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe;',
+                        icon: '🗓️',
+                        text: `Fecha pactada para el ${pDateStr} (en ${diffDays} días).`
+                    };
+                }
+            } else if (customer.paymentDay && parseInt(customer.paymentDay) > 0) {
+                promiseStatus = {
+                    badge: `🗓️ DÍA HABITUAL: ${customer.paymentDay}`,
+                    badgeStyle: 'background: #fef3c7; color: #92400e; border: 1px solid #fde68a;',
+                    icon: '🗓️',
+                    text: `Acostumbra a pagar los días ${customer.paymentDay} de cada mes.`
+                };
+            }
+
+            // 4. SCORE / CALIFICACIÓN CREDITICIA AUTOMÁTICA
+            let scoreTitle = 'Cliente Regular';
+            let scoreColor = '#3b82f6';
+            let scoreBg = '#eff6ff';
+            let scoreBorder = '#bfdbfe';
+            let scoreIcon = '👤';
+            let scoreDesc = 'Comportamiento de compra y abono estándar en el negocio.';
+
+            const isPromiseOverdue = customer.promiseDate && (new Date(customer.promiseDate + 'T00:00:00') < new Date().setHours(0,0,0,0)) && netDebt > 0;
+            const hasVeryOldDebt = balance.pendingSales.some(s => {
+                const diff = (new Date() - new Date(s.date)) / (1000 * 60 * 60 * 24);
+                return diff > 30;
+            });
+
+            if (netDebt === 0 && (avgPayDays !== null && avgPayDays <= 8 || allCustomerSales.length >= 3)) {
+                scoreTitle = 'Pagador Estrella VIP';
+                scoreColor = '#b45309';
+                scoreBg = '#fffbeb';
+                scoreBorder = '#fde68a';
+                scoreIcon = '🌟';
+                scoreDesc = 'Excelente cliente. Liquida sus cuentas con rapidez (promedio menor a 8 días) y mantiene su saldo al día.';
+            } else if (isPromiseOverdue || hasVeryOldDebt) {
+                scoreTitle = 'En Observación / Riesgo Moroso';
+                scoreColor = '#991b1b';
+                scoreBg = '#fee2e2';
+                scoreBorder = '#fca5a5';
+                scoreIcon = '🚨';
+                scoreDesc = 'Presenta compromisos de pago vencidos o deudas acumuladas con más de 30 días de antigüedad.';
+            } else if (avgPayDays !== null && avgPayDays <= 15) {
+                scoreTitle = 'Cliente Confiable';
+                scoreColor = '#065f46';
+                scoreBg = '#ecfdf5';
+                scoreBorder = '#a7f3d0';
+                scoreIcon = '🟢';
+                scoreDesc = 'Comportamiento responsable. Suele amortizar y saldar sus fiados en un lapso de 1 a 2 semanas.';
+            } else if (avgPayDays !== null && avgPayDays > 15) {
+                scoreTitle = 'Pagador Lento';
+                scoreColor = '#92400e';
+                scoreBg = '#fffbeb';
+                scoreBorder = '#fde68a';
+                scoreIcon = '🟡';
+                scoreDesc = 'Tarda en promedio más de dos semanas en liquidar sus compras a crédito.';
+            }
+
+            // 5. FIDELIDAD GLOBAL & TOTALES
+            const totalLifetimePurchases = allCustomerSales.reduce((acc, s) => acc + (parseFloat(s.total) || 0), 0);
+            const totalLifetimePaid = payments.reduce((acc, p) => acc + (parseFloat(p.amount) || 0), 0);
+            const totalLifetimeTickets = allCustomerSales.length;
+            const avgTicket = totalLifetimeTickets > 0 ? Math.round(totalLifetimePurchases / totalLifetimeTickets) : 0;
+
+            // 6. MOVIMIENTOS RECIENTES (Últimos 4 registros combinando ventas crédito y abonos)
+            const recentMovements = [
+                ...balance.pendingSales.slice(0, 4).map(s => ({
+                    type: 'credit',
+                    date: s.date,
+                    amount: parseFloat(s.total) || 0,
+                    remaining: (parseFloat(s.total) || 0) - (parseFloat(s.paidAmount) || 0),
+                    label: `Compra fiada #${s.saleNumber || s.id || ''}`
+                })),
+                ...payments.slice(0, 4).map(p => ({
+                    type: 'payment',
+                    date: p.date,
+                    amount: parseFloat(p.amount) || 0,
+                    label: `Abono recibido (${p.paymentMethod || 'Efectivo'})`
+                }))
+            ].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 4);
+
+            const isPrivacyActive = localStorage.getItem('customers_privacy_mode') === 'true';
+
+            const modalContent = `
+                <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                    <!-- Cabecera de Perfil & Score de Confianza -->
+                    <div style="background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); border-radius: 1rem; padding: 1.25rem 1.5rem; color: #ffffff; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; box-shadow: 0 4px 15px rgba(15, 23, 42, 0.2);">
+                        <div style="display: flex; align-items: center; gap: 1rem;">
+                            <div style="width: 54px; height: 54px; border-radius: 50%; background: linear-gradient(135deg, #6366f1 0%, #4338ca 100%); color: #ffffff; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; font-weight: 900; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);">
+                                ${(customer.name?.[0] || 'C').toUpperCase()}
+                            </div>
+                            <div>
+                                <h3 style="margin: 0; font-size: 1.3rem; font-weight: 850; color: #ffffff; letter-spacing: -0.01em;">${safeHTML(customer.name)}</h3>
+                                <div style="display: flex; gap: 0.75rem; margin-top: 0.25rem; font-size: 0.8rem; color: #94a3b8; flex-wrap: wrap;">
+                                    ${customer.rut ? `<span>🆔 ${safeHTML(customer.rut)}</span>` : ''}
+                                    ${customer.phone ? `<span>📞 ${safeHTML(customer.phone)}</span>` : ''}
+                                    ${customer.email ? `<span>✉️ ${safeHTML(customer.email)}</span>` : ''}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Calificación Crediticia -->
+                        <div style="background: ${scoreBg}; border: 1.5px solid ${scoreBorder}; padding: 0.5rem 0.85rem; border-radius: 0.75rem; text-align: right; max-width: 250px;">
+                            <div style="display: flex; align-items: center; gap: 0.35rem; justify-content: flex-end;">
+                                <span style="font-size: 1.1rem;">${scoreIcon}</span>
+                                <strong style="font-size: 0.82rem; font-weight: 850; color: ${scoreColor};">${scoreTitle}</strong>
+                            </div>
+                            <span style="font-size: 0.7rem; color: #64748b; display: block; line-height: 1.2; margin-top: 0.2rem;">${scoreDesc}</span>
+                        </div>
+                    </div>
+
+                    <!-- Los 4 Indicadores Clave (2x2 Grid) -->
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1rem;">
+                        <!-- KPI 1: Cumplimiento de Fechas -->
+                        <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 1rem; padding: 1.1rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+                            <div>
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.35rem;">
+                                    <span style="font-size: 0.72rem; font-weight: 800; color: #64748b; text-transform: uppercase;">🗓️ Fechas de Pago</span>
+                                    <button type="button" class="btn btn-sm" onclick="CustomersView.showEditPromiseDateModal(${customer.id})" style="padding: 0.15rem 0.45rem; font-size: 0.7rem; font-weight: 800; border-radius: 0.4rem; background: #f1f5f9; border: 1px solid #cbd5e1; color: #475569;" title="Cambiar fecha prometida">
+                                        ✏️ Agendar
+                                    </button>
+                                </div>
+                                <div style="display: inline-block; padding: 0.25rem 0.6rem; border-radius: 0.5rem; font-size: 0.78rem; font-weight: 850; ${promiseStatus.badgeStyle}">
+                                    ${promiseStatus.badge}
+                                </div>
+                            </div>
+                            <span style="font-size: 0.75rem; color: #64748b; line-height: 1.3;">${promiseStatus.text}</span>
+                        </div>
+
+                        <!-- KPI 2: Velocidad de Pago -->
+                        <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 1rem; padding: 1.1rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+                            <div>
+                                <span style="font-size: 0.72rem; font-weight: 800; color: #64748b; text-transform: uppercase;">⏱️ Velocidad de Abono</span>
+                                <div style="font-size: 1.45rem; font-weight: 900; color: #0f172a; margin: 0.2rem 0;">
+                                    ${avgPayDays !== null ? `${avgPayDays} día${avgPayDays !== 1 ? 's' : ''}` : 'Al Contado'}
+                                </div>
+                            </div>
+                            <span style="font-size: 0.75rem; color: #64748b;">
+                                ${avgPayDays !== null ? `Tarda en promedio ${avgPayDays} días en saldar desde que se le entrega mercadería fiada.` : 'Siempre compra al contado o aún no registra créditos saldados.'}
+                            </span>
+                        </div>
+
+                        <!-- KPI 3: Crédito de Mes Actual -->
+                        <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 1rem; padding: 1.1rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+                            <div>
+                                <span style="font-size: 0.72rem; font-weight: 800; color: #64748b; text-transform: uppercase;">💳 Fiado en ${currentMonthName}</span>
+                                <div style="font-size: 1.45rem; font-weight: 900; color: #4338ca; margin: 0.2rem 0;">
+                                    ${isPrivacyActive ? '$ ••••' : formatCLP(creditAmountMonth)}
+                                </div>
+                            </div>
+                            <span style="font-size: 0.75rem; color: #64748b;">
+                                ${creditSalesMonthCount > 0 ? `${creditSalesMonthCount} compra(s) a crédito este mes. (Total compras mes: ${isPrivacyActive ? '$ ••••' : formatCLP(totalSalesMonthAmount)})` : `Sin compras fiadas en ${currentMonthName}. (Total compras: ${isPrivacyActive ? '$ ••••' : formatCLP(totalSalesMonthAmount)})`}
+                            </span>
+                        </div>
+
+                        <!-- KPI 4: Fidelidad & Ticket Promedio -->
+                        <div style="background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 1rem; padding: 1.1rem; display: flex; flex-direction: column; justify-content: space-between; gap: 0.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.02);">
+                            <div>
+                                <span style="font-size: 0.72rem; font-weight: 800; color: #64748b; text-transform: uppercase;">🛒 Fidelidad Global</span>
+                                <div style="font-size: 1.45rem; font-weight: 900; color: #059669; margin: 0.2rem 0;">
+                                    ${isPrivacyActive ? '$ ••••' : formatCLP(totalLifetimePurchases)}
+                                </div>
+                            </div>
+                            <span style="font-size: 0.75rem; color: #64748b;">
+                                ${totalLifetimeTickets} compra(s) históricas. Ticket medio: <strong>${isPrivacyActive ? '$ ••••' : formatCLP(avgTicket)}</strong> / visita.
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Franja de Saldos Financieros Actuales -->
+                    <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 0.85rem; padding: 0.85rem 1.25rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; text-align: center;">
+                        <div>
+                            <span style="font-size: 0.7rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Deuda Pendiente Neta</span>
+                            <div style="font-size: 1.25rem; font-weight: 900; color: ${netDebt > 0 ? '#dc2626' : '#64748b'}; margin-top: 0.15rem;">
+                                ${isPrivacyActive ? (netDebt > 0 ? '$ ••••' : '$0') : (netDebt > 0 ? formatCLP(netDebt) : '$0')}
+                            </div>
+                        </div>
+                        <div>
+                            <span style="font-size: 0.7rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Dinero a Favor</span>
+                            <div style="font-size: 1.25rem; font-weight: 900; color: ${netCredit > 0 ? '#16a34a' : '#64748b'}; margin-top: 0.15rem;">
+                                ${isPrivacyActive ? (netCredit > 0 ? '$ ••••' : '$0') : (netCredit > 0 ? formatCLP(netCredit) : '$0')}
+                            </div>
+                        </div>
+                        <div>
+                            <span style="font-size: 0.7rem; font-weight: 800; color: #64748b; text-transform: uppercase;">Total Histórico Abonado</span>
+                            <div style="font-size: 1.25rem; font-weight: 900; color: #2563eb; margin-top: 0.15rem;">
+                                ${isPrivacyActive ? '$ ••••' : formatCLP(totalLifetimePaid)}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Línea de Tiempo: Últimos Movimientos -->
+                    ${recentMovements.length > 0 ? `
+                        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 0.85rem; padding: 0.85rem 1.1rem;">
+                            <span style="font-size: 0.74rem; font-weight: 800; color: #475569; text-transform: uppercase; display: block; margin-bottom: 0.5rem;">
+                                🕒 Actividad Reciente de Crédito y Pagos:
+                            </span>
+                            <div style="display: flex; flex-direction: column; gap: 0.4rem;">
+                                ${recentMovements.map(m => {
+                                    const mDate = m.date ? new Date(m.date).toLocaleDateString('es-CL') : '—';
+                                    const isPay = m.type === 'payment';
+                                    return `
+                                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; padding: 0.35rem 0.5rem; background: ${isPay ? '#f0fdf4' : '#fff7ed'}; border-radius: 0.4rem; border: 1px solid ${isPay ? '#bbf7d0' : '#fed7aa'};">
+                                            <span style="color: #334155; font-weight: 600;">
+                                                ${isPay ? '💵' : '🛒'} ${m.label} (${mDate})
+                                            </span>
+                                            <strong style="color: ${isPay ? '#16a34a' : '#c2410c'}; font-weight: 850;">
+                                                ${isPay ? '+' : '-'}${isPrivacyActive ? '$ ••••' : formatCLP(m.amount)}
+                                            </strong>
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <!-- Barra de Acciones Rápidas -->
+                    <div style="display: flex; gap: 0.6rem; flex-wrap: wrap; justify-content: flex-end; padding-top: 0.5rem; border-top: 1px solid #e2e8f0;">
+                        ${customer.phone ? `
+                            <button type="button" class="btn" onclick="CustomersView.shareAccountStatusViaWhatsApp(${customer.id})" style="background: #25d366; color: white; font-weight: 750; border-radius: 0.6rem; padding: 0.55rem 1rem; border: none; font-size: 0.82rem; display: flex; align-items: center; gap: 0.35rem;" title="Compartir estado por WhatsApp">
+                                <span>💬 WhatsApp</span>
+                            </button>
+                        ` : ''}
+                        <button type="button" class="btn btn-outline-primary" onclick="CustomersView.showAccountDetails(${customer.id})" style="font-weight: 750; border-radius: 0.6rem; padding: 0.55rem 1rem; font-size: 0.82rem;">
+                            💳 Ver Cuenta Completa
+                        </button>
+                        <button type="button" class="btn btn-success" onclick="CustomersView.showUnifiedAbonoModal('${customer.id}')" style="font-weight: 800; border-radius: 0.6rem; padding: 0.55rem 1.1rem; font-size: 0.82rem; background: #10b981; border: none;">
+                            ➕ Registrar Abono
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            showModal(modalContent, {
+                title: `📊 Inteligencia y Estadísticas - ${customer.name}`,
+                width: '680px'
+            });
+        } catch (e) {
+            console.error('Error al generar estadísticas del cliente:', e);
+            showNotification('Error al cargar estadísticas del cliente', 'error');
+        }
+    },
+
+    async showEditPromiseDateModal(customerId) {
+        try {
+            const customer = await Customer.getById(parseInt(customerId));
+            if (!customer) return;
+
+            const now = new Date();
+            const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+            const currentPromise = customer.promiseDate || '';
+
+            const content = `
+                <div style="display: flex; flex-direction: column; gap: 1rem;">
+                    <p style="margin: 0; font-size: 0.88rem; color: #475569;">
+                        Agenda la fecha en que <strong>${safeHTML(customer.name)}</strong> se compromete a pagar o abonar su deuda:
+                    </p>
+
+                    <!-- Atajos Rápidos -->
+                    <div>
+                        <span style="font-size: 0.72rem; font-weight: 800; color: #64748b; text-transform: uppercase; display: block; margin-bottom: 0.35rem;">
+                            Atajos Rápidos:
+                        </span>
+                        <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('editPromiseInput').value = new Date(Date.now() + 3*86400000).toISOString().split('T')[0]">
+                                +3 Días
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('editPromiseInput').value = new Date(Date.now() + 7*86400000).toISOString().split('T')[0]">
+                                +7 Días (1 Sem)
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('editPromiseInput').value = new Date(Date.now() + 15*86400000).toISOString().split('T')[0]">
+                                +15 Días
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('editPromiseInput').value = '${endOfMonth.toISOString().split('T')[0]}'">
+                                Fin de Mes (${endOfMonth.getDate()}/${endOfMonth.getMonth() + 1})
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="document.getElementById('editPromiseInput').value = ''">
+                                ❌ Sin Compromiso
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Input Selector -->
+                    <div>
+                        <label style="font-size: 0.78rem; font-weight: 750; color: #1e293b; display: block; margin-bottom: 0.25rem;">
+                            Fecha de Compromiso de Pago:
+                        </label>
+                        <input type="date" id="editPromiseInput" class="form-control" value="${currentPromise}" style="height: 44px; font-size: 1rem; font-weight: 800;">
+                    </div>
+
+                    <!-- Botones -->
+                    <div style="display: flex; gap: 0.6rem; justify-content: flex-end; margin-top: 0.5rem;">
+                        <button type="button" class="btn btn-secondary" onclick="CustomersView.showCustomerStatsModal(${customer.id})">
+                            Cancelar
+                        </button>
+                        <button type="button" class="btn btn-primary" onclick="CustomersView.saveEditedPromiseDate(${customer.id})" style="font-weight: 800;">
+                            💾 Guardar Fecha
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            showModal(content, {
+                title: `🗓️ Agendar Promesa de Pago`,
+                width: '460px'
+            });
+        } catch (e) {
+            console.error('Error al abrir modal de fecha de pago:', e);
+        }
+    },
+
+    async saveEditedPromiseDate(customerId) {
+        try {
+            const input = document.getElementById('editPromiseInput');
+            const val = input ? input.value : '';
+            await Customer.update(parseInt(customerId), { promiseDate: val || null });
+            showNotification(val ? 'Fecha de compromiso agendada con éxito' : 'Compromiso de pago eliminado', 'success');
+            await this.refresh();
+            this.showCustomerStatsModal(customerId);
+        } catch (e) {
+            console.error('Error al guardar fecha de pago:', e);
+            showNotification('Error al guardar fecha de pago', 'error');
+        }
     }
 };

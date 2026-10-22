@@ -23,10 +23,27 @@ class ProductController {
     static async deleteProduct(id) {
         // C8: Permiso para desactivar producto
         PermissionService.require('products.delete', 'desactivar productos');
+        
+        // Obtener el producto antes de borrar para registrar trazabilidad exacta
+        const product = await Product.getById(id);
+        const currentStock = product ? (parseFloat(product.stock) || 0) : 0;
+
         if (typeof SyncService !== 'undefined' && typeof SyncService.markProductDeleted === 'function') {
             await SyncService.markProductDeleted(id);
         }
         await Product.delete(id);
+
+        // Registrar en el Kardex / Historial de movimientos de stock
+        if (typeof StockMovement !== 'undefined' && typeof StockMovement.create === 'function') {
+            await StockMovement.create({
+                productId: id,
+                type: 'adjustment',
+                quantity: 0,
+                reference: 'Baja del Catálogo',
+                reason: `Producto desactivado/eliminado del catálogo (Stock al momento de baja: ${currentStock})`
+            }).catch(err => console.warn('[ProductController] Error registrando movimiento de baja:', err));
+        }
+
         showNotification('Producto desactivado. Ya no aparecerá en listados ni ventas.', 'success');
         if (typeof SyncService !== 'undefined' && typeof SyncService.triggerAutoSync === 'function') {
             SyncService.triggerAutoSync(800);
@@ -40,7 +57,20 @@ class ProductController {
     static async restoreProduct(id) {
         // C8: Permiso para restaurar producto (mismo que delete)
         PermissionService.require('products.delete', 'restaurar productos');
+        const product = await Product.getById(id);
         await Product.restore(id);
+
+        // Registrar restauración en el Kardex de stock
+        if (typeof StockMovement !== 'undefined' && typeof StockMovement.create === 'function') {
+            await StockMovement.create({
+                productId: id,
+                type: 'adjustment',
+                quantity: 0,
+                reference: 'Restauración en Catálogo',
+                reason: `Producto reactivado y disponible en catálogo (Stock: ${product ? (product.stock || 0) : 0})`
+            }).catch(err => console.warn('[ProductController] Error registrando movimiento de restauración:', err));
+        }
+
         showNotification('Producto restaurado y activo nuevamente.', 'success');
         if (typeof SyncService !== 'undefined' && typeof SyncService.triggerAutoSync === 'function') {
             SyncService.triggerAutoSync(800);

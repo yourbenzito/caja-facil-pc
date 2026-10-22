@@ -12,6 +12,78 @@ class NotificationCenter {
         this.loadFromStorage();
         this.renderBellIcon();
         console.log('🔔 [NotificationCenter] Centro de notificaciones inicializado.');
+        setTimeout(() => this.checkOverduePromises(), 3000);
+        if (!this._promiseInterval) {
+            this._promiseInterval = setInterval(() => this.checkOverduePromises(), 20 * 60 * 1000);
+        }
+    }
+
+    /**
+     * Verifica clientes con promesas de pago vencidas y alerta al dueño 2 veces al día
+     * (Turno mañana: antes de las 14:00 | Turno tarde: a partir de las 14:00)
+     */
+    static async checkOverduePromises() {
+        try {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const todayStr = `${year}-${month}-${day}`;
+            const currentSlot = now.getHours() < 14 ? 'slot_manana' : 'slot_tarde';
+            const slotKey = `PROMISE_ALERT_${todayStr}_${currentSlot}`;
+
+            // Si ya se alertó en este bloque horario del día, no repetir
+            if (localStorage.getItem(slotKey)) {
+                return;
+            }
+
+            if (typeof Customer === 'undefined' || typeof Customer.getAll !== 'function') {
+                return;
+            }
+
+            const customers = await Customer.getAll();
+            if (!Array.isArray(customers) || customers.length === 0) return;
+
+            const overdueList = [];
+            for (const c of customers) {
+                if (c.promiseDate && c.promiseDate < todayStr && (c.status !== 'deleted')) {
+                    let debt = parseFloat(c.totalDebt) || 0;
+                    if (debt <= 0 && typeof CustomerAccountService !== 'undefined' && CustomerAccountService.getCustomerBalance) {
+                        try {
+                            const bal = await CustomerAccountService.getCustomerBalance(c.id);
+                            debt = bal ? (parseFloat(bal.totalDebt) || 0) : 0;
+                        } catch (_) {}
+                    }
+                    if (debt > 0) {
+                        overdueList.push({ name: c.name, promiseDate: c.promiseDate, debt });
+                    }
+                }
+            }
+
+            if (overdueList.length > 0) {
+                localStorage.setItem(slotKey, '1');
+                if (overdueList.length === 1) {
+                    const c = overdueList[0];
+                    const debtFmt = typeof formatCLP === 'function' ? formatCLP(c.debt) : `$${c.debt}`;
+                    this.addNotification({
+                        title: '🚨 Compromiso de Pago Vencido',
+                        message: `El cliente "${c.name}" tenía compromiso acordado para el ${c.promiseDate} y aún mantiene una deuda de ${debtFmt}.`,
+                        type: 'danger'
+                    });
+                } else {
+                    const totalOverdueDebt = overdueList.reduce((sum, item) => sum + item.debt, 0);
+                    const totalFmt = typeof formatCLP === 'function' ? formatCLP(totalOverdueDebt) : `$${totalOverdueDebt}`;
+                    const namesSummary = overdueList.slice(0, 3).map(x => x.name).join(', ') + (overdueList.length > 3 ? ` y ${overdueList.length - 3} más` : '');
+                    this.addNotification({
+                        title: `🚨 ${overdueList.length} Compromisos de Pago Vencidos`,
+                        message: `Hay ${overdueList.length} clientes con fecha límite vencida (${namesSummary}) sumando una deuda de ${totalFmt}.`,
+                        type: 'danger'
+                    });
+                }
+            }
+        } catch (err) {
+            console.warn('[NotificationCenter] Error verificando promesas vencidas:', err);
+        }
     }
 
     static loadFromStorage() {

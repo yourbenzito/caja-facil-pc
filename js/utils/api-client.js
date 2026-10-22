@@ -19,6 +19,16 @@ const ApiClient = {
         const businessId = localStorage.getItem('BUSINESS_ID') || sessionStorage.getItem('BUSINESS_ID');
         if (token) headers['Authorization'] = `Bearer ${token}`;
         if (businessId) headers['x-business-id'] = businessId;
+
+        try {
+            if (typeof AuthManager !== 'undefined' && typeof AuthManager.getCurrentUser === 'function') {
+                const u = AuthManager.getCurrentUser();
+                if (u && (u.username || u.name)) {
+                    headers['x-username'] = encodeURIComponent(u.username || u.name);
+                }
+            }
+        } catch (_) {}
+
         return headers;
     },
 

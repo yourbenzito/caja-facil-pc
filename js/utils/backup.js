@@ -62,6 +62,7 @@ class BackupManager {
         const supplierPayments = await db.getAll('supplierPayments');
         const saleReturns = await db.getAll('saleReturns');
         const debtPaymentSessions = await db.getAll('debtPaymentSessions');
+        const counterNotes = await db.getAll('counterNotes');
 
         // CORRECCIÓN: Validar categorías por nombre e ID
         const categoryNames = new Set(categories.map(c => (c.name || '').toLowerCase().trim()));
@@ -159,7 +160,8 @@ class BackupManager {
             productCostHistory,
             supplierPayments,
             saleReturns,
-            debtPaymentSessions
+            debtPaymentSessions,
+            counterNotes
         };
     }
 
@@ -307,7 +309,7 @@ class BackupManager {
                 }
                 
                 // Modo IndexedDB: Importación de tablas operativas (excluyendo users y passwordResets)
-                const stores = ['products', 'categories', 'sales', 'customers', 'suppliers', 'purchases', 'expenses', 'cashRegisters', 'cashMovements', 'stockMovements', 'settings', 'payments', 'businesses', 'customerCreditDeposits', 'customerCreditUses', 'auditLogs', 'productPriceHistory', 'productCostHistory', 'supplierPayments', 'saleReturns', 'debtPaymentSessions'];
+                const stores = ['products', 'categories', 'sales', 'customers', 'suppliers', 'purchases', 'expenses', 'cashRegisters', 'cashMovements', 'stockMovements', 'settings', 'payments', 'businesses', 'customerCreditDeposits', 'customerCreditUses', 'auditLogs', 'productPriceHistory', 'productCostHistory', 'supplierPayments', 'saleReturns', 'debtPaymentSessions', 'counterNotes'];
 
                 for (const store of stores) {
                     if (data[store] && Array.isArray(data[store])) {

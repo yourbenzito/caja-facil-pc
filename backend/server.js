@@ -64,6 +64,56 @@ app.use((req, res, next) => {
 app.use(cors({ origin: [/localhost:\d+$/, /127\.0\.0\.1:\d+$/] }));
 app.use(express.json({ limit: '50mb' }));
 
+// 🛡️ Cabeceras de seguridad HTTP estándar (Security Headers)
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    next();
+});
+
+// 🛡️ Rate Limiting en memoria para protección contra ataques de fuerza bruta en login
+const loginAttempts = new Map();
+setInterval(() => {
+    const now = Date.now();
+    for (const [ip, data] of loginAttempts.entries()) {
+        if (now - data.resetTime > 60000) {
+            loginAttempts.delete(ip);
+        }
+    }
+}, 60000);
+
+const loginRateLimiter = (req, res, next) => {
+    const ip = req.ip || req.connection?.remoteAddress || '127.0.0.1';
+    const now = Date.now();
+    const entry = loginAttempts.get(ip) || { count: 0, resetTime: now };
+
+    if (now - entry.resetTime > 60000) {
+        entry.count = 0;
+        entry.resetTime = now;
+    }
+
+    if (entry.count >= 5) {
+        return res.status(429).json({ 
+            error: 'Demasiados intentos fallidos. Por seguridad, espera 1 minuto antes de volver a intentar.' 
+        });
+    }
+
+    res.on('finish', () => {
+        // Solo penalizamos intentos fallidos (401 o 400)
+        if (res.statusCode === 401 || res.statusCode === 400) {
+            entry.count += 1;
+            loginAttempts.set(ip, entry);
+        } else if (res.statusCode === 200) {
+            loginAttempts.delete(ip);
+        }
+    });
+
+    next();
+};
+app.use('/api/auth/login', loginRateLimiter);
+
 // Servir archivos estáticos del frontend
 const ROOT_DIR = pathModule.join(__dirname, '..');
 const STATIC_OPTS = { etag: false, lastModified: false, setHeaders: (res) => { res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate'); } };

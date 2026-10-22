@@ -11,6 +11,7 @@ const POSView = {
     customerPrivacyMode: true,
     async render() {
         const cashOpen = await posController.init();
+        const pendingNotesCount = (typeof NotesService !== 'undefined') ? NotesService.getPendingCount() : 0;
 
         if (!cashOpen) {
             return `
@@ -39,10 +40,13 @@ const POSView = {
                     <!-- Fila 1 Superior: Total a Pagar + Buscador Central + Finalizar Cobro -->
                     <div style="display: flex; align-items: stretch; gap: 0.65rem; width: 100%;">
                         
-                        <!-- 1. Total Gigante Destacado (Ancho responsivo) -->
-                        <div style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.1) 0%, rgba(99, 102, 241, 0.18) 100%); border: 2px solid var(--primary); border-radius: 0.75rem; padding: 0.35rem 0.85rem; display: flex; flex-direction: column; justify-content: center; min-width: 170px; flex-shrink: 0; box-shadow: 0 2px 10px rgba(79, 70, 229, 0.1);">
-                            <span style="font-size: 0.68rem; font-weight: 900; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px; line-height: 1;">TOTAL A PAGAR</span>
-                            <strong id="cartTotal" style="font-size: 1.9rem; font-weight: 950; color: var(--primary); line-height: 1.1; margin-top: 0.1rem;">$0</strong>
+                        <!-- 1. Total Gigante Destacado (Visor de Alto Impacto para Clientes) -->
+                        <div style="background: linear-gradient(135deg, rgba(79, 70, 229, 0.12) 0%, rgba(99, 102, 241, 0.22) 100%); border: 2.5px solid var(--primary); border-radius: 0.85rem; padding: 0.35rem 1.15rem; display: flex; flex-direction: column; justify-content: center; min-width: 235px; flex-shrink: 0; box-shadow: 0 4px 15px rgba(79, 70, 229, 0.18);">
+                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 0.4rem;">
+                                <span style="font-size: 0.72rem; font-weight: 950; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; line-height: 1;">TOTAL A PAGAR</span>
+                                <span style="font-size: 0.65rem; background: var(--primary); color: #fff; font-weight: 900; padding: 0.1rem 0.4rem; border-radius: 0.3rem; letter-spacing: 0.5px;">CLP</span>
+                            </div>
+                            <strong id="cartTotal" style="font-size: 2.35rem; font-weight: 950; color: var(--primary); line-height: 1.05; margin-top: 0.15rem; letter-spacing: -0.5px; text-shadow: 0 1px 2px rgba(79, 70, 229, 0.15);">$0</strong>
                         </div>
 
                         <!-- 2. Buscador de Productos / Escáner -->
@@ -73,12 +77,12 @@ const POSView = {
                         
                         <!-- Bloque Derecho: Botones de Gestión Operativa Táctil (Ergonómicos) -->
                         <div style="display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; flex-wrap: nowrap;">
-                            <button type="button" class="btn btn-outline-primary" id="posBusinessDropdownBtn" onclick="AuthManager.toggleBusinessDropdown(this, event)" title="Cambiar de Negocio o Sucursal" 
-                                    style="height: 40px; padding: 0 0.65rem; font-weight: 800; font-size: 0.8rem; border-radius: 0.65rem; border: 1.5px solid #6366f1; background: rgba(79, 70, 229, 0.06); color: var(--primary); display: flex; align-items: center; gap: 0.3rem; white-space: nowrap; transition: all 0.2s; cursor: pointer;">
-                                <span>🏪</span>
-                                <span class="current-business-name-badge">${localStorage.getItem('CURRENT_BUSINESS') || 'Mi Negocio'}</span>
-                                <span style="font-size: 0.7rem; opacity: 0.7;">▾</span>
-                            </button>
+                            <!-- Indicador de Turno Compacto -->
+                            <div id="posCashStatusBadge" title="Estado de la Caja Registradora" 
+                                 style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0 0.65rem; height: 40px; border-radius: 0.65rem; background: rgba(16, 185, 129, 0.08); border: 1.5px solid #10b981; color: #047857; font-size: 0.78rem; font-weight: 850; white-space: nowrap;">
+                                <span style="font-size: 0.6rem;">🟢</span>
+                                <span>Caja Abierta</span>
+                            </div>
 
                             <div id="customerInfo">
                                 <button type="button" class="btn btn-outline-primary btn-customer-select" onclick="POSView.selectCustomer()" 
@@ -88,47 +92,62 @@ const POSView = {
                                 </button>
                             </div>
 
-                            <button type="button" class="btn btn-success" onclick="POSView.quickPayExactCash()" title="Cobro instantáneo en efectivo exacto"
+                            <button type="button" class="btn btn-success" onclick="POSView.quickPayExactCash()" title="Cobro instantáneo en efectivo exacto [F9]"
                                     style="height: 40px; padding: 0 0.75rem; font-weight: 900; font-size: 0.8rem; border-radius: 0.65rem; display: flex; align-items: center; gap: 0.35rem; white-space: nowrap; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.2); transition: all 0.2s; cursor: pointer;">
                                 <span>⚡</span>
-                                <span>EFECTIVO</span>
+                                <span>[F9] EFECTIVO</span>
                             </button>
 
-                            <button type="button" class="btn btn-outline-primary" onclick="POSView.quickPayCard()" title="Cobro instantáneo con tarjeta"
+                            <button type="button" class="btn btn-outline-primary" onclick="POSView.quickPayCard()" title="Cobro instantáneo con tarjeta [F10]"
                                     style="height: 40px; padding: 0 0.75rem; font-weight: 900; font-size: 0.8rem; border-radius: 0.65rem; border: 2px solid var(--primary); background: var(--surface); display: flex; align-items: center; gap: 0.35rem; white-space: nowrap; transition: all 0.2s; cursor: pointer;">
                                 <span>💳</span>
-                                <span>TARJETA</span>
+                                <span>[F10] TARJETA</span>
                             </button>
 
-                            <div style="width: 1px; height: 26px; background: var(--border); margin: 0 0.15rem; flex-shrink: 0;"></div>
-
+                            <div style="width: 1px; height: 26px; background: var(--border); margin: 0 0.2rem; flex-shrink: 0;"></div>
 
                             <button type="button" class="btn btn-xs btn-outline-warning" onclick="POSView.showDiscountModal()" title="Aplicar Descuento [Alt+D]" style="height: 40px; font-weight: 800; border-radius: 0.6rem; padding: 0 0.6rem; font-size: 0.78rem; white-space: nowrap; display: flex; align-items: center; gap: 0.25rem; cursor: pointer;">
                                 <span>🏷️</span>
                                 <span>[Alt+D] DESC</span>
                             </button>
+
                             <button type="button" class="btn btn-xs btn-outline-danger" onclick="POSView.clearCart()" title="Limpiar Carrito [F8]" style="height: 40px; font-weight: 800; border-radius: 0.6rem; padding: 0 0.6rem; font-size: 0.78rem; white-space: nowrap; display: flex; align-items: center; gap: 0.25rem; cursor: pointer;">
                                 <span>🗑️</span>
                                 <span>[F8]</span>
+                            </button>
+
+                            <button type="button" class="btn btn-xs btn-outline-secondary" onclick="POSView.showShortcutsHelpModal()" title="Ver Guía de Atajos de Teclado [F12]"
+                                    style="height: 40px; padding: 0 0.55rem; font-weight: 800; font-size: 0.78rem; border-radius: 0.6rem; border: 1.5px solid #cbd5e1; background: #ffffff; color: #475569; display: flex; align-items: center; gap: 0.25rem; white-space: nowrap; cursor: pointer; transition: all 0.2s;">
+                                <span>⌨️</span>
+                                <span>[F12]</span>
                             </button>
                         </div>
                     </div>
                 </div>
 
                 <!-- 2. VISTA PRINCIPAL DEL CARRITO (OCUPA TODO EL ALTO Y ANCHO RESTANTE) -->
-                <div class="pos-cart-panel" style="flex: 1; background: var(--surface); border: 2px solid var(--border); border-radius: 1rem; padding: 0.75rem 1rem; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.03);">
-                    <div class="pos-cart-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.45rem; padding-bottom: 0.35rem; border-bottom: 1px solid var(--border);">
-                        <h3 class="pos-cart-title" style="margin: 0; font-size: 0.9rem; font-weight: 900; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">
-                            🛒 LISTA DE PRODUCTOS
-                        </h3>
-                        <div style="display: flex; gap: 1rem; font-size: 0.82rem; font-weight: 800; color: var(--text-muted);">
-                            <span id="cartDiscountSection" style="display: none; color: var(--danger);">Desc: <strong id="cartDiscountAmount">$0</strong></span>
-                            <span id="fiscalBreakdown" style="display: none; color: var(--primary);">IVA: <strong id="fiscalIVA">$0</strong></span>
-                            <span>Subtotal: <strong id="cartSubtotal" style="color: var(--text-main); font-size: 0.95rem;">$0</strong></span>
+                <div class="pos-cart-panel" style="flex: 1; background: var(--surface); border: 2px solid var(--border); border-radius: 1rem; padding: 0.5rem 0.75rem; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.03);">
+                    <div class="pos-cart-header" style="display: flex; justify-content: space-between; align-items: center; padding: 0.45rem 0.85rem; border-bottom: 1.5px solid var(--border); background: var(--surface-content) !important; border-radius: 0.75rem 0.75rem 0 0; margin-bottom: 0.25rem;">
+                        <div style="display: flex; align-items: center; gap: 0.55rem;">
+                            <span style="font-size: 1.15rem;">🛒</span>
+                            <h3 class="pos-cart-title" style="margin: 0; font-size: 0.9rem; font-weight: 950; color: var(--text-main); letter-spacing: 0.5px; text-transform: uppercase;">
+                                LISTA DE PRODUCTOS
+                            </h3>
+                            <span id="cartItemsCountBadge" style="display: none; background: rgba(79, 70, 229, 0.08); color: var(--primary); font-size: 0.72rem; font-weight: 900; padding: 0.12rem 0.5rem; border-radius: 999px; border: 1px solid rgba(79, 70, 229, 0.2);">
+                                0 productos
+                            </span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 1rem; font-size: 0.82rem; font-weight: 800; color: var(--text-muted);">
+                            <span id="cartDiscountSection" style="display: none; color: var(--danger); background: rgba(239, 68, 68, 0.08); padding: 0.15rem 0.5rem; border-radius: 0.4rem; border: 1px solid rgba(239, 68, 68, 0.2);">Desc: <strong id="cartDiscountAmount">$0</strong></span>
+                            <span id="fiscalBreakdown" style="display: none; color: var(--primary); background: rgba(79, 70, 229, 0.08); padding: 0.15rem 0.5rem; border-radius: 0.4rem; border: 1px solid rgba(79, 70, 229, 0.2);">IVA: <strong id="fiscalIVA">$0</strong></span>
+                            <div style="display: flex; align-items: baseline; gap: 0.35rem;">
+                                <span style="font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; font-weight: 800;">Subtotal:</span>
+                                <strong id="cartSubtotal" style="color: var(--text-main); font-size: 1.1rem; font-weight: 950;">$0</strong>
+                            </div>
                         </div>
                     </div>
 
-                    <div id="cartItems" class="pos-cart-items-container" style="flex: 1; overflow-y: auto; padding-right: 0.35rem;"></div>
+                    <div id="cartItems" class="pos-cart-items-container" style="flex: 1; overflow-y: auto; padding-right: 0.25rem;"></div>
                 </div>
             </div>
         `;
@@ -376,6 +395,17 @@ const POSView = {
             // F6: Clientes en espera / pausar venta
             if (e.key === 'F6') { e.preventDefault(); POSView.openHeldSalesMenu(); return; }
 
+            // F7: Pizarra de Notas, Encargos y Envases
+            if (e.key === 'F7') {
+                e.preventDefault();
+                if (typeof app !== 'undefined' && typeof app.openNotesModal === 'function') {
+                    app.openNotesModal();
+                } else if (typeof NotesModal !== 'undefined') {
+                    NotesModal.open();
+                }
+                return;
+            }
+
             // F8: Limpiar carrito
             if (e.key === 'F8') {
                 e.preventDefault();
@@ -385,7 +415,18 @@ const POSView = {
                 return;
             }
 
+            // F9: Cobro express en efectivo exacto
+            if (e.key === 'F9') { e.preventDefault(); POSView.quickPayExactCash(); return; }
 
+            // F10: Cobro express con tarjeta
+            if (e.key === 'F10') { e.preventDefault(); POSView.quickPayCard(); return; }
+
+            // F12 o ?: Guía de atajos de teclado
+            if (e.key === 'F12' || (e.key === '?' && !['INPUT', 'TEXTAREA'].includes(activeTag))) {
+                e.preventDefault();
+                POSView.showShortcutsHelpModal();
+                return;
+            }
 
             // Alt+D: Descuento
             if (e.altKey && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); POSView.showDiscountModal(); return; }
@@ -642,11 +683,25 @@ const POSView = {
     },
 
     showProductModal(product) {
-        // PREVENCIÓN DE DUPLICADOS: Si ya hay un modal de producto abierto, no abrir otro
-        if (document.getElementById('productQuantity')) {
-            console.warn('⚠️ Modal de producto ya está abierto. Ignorando llamada duplicada.');
+        // PREVENCIÓN DE DUPLICADOS O SUMA RÁPIDA CON PISTOLA:
+        // Si el modal ya está abierto y se escanea el MISMO producto, sumar +1 a la cantidad
+        const existingQtyInput = document.getElementById('productQuantity');
+        if (existingQtyInput && this._activeModalProductId === product.id) {
+            const isWeight = product.type === 'weight';
+            if (!isWeight) {
+                const currentVal = parseFloat(existingQtyInput.value) || 0;
+                existingQtyInput.value = (currentVal + 1);
+                existingQtyInput.dispatchEvent(new Event('input', { bubbles: true }));
+                showNotification(`+1 ${product.name}`, 'info');
+                return;
+            }
+        }
+        if (existingQtyInput) {
+            console.warn('⚠️ Modal de producto ya está abierto con otro producto.');
             return;
         }
+
+        this._activeModalProductId = product.id;
 
         if (this._receiptTimer) {
             clearInterval(this._receiptTimer);
@@ -700,7 +755,7 @@ const POSView = {
 
         const footer = `
             <div style="display: flex; gap: 0.75rem; width: 100%;">
-                <button class="btn btn-secondary" style="flex: 1; height: 44px; font-weight: 700; border-radius: 0.6rem;" onclick="closeModal()">CANCELAR</button>
+                <button class="btn btn-secondary" style="flex: 1; height: 44px; font-weight: 700; border-radius: 0.6rem;" onclick="POSView._activeModalProductId = null; closeModal()">CANCELAR</button>
                 <button class="btn ${isOutOfStock ? 'btn-warning' : 'btn-primary'}" style="flex: 2; height: 44px; font-size: 1.02rem; font-weight: 800; border-radius: 0.6rem; ${isOutOfStock ? 'background: #f59e0b; color: #fff; border: 1px solid #d97706;' : ''}" onclick="POSView.addProductFromModal(${product.id})">
                     ${isOutOfStock ? '⚠️ VENDER DE TODAS FORMAS' : '✓ AGREGAR'}
                 </button>
@@ -795,6 +850,7 @@ const POSView = {
 
             posController.addToCart(product, q, p);
             this.updateCart();
+            this._activeModalProductId = null;
             closeModal();
             
             // Solo limpiamos el buscador si el producto se agregó exitosamente
@@ -821,6 +877,12 @@ const POSView = {
         
         const sumTotEl = document.getElementById('cartSummaryTotal');
         if (sumTotEl) sumTotEl.textContent = formatCLP(summary.total, true);
+
+        const countBadge = document.getElementById('cartItemsCountBadge');
+        if (countBadge) {
+            countBadge.textContent = `${summary.items.length} ${summary.items.length === 1 ? 'producto' : 'productos'}`;
+            countBadge.style.display = summary.items.length > 0 ? 'inline-block' : 'none';
+        }
 
         // ACTUALIZAR INFORMACIÓN DEL CLIENTE (FIX: Limpiar inmediatamente al terminar venta)
         const infoEl = document.getElementById('customerInfo');
@@ -905,9 +967,9 @@ const POSView = {
                 const totalNext = nextSale.cart.reduce((sum, item) => sum + item.total, 0);
                 cartDiv.innerHTML = `
                     <div class="cart-empty-state" style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.85rem; padding: 2.5rem 1rem;">
-                        <div style="font-size: 2.5rem;">🛒</div>
-                        <div style="font-size: 1.1rem; font-weight: 800; color: var(--text-main);">Carrito disponible para venta</div>
-                        <div style="background: rgba(245, 158, 11, 0.1); border: 2px solid #f59e0b; border-radius: 0.85rem; padding: 0.85rem 1.25rem; display: flex; align-items: center; gap: 1rem; max-width: 480px; width: 100%; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.12);">
+                        <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(79, 70, 229, 0.08); border: 2px dashed rgba(79, 70, 229, 0.25); display: flex; align-items: center; justify-content: center; font-size: 2rem;">🛒</div>
+                        <div style="font-size: 1.05rem; font-weight: 850; color: var(--text-main);">Carrito disponible para venta</div>
+                        <div style="background: rgba(245, 158, 11, 0.1); border: 2px solid #f59e0b; border-radius: 0.85rem; padding: 0.85rem 1.25rem; display: flex; align-items: center; gap: 1rem; max-width: 480px; width: 100%; box-shadow: 0 4px 15px rgba(245, 158, 11, 0.12); margin-top: 0.5rem;">
                             <div style="font-size: 1.8rem;">⏳</div>
                             <div style="flex: 1; text-align: left; min-width: 0;">
                                 <div style="font-size: 0.72rem; font-weight: 900; color: #d97706; text-transform: uppercase; letter-spacing: 0.5px;">Cliente en espera pendiente</div>
@@ -921,12 +983,24 @@ const POSView = {
                     </div>
                 `;
             } else {
-                cartDiv.innerHTML = `<div class="cart-empty-state">🛒 Carrito vacío</div>`;
+                cartDiv.innerHTML = `
+                    <div class="cart-empty-state" style="height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; padding: 3rem 1rem; text-align: center;">
+                        <div style="width: 72px; height: 72px; border-radius: 50%; background: rgba(79, 70, 229, 0.06); border: 2px dashed rgba(79, 70, 229, 0.25); display: flex; align-items: center; justify-content: center; font-size: 2.2rem;">
+                            🛒
+                        </div>
+                        <div style="font-size: 1.15rem; font-weight: 900; color: var(--text-main);">
+                            Carrito listo para venta
+                        </div>
+                        <div style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600; max-width: 360px; line-height: 1.4;">
+                            Escanea un código con el lector USB o presiona <kbd style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 6px; padding: 2px 7px; font-weight: 800; color: var(--text-main); font-size: 0.78rem;">F1</kbd> para buscar por nombre
+                        </div>
+                    </div>
+                `;
             }
         } else {
             const hasLoss = summary.items.some(item => (parseFloat(item.cost) || 0) > 0 && parseFloat(item.unitPrice) < parseFloat(item.cost));
             const lossBanner = hasLoss ? `
-                <div style="background: rgba(239, 68, 68, 0.1); border: 1.5px solid #dc2626; color: #dc2626; padding: 0.45rem 0.75rem; border-radius: 0.6rem; font-size: 0.78rem; font-weight: 800; margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.4rem;">
+                <div style="background: rgba(239, 68, 68, 0.1); border: 1.5px solid #dc2626; color: #dc2626; padding: 0.4rem 0.75rem; border-radius: 0.6rem; font-size: 0.75rem; font-weight: 800; margin-bottom: 0.4rem; display: flex; align-items: center; gap: 0.4rem;">
                     <span>⚠️</span>
                     <span>AVISO PREVENTIVO: Hay producto(s) vendiéndose por debajo de su costo de compra</span>
                 </div>
@@ -934,51 +1008,76 @@ const POSView = {
 
             cartDiv.innerHTML = `
                 ${lossBanner}
-                <div class="pos-cart-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
+                <!-- Cabecera de columnas para alineación compacta tipo POS -->
+                <div class="pos-cart-col-headers" style="display: flex; align-items: center; gap: 0.65rem; padding: 0.35rem 0.65rem; font-size: 0.7rem; font-weight: 900; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1.5px solid var(--border); margin-bottom: 0.35rem; background: rgba(0,0,0,0.02); border-radius: 0.4rem;">
+                    <div style="width: 28px; text-align: center; flex-shrink: 0;">#</div>
+                    <div style="flex: 1; min-width: 0;">Descripción del Producto</div>
+                    <div style="width: 120px; text-align: center; flex-shrink: 0;">Cantidad</div>
+                    <div style="width: 95px; text-align: right; flex-shrink: 0;">Precio Unit.</div>
+                    <div style="width: 110px; text-align: right; flex-shrink: 0;">Total</div>
+                    <div style="width: 32px; text-align: center; flex-shrink: 0;"></div>
+                </div>
+
+                <div class="pos-cart-list" style="display: flex; flex-direction: column; gap: 0.35rem;">
                 ${summary.items.map((item, index) => {
-                const isLoss = (parseFloat(item.cost) || 0) > 0 && parseFloat(item.unitPrice) < parseFloat(item.cost);
-                const stockWarn = (item.stock !== undefined) && (item.quantity > item.stock);
-                const stockNeg  = (item.stock !== undefined) && (item.stock <= 0);
-                return `
-                        <div class="pos-cart-item ${isLoss ? 'is-loss' : ''} ${stockWarn ? 'stock-warn' : ''}" style="background: var(--surface-content); border: 2px solid var(--border); border-radius: 0.85rem; padding: 0.65rem 1.15rem; display: flex; align-items: center; justify-content: space-between; gap: 1rem; transition: all 0.2s;">
-                            <div class="pos-cart-item-info" style="flex: 1; min-width: 0;">
-                                <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.35rem;">
-                                    <strong style="font-size: 1.1rem; font-weight: 900; color: var(--text-main);">${safeHTML(item.name)}</strong>
-                                    ${isLoss ? '<span class="badge-loss" style="background: #ef4444; color: #fff; font-weight: 900; font-size: 0.7rem; padding: 0.12rem 0.45rem; border-radius: 0.35rem; margin: 0;">⚠️ VENTA BAJO COSTO</span>' : ''}
-                                    ${stockNeg ? '<span class="badge-stock-critical" style="margin: 0; background: #fee2e2; color: #991b1b; border: 1.5px solid #fca5a5; font-size: 0.72rem; font-weight: 900; padding: 0.12rem 0.45rem; border-radius: 0.35rem;">📦 SIN STOCK</span>' : (stockWarn ? '<span class="badge-stock-warn" style="margin: 0; background: #fef3c7; color: #92400e; border: 1.5px solid #fcd34d; font-size: 0.72rem; font-weight: 900; padding: 0.12rem 0.45rem; border-radius: 0.35rem;">📦 STOCK INSUF.</span>' : '')}
-                                </div>
-                                <div class="pos-cart-item-controls" style="display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap;">
-                                    <!-- Stepper Táctil de Cantidad con Numpad -->
-                                    <div style="display: flex; align-items: center; gap: 0.35rem;">
-                                        <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 800; text-transform: uppercase;">CANT:</span>
-                                        <div class="pos-cart-stepper">
-                                            <button type="button" class="btn-stepper btn-stepper-minus" onclick="POSView.stepQuantity(${item.productId}, -1)" title="Restar">-</button>
-                                            <input type="number" class="stepper-input" value="${item.quantity}" step="${item.type === 'weight' ? '0.001' : '1'}" 
-                                                   onchange="POSView.updateQuantity(${item.productId}, this.value)" 
-                                                   onfocus="this.select()" inputmode="decimal"
-                                                   onkeydown="if(event.key==='Enter') { event.preventDefault(); this.blur(); }">
-                                            <button type="button" class="btn-stepper btn-stepper-plus" onclick="POSView.stepQuantity(${item.productId}, 1)" title="Sumar">+</button>
-                                        </div>
-                                    </div>
-                                    <!-- Selector / Modificador Táctil de Precio -->
-                                    <div style="display: flex; align-items: center; gap: 0.35rem;">
-                                        <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 800; text-transform: uppercase;">PRECIO:</span>
-                                        <input type="number" value="${item.unitPrice}" step="10" 
-                                               onchange="POSView.updatePrice(${item.productId}, this.value)" 
-                                               onfocus="this.select()" inputmode="numeric"
-                                               onkeydown="if(event.key==='Enter') { event.preventDefault(); this.blur(); }" 
-                                               style="width: 105px; height: 38px; text-align: center; font-weight: 900; font-size: 1rem; border: 1.5px solid var(--border); border-radius: 0.5rem; background: var(--surface);">
-                                    </div>
-                                </div>
+                    const isLoss = (parseFloat(item.cost) || 0) > 0 && parseFloat(item.unitPrice) < parseFloat(item.cost);
+                    const stockWarn = (item.stock !== undefined) && (item.quantity > item.stock);
+                    const stockNeg  = (item.stock !== undefined) && (item.stock <= 0);
+                    const isWeight  = item.type === 'weight';
+                    return `
+                        <div class="pos-cart-item pos-cart-row ${isLoss ? 'is-loss' : ''} ${stockWarn ? 'stock-warn' : ''}">
+                            <!-- 1. N° de Orden -->
+                            <div style="width: 28px; height: 28px; border-radius: 6px; background: rgba(79, 70, 229, 0.08); color: var(--primary); font-size: 0.78rem; font-weight: 900; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                ${index + 1}
                             </div>
-                            <div style="display: flex; align-items: center; gap: 1.25rem; flex-shrink: 0;">
-                                <div style="font-size: 1.45rem; font-weight: 950; color: var(--primary);">${formatCLP(item.total, true)}</div>
-                                <button type="button" class="btn btn-outline-danger" onclick="POSView.removeItem(${item.productId})" title="Quitar producto del carrito" style="width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 0.65rem; border: 2px solid var(--danger); display: flex; align-items: center; justify-content: center; font-size: 1.15rem; padding: 0; transition: all 0.2s; cursor: pointer;">🗑️</button>
+
+                            <!-- 2. Descripción + Badges -->
+                            <div style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 0.4rem; overflow: hidden;">
+                                <strong style="font-size: 0.95rem; font-weight: 900; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${safeHTML(item.name)}">
+                                    ${safeHTML(item.name)}
+                                </strong>
+                                ${isLoss ? '<span style="background: #ef4444; color: #fff; font-weight: 900; font-size: 0.62rem; padding: 0.1rem 0.35rem; border-radius: 0.3rem; flex-shrink: 0; white-space: nowrap;">⚠️ BAJO COSTO</span>' : ''}
+                                ${stockNeg ? '<span style="background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; font-size: 0.62rem; font-weight: 900; padding: 0.1rem 0.35rem; border-radius: 0.3rem; flex-shrink: 0; white-space: nowrap;">📦 SIN STOCK</span>' : (stockWarn ? '<span style="background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; font-size: 0.62rem; font-weight: 900; padding: 0.1rem 0.35rem; border-radius: 0.3rem; flex-shrink: 0; white-space: nowrap;">📦 STOCK INSUF.</span>' : '')}
+                            </div>
+
+                            <!-- 3. Stepper de Cantidad -->
+                            <div style="display: flex; align-items: center; gap: 0.2rem; width: 120px; justify-content: center; flex-shrink: 0;">
+                                <button type="button" class="pos-cart-stepper-btn" onclick="POSView.stepQuantity(${item.productId}, -1)" title="Restar cantidad">-</button>
+                                <input type="number" class="stepper-input" value="${item.quantity}" step="${isWeight ? '0.001' : '1'}" 
+                                       onchange="POSView.updateQuantity(${item.productId}, this.value)" 
+                                       onfocus="this.select()" inputmode="decimal"
+                                       onkeydown="if(event.key==='Enter') { event.preventDefault(); this.blur(); }"
+                                       style="width: ${isWeight ? '58px' : '48px'}; height: 28px; text-align: center; font-weight: 900; font-size: 0.92rem; border: 1.5px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text-main); padding: 0 3px;">
+                                <button type="button" class="pos-cart-stepper-btn" onclick="POSView.stepQuantity(${item.productId}, 1)" title="Sumar cantidad">+</button>
+                                ${isWeight ? '<span style="font-size: 0.68rem; font-weight: 800; color: var(--text-muted); margin-left: 1px;">kg</span>' : ''}
+                            </div>
+
+                            <!-- 4. Precio Unitario Editable -->
+                            <div style="display: flex; align-items: center; gap: 0.15rem; width: 95px; justify-content: flex-end; flex-shrink: 0;">
+                                <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 800;">$</span>
+                                <input type="number" value="${item.unitPrice}" step="10" 
+                                       onchange="POSView.updatePrice(${item.productId}, this.value)" 
+                                       onfocus="this.select()" inputmode="numeric"
+                                       onkeydown="if(event.key==='Enter') { event.preventDefault(); this.blur(); }" 
+                                       style="width: 82px; height: 28px; text-align: right; font-weight: 850; font-size: 0.9rem; border: 1.5px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text-main); padding: 0 5px;">
+                            </div>
+
+                            <!-- 5. Total de la Línea -->
+                            <div style="width: 110px; text-align: right; font-size: 1.15rem; font-weight: 950; color: var(--primary); flex-shrink: 0; letter-spacing: -0.2px;">
+                                ${formatCLP(item.total, true)}
+                            </div>
+
+                            <!-- 6. Botón Quitar Producto -->
+                            <div style="width: 32px; display: flex; justify-content: center; flex-shrink: 0;">
+                                <button type="button" class="pos-cart-remove-btn" onclick="POSView.removeItem(${item.productId})" title="Quitar producto del carrito">
+                                    🗑️
+                                </button>
                             </div>
                         </div>
                     `;
-            }).join('')}
-            </div>`;
+                }).join('')}
+                </div>
+            `;
         }
     },
 
@@ -1089,21 +1188,102 @@ const POSView = {
         showModal(content, { title: '🏷 Descuento a la Venta', footer });
     },
 
+    showShortcutsHelpModal() {
+        const content = `
+            <div style="font-family: 'Outfit', sans-serif;">
+                <p style="margin: 0 0 1rem 0; font-size: 0.88rem; color: #64748b; font-weight: 500;">
+                    Atajos de teclado configurados para vender y cobrar a máxima velocidad:
+                </p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                    <!-- Columna 1: Cobro y Pagos -->
+                    <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 0.75rem; padding: 0.85rem;">
+                        <h4 style="margin: 0 0 0.6rem 0; font-size: 0.88rem; color: #1e293b; font-weight: 850; display: flex; align-items: center; gap: 0.35rem;">
+                            💸 Cobro y Pagos
+                        </h4>
+                        <div style="display: flex; flex-direction: column; gap: 0.45rem; font-size: 0.82rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 900; color: #4338ca; background: #e0e7ff; padding: 0.15rem 0.45rem; border-radius: 0.35rem;">[F2]</span>
+                                <span style="color: #334155; font-weight: 600;">Cobro Normal (vuelto)</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 900; color: #065f46; background: #d1fae5; padding: 0.15rem 0.45rem; border-radius: 0.35rem;">[F9]</span>
+                                <span style="color: #334155; font-weight: 600;">Express Efectivo Exacto</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 900; color: #1e40af; background: #dbeafe; padding: 0.15rem 0.45rem; border-radius: 0.35rem;">[F10]</span>
+                                <span style="color: #334155; font-weight: 600;">Express Tarjeta</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 900; color: #854d0e; background: #fef9c3; padding: 0.15rem 0.45rem; border-radius: 0.35rem;">[F4]</span>
+                                <span style="color: #334155; font-weight: 600;">Pasar a Deuda (Fiado)</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Columna 2: Operaciones de Carrito -->
+                    <div style="background: #f8fafc; border: 1.5px solid #e2e8f0; border-radius: 0.75rem; padding: 0.85rem;">
+                        <h4 style="margin: 0 0 0.6rem 0; font-size: 0.88rem; color: #1e293b; font-weight: 850; display: flex; align-items: center; gap: 0.35rem;">
+                            🛒 Carrito y Operaciones
+                        </h4>
+                        <div style="display: flex; flex-direction: column; gap: 0.45rem; font-size: 0.82rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 900; color: #4338ca; background: #e0e7ff; padding: 0.15rem 0.45rem; border-radius: 0.35rem;">[F1]</span>
+                                <span style="color: #334155; font-weight: 600;">Buscador / Escáner</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 900; color: #4338ca; background: #e0e7ff; padding: 0.15rem 0.45rem; border-radius: 0.35rem;">[F3]</span>
+                                <span style="color: #334155; font-weight: 600;">Asignar Cliente</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 900; color: #4338ca; background: #e0e7ff; padding: 0.15rem 0.45rem; border-radius: 0.35rem;">[F6]</span>
+                                <span style="color: #334155; font-weight: 600;">Ventas en Espera</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 900; color: #b45309; background: #fef3c7; padding: 0.15rem 0.45rem; border-radius: 0.35rem;">[F7]</span>
+                                <span style="color: #334155; font-weight: 600;">Notas / Envases / Reservas</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 900; color: #991b1b; background: #fee2e2; padding: 0.15rem 0.45rem; border-radius: 0.35rem;">[F8]</span>
+                                <span style="color: #334155; font-weight: 600;">Limpiar Carrito</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 900; color: #854d0e; background: #fef9c3; padding: 0.15rem 0.45rem; border-radius: 0.35rem;">[Alt+D]</span>
+                                <span style="color: #334155; font-weight: 600;">Descuento</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-weight: 900; color: #475569; background: #f1f5f9; padding: 0.15rem 0.45rem; border-radius: 0.35rem;">[Esc]</span>
+                                <span style="color: #334155; font-weight: 600;">Cerrar Ventana</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        const footer = `
+            <div style="display: flex; justify-content: flex-end; width: 100%;">
+                <button class="btn btn-primary" onclick="closeModal()" style="font-weight: 850; padding: 0.5rem 1.5rem; border-radius: 0.65rem;">Entendido (Esc)</button>
+            </div>
+        `;
+        showModal(content, { title: '⌨️ Guía de Atajos de Teclado del POS', footer });
+    },
+
     async applyDiscount(amount) {
         if (amount < 0 || isNaN(amount)) return;
         const summary = posController.getCartSummary();
         const subtotal = summary.subtotal || 0;
         const discountPercent = subtotal > 0 ? (amount / subtotal) * 100 : 0;
 
-        // Falla #31: Descuentos superiores al umbral del 15% exigen PIN de supervisor
+        // Falla #31 / Etapa 2: Descuentos superiores al umbral configurado (default 10%) exigen PIN de supervisor
         const currentRole = (typeof AuthManager !== 'undefined' && AuthManager.getCurrentUserRole) 
             ? AuthManager.getCurrentUserRole() 
             : (localStorage.getItem('USER_ROLE') || 'cashier');
 
-        if (discountPercent > 15 && currentRole === 'cashier') {
+        const maxAllowedDiscount = parseFloat(localStorage.getItem('MAX_EMPLOYEE_DISCOUNT_PERCENT') || '10');
+
+        if (discountPercent > maxAllowedDiscount && currentRole === 'cashier') {
             const authorized = await this.requestSupervisorPinModal(
                 `Autorización Requerida: Descuento del ${discountPercent.toFixed(1)}%`,
-                `El descuento (${formatCLP(amount)}) supera el umbral permitido del 15%. Ingrese el PIN de Administrador/Supervisor para autorizar.`
+                `El descuento (${formatCLP(amount)}) supera el umbral permitido del ${maxAllowedDiscount}%. Ingrese el PIN de Administrador/Dueño para autorizar.`
             );
             if (!authorized) {
                 showNotification('❌ Descuento no autorizado. Operación cancelada.', 'error');
@@ -1174,6 +1354,71 @@ const POSView = {
     removeDiscount() {
         posController.clearDiscount();
         this.updateCart();
+    },
+
+    showTransferDataModal() {
+        const bank = localStorage.getItem('BANK_NAME') || '';
+        const type = localStorage.getItem('BANK_ACCOUNT_TYPE') || 'Cuenta RUT';
+        const accNum = localStorage.getItem('BANK_ACCOUNT_NUMBER') || '';
+        const rut = localStorage.getItem('BANK_RUT') || '';
+        const name = localStorage.getItem('BANK_BENEFICIARY') || localStorage.getItem('PMV_BIZ') || 'Mi Negocio';
+        const email = localStorage.getItem('BANK_EMAIL') || '';
+
+        if (!bank && !accNum && !rut) {
+            showNotification('⚠️ No hay cuenta bancaria configurada. Puedes configurarla en Ajustes > Ventas.', 'warning');
+            return;
+        }
+
+        const lines = [];
+        if (bank) lines.push(`Banco: ${bank}`);
+        if (type) lines.push(`Tipo: ${type}`);
+        if (accNum) lines.push(`N° Cuenta: ${accNum}`);
+        if (rut) lines.push(`RUT: ${rut}`);
+        if (name) lines.push(`Titular: ${name}`);
+        if (email) lines.push(`Email: ${email}`);
+        const textToCopy = lines.join('\n');
+
+        const content = `
+            <div style="padding: 0.5rem 0.25rem;">
+                <div style="background: #f8fafc; border: 1.5px solid #cbd5e1; border-radius: 0.85rem; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.75rem;">
+                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">
+                        <span style="color: #64748b; font-size: 0.85rem; font-weight: 600;">Banco:</span>
+                        <strong style="color: #0f172a; font-size: 0.95rem;">${safeHTML(bank || 'No especificado')}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">
+                        <span style="color: #64748b; font-size: 0.85rem; font-weight: 600;">Tipo de Cuenta:</span>
+                        <strong style="color: #0f172a; font-size: 0.95rem;">${safeHTML(type)}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">
+                        <span style="color: #64748b; font-size: 0.85rem; font-weight: 600;">N° de Cuenta:</span>
+                        <strong style="color: #047857; font-size: 1.15rem; letter-spacing: 0.5px; font-weight: 900;">${safeHTML(accNum || '---')}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">
+                        <span style="color: #64748b; font-size: 0.85rem; font-weight: 600;">RUT Titular:</span>
+                        <strong style="color: #0f172a; font-size: 0.95rem;">${safeHTML(rut || '---')}</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 0.5rem;">
+                        <span style="color: #64748b; font-size: 0.85rem; font-weight: 600;">Titular:</span>
+                        <strong style="color: #0f172a; font-size: 0.95rem;">${safeHTML(name)}</strong>
+                    </div>
+                    ${email ? `
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: #64748b; font-size: 0.85rem; font-weight: 600;">Correo Comprobante:</span>
+                        <strong style="color: #2563eb; font-size: 0.9rem;">${safeHTML(email)}</strong>
+                    </div>
+                    ` : ''}
+                </div>
+                <div style="margin-top: 1.25rem; display: flex; gap: 0.75rem;">
+                    <button type="button" class="btn btn-primary" onclick='navigator.clipboard.writeText(${JSON.stringify(textToCopy)}).then(() => showNotification("📋 Datos bancarios copiados", "success"));' style="flex: 1; padding: 0.75rem; font-weight: 800; border-radius: 0.6rem; background: #059669; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem;">
+                        📋 Copiar Datos
+                    </button>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()" style="padding: 0.75rem 1.25rem; font-weight: 700; border-radius: 0.6rem;">
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        `;
+        showModal(content, { title: '🏦 Cuenta para Transferencia' });
     },
 
     /**
@@ -1288,6 +1533,9 @@ const POSView = {
                                 <span style="font-size: 1.15rem;">🏦</span>
                                 <strong style="font-size: 0.88rem; color: var(--text-main); text-transform: uppercase; font-weight: 800;">Transferencia / QR</strong>
                             </div>
+                            <button type="button" class="btn btn-xs" onclick="POSView.showTransferDataModal()" title="Ver datos de la cuenta para transferir" style="background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; border-radius: 0.4rem; font-weight: 800; font-size: 0.75rem; padding: 0.2rem 0.55rem; cursor: pointer; display: flex; align-items: center; gap: 0.25rem;">
+                                📋 Ver Datos Cuenta
+                            </button>
                         </div>
                         <div style="display: flex; gap: 0.5rem; align-items: stretch;">
                             <div style="position: relative; flex: 1;">
@@ -1332,15 +1580,19 @@ const POSView = {
                                 <span style="font-size: 1.15rem;">💰</span>
                                 <strong style="font-size: 0.88rem; color: #166534; text-transform: uppercase; font-weight: 800;">Saldo a Favor (${formatCLP(customer.balanceCredit)})</strong>
                             </div>
+                            <span style="font-size: 0.72rem; color: #047857; font-weight: 700;">¿Desea usarlo en esta venta?</span>
                         </div>
-                        <div style="display: flex; gap: 0.5rem; align-items: stretch;">
+                        <div style="display: flex; gap: 0.4rem; align-items: stretch;">
                             <div style="position: relative; flex: 1;">
                                 <span style="position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); font-weight: 800; color: #166534; font-size: 1.15rem;">$</span>
                                 <input type="number" id="pay_credit" class="pay-input-pro pay-input" style="width: 100%; height: 48px; padding: 0.5rem 0.6rem 0.5rem 2rem; font-size: 1.3rem; font-weight: 900; border: 2px solid #10b981; border-radius: 0.6rem; background: #fff; color: #166534 !important; box-sizing: border-box;" 
                                        placeholder="0" inputmode="numeric" onfocus="this.select()">
                             </div>
-                            <button type="button" class="btn btn-success" onclick="POSView.fillRemainingCredit(${total})" style="padding: 0 1.5rem; height: 48px; font-weight: 900; font-size: 0.95rem; border-radius: 0.6rem; background: #10b981; border: none; cursor: pointer;">
-                                APLICAR
+                            <button type="button" class="btn btn-success" onclick="POSView.fillRemainingCredit(${total})" style="padding: 0 0.9rem; height: 48px; font-weight: 900; font-size: 0.82rem; border-radius: 0.6rem; background: #10b981; border: none; cursor: pointer; white-space: nowrap;">
+                                USAR SALDO
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="const pc = document.getElementById('pay_credit'); if(pc) { pc.value = ''; pc.dispatchEvent(new Event('input')); }" style="padding: 0 0.75rem; height: 48px; font-weight: 800; font-size: 0.8rem; border-radius: 0.6rem; background: #fff; cursor: pointer; white-space: nowrap;" title="No usar saldo a favor en esta venta">
+                                NO USAR
                             </button>
                         </div>
                     </div>
@@ -1885,42 +2137,59 @@ const POSView = {
 
             const isDebtOnly = salePaidDetails.debt > 0 && (scash + scard + sother + scred) === 0;
 
-            // Validación de Límite de Crédito: Requiere autorización obligatoria por PIN de Dueño / Supervisor
+            // Validación de Ventas Fiadas y Límites de Crédito:
+            // Si quien cobra es un cajero/empleado y el cliente tiene saldo pendiente o supera el cupo,
+            // se requiere autorización obligatoria por PIN Maestro del Dueño.
             let creditLimitOverridden = false;
             if (salePaidDetails.debt > 0 && customer) {
+                const userRole = (typeof AuthManager !== 'undefined' && AuthManager.getCurrentUserRole) 
+                    ? AuthManager.getCurrentUserRole() 
+                    : (localStorage.getItem('USER_ROLE') || 'cashier');
+                const roleNormalized = String(userRole || '').toLowerCase().trim();
+                const isOwnerOrAdmin = ['owner', 'admin', 'partner', 'propietario', 'administrador'].includes(roleNormalized);
+
+                const currentDebt = parseFloat(customer.totalDebt) || 0;
                 const limit = parseFloat(customer.creditLimit) || 0;
-                if (limit > 0) {
-                    const currentDebt = parseFloat(customer.totalDebt) || 0;
-                    const newTotalDebt = currentDebt + salePaidDetails.debt;
-                    if (newTotalDebt > limit) {
-                        const authResult = await SupervisorAuth.requirePin(
-                            '⚠️ LÍMITE DE CRÉDITO EXCEDIDO',
-                            `El cliente "${customer.name}" tiene un límite de crédito de ${formatCLP(limit)}.\n` +
-                            `Con esta venta su deuda acumulada alcanzará ${formatCLP(newTotalDebt)} (supera el límite por ${formatCLP(newTotalDebt - limit)}).\n\n` +
-                            `Se requiere el PIN de Dueño o Administrador para autorizar la excepción:`
-                        );
+                const newTotalDebt = currentDebt + salePaidDetails.debt;
+                const isOverLimit = (limit > 0 && newTotalDebt > limit);
+                const hasPendingDebt = (currentDebt > 0);
 
-                        if (!authResult || !authResult.authorized) {
-                            showNotification('⛔ Venta fiada cancelada: requiere autorización del Dueño / Supervisor para superar el cupo.', 'warning');
-                            if (btn) {
-                                btn.disabled = false;
-                                btn.textContent = 'CONFIRMAR VENTA';
-                            }
-                            this._isProcessingSale = false;
-                            return;
-                        }
-
-                        creditLimitOverridden = true;
-                        try {
-                            AuditLogService.log({
-                                entity: 'customer',
-                                entityId: customer.id,
-                                action: 'credit_limit_override',
-                                summary: `Supervisor (${authResult.supervisorName || 'Autorizado'}) autorizó venta fiada que supera límite a ${customer.name} (${formatCLP(limit)} -> ${formatCLP(newTotalDebt)})`,
-                                metadata: { customerId: customer.id, limit, newTotalDebt, supervisor: authResult.supervisorName }
-                            });
-                        } catch (_) {}
+                // Si es cajero y (el cliente ya debe plata o supera el límite de crédito):
+                if (!isOwnerOrAdmin && (hasPendingDebt || isOverLimit)) {
+                    let pinTitle = '⚠️ AUTORIZACIÓN DE FIADO REQUERIDA';
+                    let pinMessage = `El cliente "${customer.name}" tiene saldo pendiente de ${formatCLP(currentDebt)}.\n`;
+                    if (isOverLimit) {
+                        pinTitle = '⚠️ LÍMITE DE CRÉDITO EXCEDIDO';
+                        pinMessage += `Con este fiado alcanzará ${formatCLP(newTotalDebt)} (supera su límite de ${formatCLP(limit)}).\n\n`;
+                    } else {
+                        pinMessage += `Con este nuevo fiado alcanzará una deuda acumulada de ${formatCLP(newTotalDebt)}.\n\n`;
                     }
+                    pinMessage += `Se requiere el PIN Maestro del Dueño o Administrador para autorizar el fiado:`;
+
+                    const authResult = await SupervisorAuth.requirePin(pinTitle, pinMessage);
+
+                    if (!authResult || !authResult.authorized) {
+                        showNotification('⛔ Venta fiada cancelada: requiere autorización del Dueño / Administrador.', 'warning');
+                        if (btn) {
+                            btn.disabled = false;
+                            btn.textContent = 'CONFIRMAR VENTA';
+                        }
+                        this._isProcessingSale = false;
+                        return;
+                    }
+
+                    creditLimitOverridden = isOverLimit;
+                    try {
+                        AuditLogService.log({
+                            entity: 'customer',
+                            entityId: customer.id,
+                            action: 'credit_debt_override',
+                            summary: `Dueño (${authResult.supervisorName || 'Autorizado'}) autorizó venta fiada a ${customer.name} (Deuda previa: ${formatCLP(currentDebt)}, Venta: ${formatCLP(salePaidDetails.debt)})`,
+                            metadata: { customerId: customer.id, previousDebt: currentDebt, newTotalDebt, supervisor: authResult.supervisorName }
+                        });
+                    } catch (_) {}
+                } else if (isOverLimit) {
+                    creditLimitOverridden = true;
                 }
             }
             
@@ -2022,7 +2291,7 @@ const POSView = {
             this.startNewSale();
             this.updateRecentSalesUI();
             
-            showNotification(`✅ Venta #${sale.saleNumber || ''} procesada al instante`, 'success');
+            showNotification(`✅ Venta #${sale.terminal_id ? sale.terminal_id + '-' : 'PC-1-'}${sale.saleNumber || ''} procesada al instante`, 'success');
             this.showSaleReceipt(sale, false, finalSaleTotal, calculatedChange);
         } catch (e) {
             showNotification(e.message || 'Error al procesar cobro rápido', 'error');
@@ -2097,10 +2366,19 @@ const POSView = {
         this.lastTendered = tendered;
         this.lastChange = change;
 
-        // Imprimir automáticamente si está configurado (con aislamiento de hardware - Falla #34)
+        // Imprimir automáticamente o abrir gaveta si está configurado (con aislamiento de hardware)
         try {
             const printerPort = localStorage.getItem('printerPort') || 'USB';
             const autoPrintTicket = localStorage.getItem('autoPrintTicket') === 'true';
+            const autoOpenDrawer = localStorage.getItem('AUTO_OPEN_CASH_DRAWER') === 'true';
+            const isCash = sale.paymentMethod === 'cash' || (sale.payment_methods && sale.payment_methods.some(m => m.method === 'cash'));
+
+            if (autoOpenDrawer && isCash) {
+                if (typeof SettingsView !== 'undefined' && SettingsView.testCashDrawer) {
+                    SettingsView.testCashDrawer();
+                }
+            }
+
             if (printerPort === 'bluetooth' && autoPrintTicket) {
                 this.printBluetoothSale(sale, tendered, change).catch(err => {
                     console.warn('Aviso hardware impresora Bluetooth:', err);
@@ -2121,7 +2399,7 @@ const POSView = {
             <div class="receipt-pro">
                 <div class="receipt-header">
                     <h2>COMPROBANTE</h2>
-                    <div class="receipt-folio">Folio #${sale.saleNumber}</div>
+                    <div class="receipt-folio">Folio #${sale.terminal_id ? sale.terminal_id + '-' : 'PC-1-'}${sale.saleNumber}</div>
                     <p class="receipt-date">${formatDateTime(sale.date)}</p>
                 </div>
                 
@@ -2457,7 +2735,7 @@ const POSView = {
                 <div style="background: #eff6ff; border: 1.5px solid #60a5fa; border-radius: 0.85rem; padding: 0.85rem 1rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
                     <div>
                         <div style="font-weight: 800; font-size: 1.05rem; color: #1e3a8a;">👤 ${safeHTML(customer.name)}</div>
-                        <div style="font-size: 0.82rem; color: #3b82f6; font-weight: 600;">Venta #${sale.saleNumber || sale.id} registrada a crédito (fiada)</div>
+                        <div style="font-size: 0.82rem; color: #3b82f6; font-weight: 600;">Venta #${sale.terminal_id ? sale.terminal_id + '-' : 'PC-1-'}${sale.saleNumber || sale.id} registrada a crédito (fiada)</div>
                     </div>
                     <div style="text-align: right;">
                         <span style="font-size: 0.72rem; font-weight: 800; color: #ef4444; text-transform: uppercase;">Monto Fiado</span>
@@ -3170,7 +3448,7 @@ const POSView = {
         if (address) text += `${address}\n`;
         if (phone) text += `${phone}\n`;
         text += `================================\n`;
-        text += `Folio: #${sale.saleNumber}\n`;
+        text += `Folio: #${sale.terminal_id ? sale.terminal_id + '-' : 'PC-1-'}${sale.saleNumber}\n`;
         text += `Fecha: ${formatDateTime(sale.date)}\n`;
         text += `--------------------------------\n`;
         text += `Total Neto:       ${formatCLP(sale.base_amount).padStart(14)}\n`;
@@ -3257,7 +3535,7 @@ const POSView = {
                 return `
                     <div style="background: white; border: 1px solid var(--border); border-radius: 0.5rem; padding: 0.75rem; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.borderColor='var(--primary)'" onmouseout="this.style.borderColor='var(--border)'" onclick="POSView.openQuickPaymentCorrection(${sale.id})">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.25rem;">
-                            <strong style="font-size: 0.85rem; color: var(--text-color);">Venta #${sale.saleNumber}</strong>
+                            <strong style="font-size: 0.85rem; color: var(--text-color);">Venta #${sale.terminal_id ? sale.terminal_id + '-' : 'PC-1-'}${sale.saleNumber}</strong>
                             <span style="font-size: 0.65rem; font-weight: 800; color: ${badgeStyle}; background: ${badgeStyle}20; padding: 2px 6px; border-radius: 4px;">${badgeText}</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; align-items: center;">

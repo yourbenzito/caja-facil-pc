@@ -98,7 +98,7 @@ class Database {
                 const stores = ['products', 'categories', 'sales', 'customers', 'suppliers', 'purchases', 'cashRegisters', 
                               'cashMovements', 'stockMovements', 'settings', 'users', 'auditLogs', 'expenses', 
                               'saleReturns', 'supplierPayments', 'customerCreditDeposits', 'customerCreditUses', 
-                              'productPriceHistory', 'offlineQueue', 'payments', 'passwordResets', 'debtPaymentSessions', 'productCostHistory', 'staff'];
+                              'productPriceHistory', 'offlineQueue', 'payments', 'passwordResets', 'debtPaymentSessions', 'productCostHistory', 'staff', 'counterNotes'];
                 
                 stores.forEach(s => {
                     let store;
@@ -159,9 +159,16 @@ class Database {
             const cacheKey = `${storeName}_b${bid}_${id}`;
             if (this.cache[cacheKey] && (Date.now() - this.cache[cacheKey].t < this.CACHE_TTL)) return this.cache[cacheKey].d;
             
-            const data = await window.ApiClient.get(`${storeName}/${id}`);
-            this.cache[cacheKey] = { d: data, t: Date.now() };
-            return data;
+            try {
+                const data = await window.ApiClient.get(`${storeName}/${id}`);
+                this.cache[cacheKey] = { d: data, t: Date.now() };
+                return data;
+            } catch (err) {
+                if (err && (err.status === 404 || (err.message && err.message.toLowerCase().includes('no encontrado')))) {
+                    return null;
+                }
+                throw err;
+            }
         }
         return new Promise(r => {
             this.db.transaction(storeName).objectStore(storeName).get(Number(id) || id).onsuccess = (e) => r(e.target.result);

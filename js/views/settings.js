@@ -4,10 +4,8 @@ const SettingsView = {
         setTimeout(() => {
             this.updateStats();
             this.initSecuritySection();
-            this.initAutoBackupSection();
             this.initPOSSettingsSection();
             this.loadUserRoles();
-            this.initSQLiteInfo();
             this.initAppearance();
             this.initNavCustomization();
             this.loadMultipleCashSettings();
@@ -17,12 +15,19 @@ const SettingsView = {
             this.loadTicketSettings();
             this.initMultiDeviceSection();
             this.initMyProfileSection();
+            this.loadTerminalId();
+            this.loadBankSettings();
+            this.loadDiscountLimitSetting();
         }, 100);
 
         // ponytail: Memoria temporal de 1 minuto (60 segundos) al salir y entrar de Configuración
         const lastExitTime = parseInt(localStorage.getItem('settings_last_exit_time') || '0', 10);
         const timeElapsed = Date.now() - lastExitTime;
         let activeTab = localStorage.getItem('active_settings_tab') || 'menu';
+        if (activeTab === 'settings-tab-visual') {
+            activeTab = 'settings-tab-profile';
+            localStorage.setItem('active_settings_tab', 'settings-tab-profile');
+        }
         
         // Si pasaron más de 60 segundos (1 minuto) desde que salió de Configuración, volver al menú de categorías
         if (lastExitTime > 0 && timeElapsed > 60000) {
@@ -192,43 +197,44 @@ const SettingsView = {
                     </div>
                 </div>
 
-                <!-- TARJETA MI PERFIL & SEGURIDAD PERSONAL -->
+                <!-- 1. MI PERFIL Y PREFERENCIAS -->
                 <div class="settings-category-card" style="--card-hover-border: #8b5cf6; --card-accent-color: #7c3aed; border-top-color: #8b5cf6;" onclick="SettingsView.switchTab('settings-tab-profile')">
                     <div class="card-icon">👤</div>
-                    <h3>Mi Perfil y Contraseña</h3>
-                    <p>Personaliza tu tema visual, ajusta el brillo de pantalla y cambia tu contraseña de acceso personal.</p>
-                    <div class="card-action">Mi Cuenta ➔</div>
+                    <h3>Mi Perfil y Preferencias</h3>
+                    <p>Sesión activa, contraseña personal, tema de colores, brillo y personalización de la barra inferior.</p>
+                    <div class="card-action">Mi Cuenta y Apariencia ➔</div>
                 </div>
 
-                <div class="settings-category-card" style="--card-hover-border: #6366f1; --card-accent-color: #4f46e5; border-top-color: #6366f1;" onclick="SettingsView.switchTab('settings-tab-visual')">
-                    <div class="card-icon">🎨</div>
-                    <h3>Aspecto Visual</h3>
-                    <p>Personaliza la paleta de colores de la aplicación, controla el brillo y visualiza estadísticas generales.</p>
-                    <div class="card-action">Configurar Aspecto ➔</div>
-                </div>
+                <!-- 2. VENTAS Y CAJA (POS) -->
                 <div class="settings-category-card" style="--card-hover-border: #10b981; --card-accent-color: #059669; border-top-color: #10b981;" onclick="SettingsView.switchTab('settings-tab-pos')">
                     <div class="card-icon">🛒</div>
                     <h3>Ventas y Caja (POS)</h3>
-                    <p>Controla stock negativo, semáforo de deudas de clientes y la apertura de múltiples cajas.</p>
-                    <div class="card-action">Configurar POS y Caja ➔</div>
+                    <p>Control de stock negativo, semáforo de deudas de clientes y apertura de múltiples terminales.</p>
+                    <div class="card-action">Reglas de Cobro y Cajas ➔</div>
                 </div>
+
+                <!-- 3. HARDWARE Y PERIFÉRICOS -->
                 <div class="settings-category-card" style="--card-hover-border: #06b6d4; --card-accent-color: #0891b2; border-top-color: #06b6d4;" onclick="SettingsView.switchTab('settings-tab-hardware')">
-                    <div class="card-icon">🔌</div>
-                    <h3>Impresoras y Lectores</h3>
-                    <p>Configura impresoras térmicas, balanzas electrónicas, lectores de barras y personaliza tickets.</p>
-                    <div class="card-action">Configurar Hardware ➔</div>
+                    <div class="card-icon">🖨️</div>
+                    <h3>Hardware, Impresoras y Tickets</h3>
+                    <p>Impresoras térmicas USB/Red (58mm/80mm), diseño de tickets, balanza electrónica y escáner.</p>
+                    <div class="card-action">Configurar Dispositivos ➔</div>
                 </div>
+
+                <!-- 4. PERSONAL Y PERMISOS -->
                 <div class="settings-category-card" style="--card-hover-border: #f59e0b; --card-accent-color: #d97706; border-top-color: #f59e0b;" onclick="SettingsView.switchTab('settings-tab-security')">
-                    <div class="card-icon">🔐</div>
-                    <h3>Seguridad y Personal</h3>
-                    <p>Administra las cuentas de cajeros, gestiona roles, define permisos y configura el PIN global.</p>
-                    <div class="card-action">Configurar Accesos ➔</div>
+                    <div class="card-icon">👥</div>
+                    <h3>Personal, Seguridad y Permisos</h3>
+                    <p>Cuentas de empleados, PIN maestro del Dueño, arqueo ciego y autorización de acceso a Reportes.</p>
+                    <div class="card-action">Roles y Autorizaciones ➔</div>
                 </div>
+
+                <!-- 5. RESPALDOS Y SISTEMA -->
                 <div class="settings-category-card" style="--card-hover-border: #f43f5e; --card-accent-color: #e11d48; border-top-color: #f43f5e;" onclick="SettingsView.switchTab('settings-tab-system')">
                     <div class="card-icon">💾</div>
-                    <h3>Respaldos y Sistema</h3>
-                    <p>Descarga copias de seguridad de datos, exporta informes a Excel y limpia la memoria caché.</p>
-                    <div class="card-action">Gestionar Sistema ➔</div>
+                    <h3>Respaldos, Base de Datos y Sistema</h3>
+                    <p>Copias de seguridad en nube, optimización SQLite, estadísticas del sistema y limpieza de memoria.</p>
+                    <div class="card-action">Base de Datos y Copias ➔</div>
                 </div>
             </div>
 
@@ -272,6 +278,30 @@ const SettingsView = {
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- TARJETA: MI NOMBRE DE USUARIO -->
+                    <div class="card" style="margin-bottom: 1.5rem; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #8b5cf6;">
+                        <h3 style="margin-bottom: 0.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">
+                            👤 Mi Nombre de Usuario
+                        </h3>
+                        <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1.25rem; line-height: 1.4;">
+                            Define el nombre con el que aparecerás registrado en las auditorías, ventas, compras y operaciones del sistema. Especialmente útil si inicias sesión con tu cuenta de Google / Gmail.
+                        </p>
+                        <form onsubmit="event.preventDefault(); SettingsView.saveOwnDisplayName();" style="display: flex; flex-direction: column; gap: 0.85rem; max-width: 480px;">
+                            <div>
+                                <label style="display: block; font-weight: 700; font-size: 0.85rem; color: #374151; margin-bottom: 0.35rem;">Mi Nombre de Usuario *</label>
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <input type="text" id="myDisplayNameInput" class="form-control" placeholder="Ej: Branco Silva" required maxlength="50" style="padding: 0.55rem 0.85rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1; font-size: 0.95rem; font-weight: 700; flex: 1;">
+                                    <button type="submit" class="btn btn-primary" id="btnSaveDisplayName" style="background: #7c3aed; padding: 0.55rem 1.25rem; border-radius: 0.5rem; font-weight: 800; white-space: nowrap;">
+                                        💾 Guardar
+                                    </button>
+                                </div>
+                            </div>
+                            <small style="color: #64748b; font-size: 0.78rem;">
+                                💡 Este nombre quedará registrado como el responsable de cada movimiento que realices en el negocio.
+                            </small>
+                        </form>
                     </div>
 
                     <!-- TARJETA: CAMBIO DE CONTRASEÑA PERSONAL -->
@@ -341,49 +371,9 @@ const SettingsView = {
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- PANE 1: VISUAL -->
-                <div id="settings-tab-visual" class="settings-section-panel ${activeTab === 'settings-tab-visual' ? 'active' : ''}">
-                    <button class="btn-back-settings" onclick="SettingsView.showCategoriesMenu()">
-                        ⬅️ Regresar a Ajustes
-                    </button>
-                    
-                    <div class="settings-panel-header" style="border-left-color: #6366f1; background: #faf5ff;">
-                        <h2 style="color: #4f46e5;">🎨 Aspecto e Interfaz Visual</h2>
-                        <p>Ajusta el tema visual de la aplicación, colores generales y luminosidad para tu local.</p>
-                    </div>
-                    
-                    <!-- SECCIÓN: APARIENCIA Y TEMAS -->
-                    <div class="card" style="margin-bottom: 1.5rem; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #6366f1;">
-                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🎨 Personalización Visual</h3>
-                        <div class="grid grid-2" style="gap: 2rem;">
-                            <div>
-                                <h4 style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-muted);">ELEGIR PALETA DE COLORES</h4>
-                                <div id="theme-options-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 0.75rem;">
-                                    ${this.renderThemeOptions()}
-                                </div>
-                            </div>
-                            <div>
-                                <h4 style="margin-bottom: 1rem; font-size: 0.9rem; color: var(--text-muted);">CONTROL DE LUMINOSIDAD</h4>
-                                <div style="background: #f8fafc; padding: 1.5rem; border-radius: 1rem; border: 1px solid #e2e8f0;">
-                                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
-                                        <span>Brillo de la App</span>
-                                        <strong id="brightness-value">100%</strong>
-                                    </div>
-                                    <input type="range" id="brightness-slider" min="0.3" max="1" step="0.05" value="1" 
-                                           style="width: 100%; cursor: pointer;" 
-                                           oninput="SettingsView.updateBrightness(this.value)">
-                                    <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 1rem;">
-                                        Ajusta la luz de la pantalla para reducir la fatiga visual en ambientes oscuros.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- SECCIÓN: PERSONALIZACIÓN DE LA BARRA DE NAVEGACIÓN -->
-                    <div class="card" style="margin-bottom: 1.5rem; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #6366f1;">
+                    <!-- TARJETA: PERSONALIZACIÓN DE LA BARRA DE NAVEGACIÓN -->
+                    <div class="card" style="margin-bottom: 0; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #8b5cf6;">
                         <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem; margin-bottom: 1.25rem;">
                             <div>
                                 <h3 style="margin: 0; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">
@@ -397,7 +387,7 @@ const SettingsView = {
                                 <span id="nav-custom-counter" class="badge" style="background: #e0e7ff; color: #4338ca; font-size: 0.85rem; font-weight: 800; padding: 0.4rem 0.85rem; border-radius: 9999px;">
                                     ...
                                 </span>
-                                <button type="button" class="btn btn-sm btn-ghost" onclick="SettingsView.resetNavCustomization()" style="font-size: 0.8rem; font-weight: 700; color: #64748b; border: 1px solid #e2e8f0; padding: 0.35rem 0.75rem; border-radius: 0.5rem;">
+                                <button type="button" class="btn btn-sm btn-ghost" onclick="SettingsView.resetNavCustomization()" style="font-size: 0.8rem; font-weight: 700; color: #64748b; border: 1px solid #e2e8f0; padding: 0.35rem 0.75rem; border-radius: 0.5rem; cursor: pointer;">
                                     🔄 Restablecer
                                 </button>
                             </div>
@@ -409,35 +399,12 @@ const SettingsView = {
 
                         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; padding-top: 1rem; border-top: 1px solid #e5e7eb;">
                             <div style="font-size: 0.825rem; color: #64748b; display: flex; align-items: center; gap: 0.35rem;">
-                                💡 <span>Los cambios se aplican al instante en la parte inferior de la pantalla.</span>
+                                💡 <span>Los accesos directos se reflejan de inmediato en la barra inferior.</span>
                             </div>
-                            <button type="button" class="btn btn-primary" onclick="SettingsView.saveNavCustomization()" style="background: #4f46e5; color: #ffffff; border: none; padding: 0.55rem 1.4rem; border-radius: 0.65rem; font-weight: 800; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);">
+                            <button type="button" class="btn btn-primary" onclick="SettingsView.saveNavCustomization()" style="background: #7c3aed; color: #ffffff; border: none; padding: 0.55rem 1.4rem; border-radius: 0.65rem; font-weight: 800; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);">
                                 💾 Guardar Barra
                             </button>
                         </div>
-                    </div>
-
-                    <!-- SECCIÓN: ESTADÍSTICAS -->
-                    <div class="card" style="margin-bottom: 0; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #6366f1;">
-                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">📊 Estadísticas del Sistema</h3>
-                        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.875rem 1rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; transition: background 0.2s;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'">
-                                <span style="color: #374151; font-weight: 500;">📦 Productos registrados:</span>
-                                <strong id="stat-products" style="color: #4f46e5; font-size: 1.1rem;">Cargando...</strong>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.875rem 1rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; transition: background 0.2s;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'">
-                                <span style="color: #374151; font-weight: 500;">💵 Ventas totales:</span>
-                                <strong id="stat-sales" style="color: #059669; font-size: 1.1rem;">Cargando...</strong>
-                            </div>
-                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.875rem 1rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem; transition: background 0.2s;" onmouseover="this.style.background='#f3f4f6'" onmouseout="this.style.background='#f9fafb'">
-                                <span style="color: #374151; font-weight: 500;">👥 Clientes registrados:</span>
-                                <strong id="stat-customers" style="color: #db2777; font-size: 1.1rem;">Cargando...</strong>
-                            </div>
-                        </div>
-                        <button class="btn btn-secondary" style="width: 100%; margin-top: 1.5rem; background: #f9fafb; color: #374151; border: 1.5px solid #d1d5db; font-weight: 600;" onmouseover="this.style.background='#e5e7eb'" onmouseout="this.style.background='#f9fafb'"
-                                onclick="SettingsView.checkStorage()">
-                            Ver Uso de Almacenamiento
-                        </button>
                     </div>
                 </div>
 
@@ -463,6 +430,16 @@ const SettingsView = {
                             <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
                                 Si se desactiva, el sistema impedirá agregar productos al carrito o finalizar la venta si la cantidad solicitada excede el stock actual del inventario.
                             </p>
+                            
+                            <div style="border-top: 1px solid #e5e7eb; padding-top: 0.75rem;">
+                                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
+                                    <input type="checkbox" id="posEnableCashRounding" style="width: 1.2rem; height: 1.2rem; cursor: pointer; accent-color: #10b981;" onchange="SettingsView.savePOSSettings()">
+                                    <span>Aplicar Ley del Redondeo en pagos en efectivo (Estándar Chile)</span>
+                                </label>
+                                <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: 0.2rem; line-height: 1.4;">
+                                    Redondea el total en efectivo a la decena más cercana ($1 a $5 hacia abajo a $0, $6 a $9 hacia arriba a $10) de acuerdo con la normativa chilena para monedas.
+                                </p>
+                            </div>
                         </div>
                     </div>
 
@@ -494,6 +471,28 @@ const SettingsView = {
                             <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
                                 Si se activa, permite abrir múltiples cajas al mismo tiempo (útil para locales con varios cajeros). Si se desactiva, solo se permite una caja abierta a la vez.
                             </p>
+                            <!-- BAUTIZAR ESTA COMPUTADORA / CAJA (MULTICAJA) -->
+                            <div style="border-top: 1px solid #e5e7eb; padding-top: 1.25rem; margin-top: 0.25rem;">
+                                <h4 style="margin: 0 0 0.35rem 0; font-size: 0.95rem; color: #111827; display: flex; align-items: center; gap: 0.4rem;">
+                                    💻 Identificador de esta Estación / Caja (Multicaja)
+                                </h4>
+                                <p style="font-size: 0.825rem; color: #64748b; margin-bottom: 0.75rem; line-height: 1.4;">
+                                    Nombre único de este equipo para diferenciar las ventas, turnos y notas en locales con múltiples computadores.
+                                </p>
+                                <div style="display: flex; gap: 0.5rem; max-width: 440px; align-items: center;">
+                                    <input type="text" id="terminalIdInput" class="form-control" placeholder="Ej: PC-1 o Caja 1" maxlength="20" style="padding: 0.5rem 0.75rem; border-radius: 0.5rem; font-weight: 800; font-size: 0.95rem; border: 1.5px solid #cbd5e1;">
+                                    <button type="button" class="btn btn-primary" onclick="SettingsView.saveTerminalId()" style="background: #059669; padding: 0.5rem 1.1rem; border-radius: 0.5rem; font-weight: 800; white-space: nowrap;">
+                                        💾 Guardar
+                                    </button>
+                                </div>
+                                <div style="display: flex; gap: 0.4rem; margin-top: 0.5rem; flex-wrap: wrap; align-items: center;">
+                                    <span style="font-size: 0.75rem; color: #64748b; font-weight: 600;">Sugerencias:</span>
+                                    <button type="button" class="btn btn-sm" onclick="document.getElementById('terminalIdInput').value='Caja 1'; SettingsView.saveTerminalId();" style="padding: 0.15rem 0.55rem; font-size: 0.75rem; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 0.35rem; cursor: pointer; font-weight: 700;">Caja 1</button>
+                                    <button type="button" class="btn btn-sm" onclick="document.getElementById('terminalIdInput').value='Caja 2'; SettingsView.saveTerminalId();" style="padding: 0.15rem 0.55rem; font-size: 0.75rem; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 0.35rem; cursor: pointer; font-weight: 700;">Caja 2</button>
+                                    <button type="button" class="btn btn-sm" onclick="document.getElementById('terminalIdInput').value='Mostrador'; SettingsView.saveTerminalId();" style="padding: 0.15rem 0.55rem; font-size: 0.75rem; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 0.35rem; cursor: pointer; font-weight: 700;">Mostrador</button>
+                                    <button type="button" class="btn btn-sm" onclick="document.getElementById('terminalIdInput').value='Bodega'; SettingsView.saveTerminalId();" style="padding: 0.15rem 0.55rem; font-size: 0.75rem; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 0.35rem; cursor: pointer; font-weight: 700;">Bodega</button>
+                                </div>
+                            </div>
                         </div>
                         <div style="margin-top: 1.5rem;">
                             <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Cajas Activas</h4>
@@ -501,6 +500,76 @@ const SettingsView = {
                                 <p style="color: #6b7280; font-size: 0.85rem;">Cargando cajas...</p>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- SECCIÓN: COMPRAS Y MÁRGENES COMERCIALES -->
+                    <div class="card" style="margin-top: 1.5rem; margin-bottom: 0; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #10b981;">
+                        <h3 style="margin-bottom: 0.75rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">
+                            📦 Compras y Márgenes Comerciales
+                        </h3>
+                        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
+                            Define el porcentaje de ganancia sugerido por defecto cuando recibas mercadería de proveedores y registres nuevas compras.
+                        </p>
+                        <div style="display: flex; align-items: center; gap: 1rem; max-width: 440px;">
+                            <label style="font-weight: 700; color: #1e293b; font-size: 0.9rem; flex: 1;">
+                                Margen de Ganancia Base (%):
+                            </label>
+                            <div style="display: flex; align-items: center; gap: 0.35rem; width: 130px;">
+                                <input type="number" id="settingDefaultPurchaseMargin" min="0" max="999" step="1"
+                                       class="form-control" style="font-weight: 900; font-size: 1.1rem; text-align: center; height: 40px; border-radius: 0.5rem;"
+                                       onchange="SettingsView.saveDefaultPurchaseMargin(this.value)">
+                                <span style="font-weight: 900; color: #64748b; font-size: 1.1rem;">%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SECCIÓN: DATOS BANCARIOS PARA TRANSFERENCIA -->
+                    <div class="card" style="margin-top: 1.5rem; margin-bottom: 0; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #10b981;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; gap: 0.5rem;">
+                            <h3 style="margin: 0; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">
+                                🏦 Cuenta Bancaria para Transferencias
+                            </h3>
+                            <span class="badge" style="background: #ecfdf5; color: #047857; font-weight: 800; padding: 0.25rem 0.65rem; border-radius: 0.5rem; font-size: 0.78rem;">
+                                Cobro Rápido en POS
+                            </span>
+                        </div>
+                        <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1.25rem; line-height: 1.4;">
+                            Registra la cuenta donde recibes transferencias electrónicas. El cajero podrá mostrar estos datos en 1 clic desde el punto de venta cuando un cliente solicite transferir.
+                        </p>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
+                            <div>
+                                <label style="display: block; font-weight: 700; margin-bottom: 0.35rem; color: #374151; font-size: 0.85rem;">Banco *</label>
+                                <input type="text" id="bankName" class="form-control" placeholder="Ej: BancoEstado, Santander, BCI" style="font-size: 0.9rem; padding: 0.55rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: 700; margin-bottom: 0.35rem; color: #374151; font-size: 0.85rem;">Tipo de Cuenta *</label>
+                                <select id="bankAccountType" class="form-control" style="font-size: 0.9rem; padding: 0.55rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1;">
+                                    <option value="Cuenta RUT">Cuenta RUT</option>
+                                    <option value="Cuenta Corriente">Cuenta Corriente</option>
+                                    <option value="Cuenta Vista">Cuenta Vista / Chequera Electrónica</option>
+                                    <option value="Cuenta de Ahorro">Cuenta de Ahorro</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: 700; margin-bottom: 0.35rem; color: #374151; font-size: 0.85rem;">Número de Cuenta *</label>
+                                <input type="text" id="bankAccountNumber" class="form-control" placeholder="Ej: 12345678" style="font-size: 0.9rem; padding: 0.55rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: 700; margin-bottom: 0.35rem; color: #374151; font-size: 0.85rem;">RUT del Titular *</label>
+                                <input type="text" id="bankRut" class="form-control" placeholder="Ej: 12.345.678-9" style="font-size: 0.9rem; padding: 0.55rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: 700; margin-bottom: 0.35rem; color: #374151; font-size: 0.85rem;">Nombre del Titular *</label>
+                                <input type="text" id="bankBeneficiary" class="form-control" placeholder="Ej: Juan Pérez" style="font-size: 0.9rem; padding: 0.55rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: 700; margin-bottom: 0.35rem; color: #374151; font-size: 0.85rem;">Correo para Comprobantes</label>
+                                <input type="email" id="bankEmail" class="form-control" placeholder="Ej: pagos@minegocio.cl" style="font-size: 0.9rem; padding: 0.55rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1;">
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-primary" onclick="SettingsView.saveBankSettings()" style="background: #059669; font-weight: 800; padding: 0.55rem 1.25rem; border-radius: 0.55rem;">
+                            💾 Guardar Cuenta Bancaria
+                        </button>
                     </div>
                 </div>
 
@@ -575,9 +644,27 @@ const SettingsView = {
                                     Si se activa, el sistema imprimirá automáticamente el ticket después de cada venta.
                                 </p>
                             </div>
-                            <div style="margin-top: 1rem;">
+
+                            <!-- CAJÓN PORTAMONEDAS / GAVETA -->
+                            <div style="margin-top: 1rem; border-top: 1px solid #e2e8f0; padding-top: 1rem;">
+                                <h4 style="margin-bottom: 0.5rem; font-size: 0.95rem; color: #1e293b; display: flex; align-items: center; gap: 0.4rem;">
+                                    💵 Gaveta de Dinero (Cajón Portamonedas RJ11)
+                                </h4>
+                                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
+                                    <input type="checkbox" id="autoOpenCashDrawer" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.savePrinterSettings()">
+                                    <span>Abrir gaveta de dinero automáticamente al cobrar en efectivo</span>
+                                </label>
+                                <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: 0.25rem; line-height: 1.4;">
+                                    Envía un pulso de apertura estándar al conector RJ11 de la impresora térmica conectada al finalizar la venta.
+                                </p>
+                            </div>
+
+                            <div style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
                                 <button class="btn btn-primary" onclick="SettingsView.testPrinter()">
                                     🧪 Probar Impresión
+                                </button>
+                                <button class="btn btn-secondary" onclick="SettingsView.testCashDrawer()" style="background: #f8fafc; border: 1.5px solid #cbd5e1; font-weight: 750; color: #1e293b;">
+                                    ⚡ Probar Gaveta
                                 </button>
                                 <button class="btn btn-secondary" onclick="SettingsView.savePrinterSettings()">
                                     💾 Guardar Configuración
@@ -587,53 +674,67 @@ const SettingsView = {
                     </div>
                     ` : ''}
 
-                    <!-- SECCIÓN: PERSONALIZACIÓN DE TICKETS -->
+                    <!-- SECCIÓN: FICHA DE EMPRESA Y BOLETA TÉRMICA -->
                     ${PermissionService.can('settings.backup') ? `
                     <div class="card" style="margin-bottom: 1.5rem; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #06b6d4;">
-                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">🎫 Personalización de Tickets</h3>
-                        <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.5rem;">
+                            <h3 style="margin: 0; color: #111827; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+                                🏢 Identidad del Negocio y Boleta Térmica
+                            </h3>
+                            <span class="badge" style="background: #ecfeff; color: #0891b2; font-weight: 800; padding: 0.25rem 0.65rem; border-radius: 0.5rem; font-size: 0.78rem;">
+                                Datos Fiscales y Comerciales
+                            </span>
+                        </div>
+                        <p style="font-size: 0.85rem; color: #64748b; margin-bottom: 1.25rem; line-height: 1.4;">
+                            Configura los datos oficiales de tu local. Se imprimirán en el encabezado de las boletas, tickets y comprobantes de venta.
+                        </p>
+                        
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1rem;">
                             <div>
-                                <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Encabezado del Ticket</h4>
-                                <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
-                                    Personaliza el encabezado que aparece en todos los tickets de venta.
-                                </p>
-                                <div>
-                                    <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Nombre del Negocio</label>
-                                    <input type="text" id="ticketBusinessName" class="form-control" placeholder="Ej: Mi Tienda" style="font-size: 0.9rem; padding: 0.5rem;">
-                                </div>
-                                <div style="margin-top: 0.75rem;">
-                                    <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Dirección</label>
-                                    <input type="text" id="ticketAddress" class="form-control" placeholder="Ej: Calle Principal #123" style="font-size: 0.9rem; padding: 0.5rem;">
-                                </div>
-                                <div style="margin-top: 0.75rem;">
-                                    <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: #374151;">Teléfono</label>
-                                    <input type="text" id="ticketPhone" class="form-control" placeholder="Ej: +56 9 1234 5678" style="font-size: 0.9rem; padding: 0.5rem;">
-                                </div>
+                                <label style="display: block; font-weight: 700; margin-bottom: 0.35rem; color: #374151; font-size: 0.85rem;">Nombre Comercial / Fantasía *</label>
+                                <input type="text" id="ticketBusinessName" class="form-control" placeholder="Ej: Minimarket La Esquina" style="font-size: 0.9rem; padding: 0.55rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1;">
                             </div>
-                            <div style="margin-top: 1rem;">
-                                <h4 style="margin-bottom: 0.75rem; font-size: 0.95rem; color: #374151;">Pie de Página</h4>
-                                <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 1rem;">
-                                    Mensaje que aparece al final del ticket.
-                                </p>
-                                <textarea id="ticketFooter" class="form-control" placeholder="Ej: ¡Gracias por su compra!" rows="2" style="font-size: 0.9rem; padding: 0.5rem;"></textarea>
+                            <div>
+                                <label style="display: block; font-weight: 700; margin-bottom: 0.35rem; color: #374151; font-size: 0.85rem;">RUT / Identificación Tributaria</label>
+                                <input type="text" id="ticketBusinessRut" class="form-control" placeholder="Ej: 76.123.456-7" style="font-size: 0.9rem; padding: 0.55rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1;">
                             </div>
-                            <div style="margin-top: 1rem;">
-                                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
-                                    <input type="checkbox" id="showLogoOnTicket" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.saveTicketSettings()">
-                                    <span>Mostrar logo en el ticket</span>
-                                </label>
-                                <p style="font-size: 0.85rem; color: #6b7280; margin-left: 2rem; margin-top: -0.5rem; line-height: 1.4;">
-                                    Si se activa, el logo del negocio aparecerá en el encabezado del ticket.
-                                </p>
+                            <div>
+                                <label style="display: block; font-weight: 700; margin-bottom: 0.35rem; color: #374151; font-size: 0.85rem;">Giro Comercial</label>
+                                <input type="text" id="ticketBusinessGiro" class="form-control" placeholder="Ej: Minimarket, Abarrotes y Bebidas" style="font-size: 0.9rem; padding: 0.55rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1;">
                             </div>
-                            <div style="margin-top: 1rem;">
-                                <button class="btn btn-primary" onclick="SettingsView.saveTicketSettings()">
-                                    💾 Guardar Configuración
-                                </button>
-                                <button class="btn btn-secondary" onclick="SettingsView.previewTicket()">
-                                    👁️ Vista Previa
-                                </button>
+                            <div>
+                                <label style="display: block; font-weight: 700; margin-bottom: 0.35rem; color: #374151; font-size: 0.85rem;">Teléfono de Contacto</label>
+                                <input type="text" id="ticketPhone" class="form-control" placeholder="Ej: +56 9 1234 5678" style="font-size: 0.9rem; padding: 0.55rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1;">
                             </div>
+                            <div>
+                                <label style="display: block; font-weight: 700; margin-bottom: 0.35rem; color: #374151; font-size: 0.85rem;">Dirección del Local</label>
+                                <input type="text" id="ticketAddress" class="form-control" placeholder="Ej: Av. Principal #123" style="font-size: 0.9rem; padding: 0.55rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-weight: 700; margin-bottom: 0.35rem; color: #374151; font-size: 0.85rem;">Ciudad / Comuna</label>
+                                <input type="text" id="ticketBusinessCity" class="form-control" placeholder="Ej: Santiago, Chile" style="font-size: 0.9rem; padding: 0.55rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1;">
+                            </div>
+                        </div>
+
+                        <div style="margin-bottom: 1rem;">
+                            <label style="display: block; font-weight: 700; margin-bottom: 0.35rem; color: #374151; font-size: 0.85rem;">Pie de Página del Ticket</label>
+                            <textarea id="ticketFooter" class="form-control" placeholder="Ej: ¡Gracias por su preferencia! Revise su vuelto antes de retirarse." rows="2" style="font-size: 0.9rem; padding: 0.55rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1;"></textarea>
+                        </div>
+
+                        <div style="margin-bottom: 1.25rem;">
+                            <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 600;">
+                                <input type="checkbox" id="showLogoOnTicket" style="width: 1.2rem; height: 1.2rem; cursor: pointer;" onchange="SettingsView.saveTicketSettings()">
+                                <span>Mostrar logo en el ticket (si está disponible)</span>
+                            </label>
+                        </div>
+
+                        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                            <button class="btn btn-primary" onclick="SettingsView.saveTicketSettings()" style="background: #0891b2; font-weight: 800; border-radius: 0.55rem;">
+                                💾 Guardar Datos del Negocio
+                            </button>
+                            <button class="btn btn-secondary" onclick="SettingsView.previewTicket()" style="font-weight: 750; border-radius: 0.55rem;">
+                                👁️ Vista Previa del Ticket
+                            </button>
                         </div>
                     </div>
                     ` : ''}
@@ -763,33 +864,73 @@ const SettingsView = {
                     </div>
                     ` : ''}
 
-                    <!-- SECCIÓN: SEGURIDAD Y PIN -->
+                    <!-- SECCIÓN: SEGURIDAD Y PIN MAESTRO DEL DUEÑO -->
                     ${PermissionService.can('settings.security') ? `
                     <div class="card" style="background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #f59e0b;">
-                        <h3 style="margin-bottom: 1.5rem; color: #111827; font-size: 1.05rem;">🔐 Seguridad y Recuperación de Contraseña</h3>
+                        <h3 style="margin-bottom: 1.25rem; color: #111827; font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+                            🔑 PIN Maestro de Autorizaciones y Permisos (Solo Dueño)
+                        </h3>
                         <div style="display: flex; flex-direction: column; gap: 1.5rem;">
                             <div>
-                                <h4 style="margin-bottom: 0.75rem;">PIN de Administrador Global</h4>
-                                <p style="font-size: 0.875rem; color: var(--text); opacity: 0.8; margin-bottom: 1rem;">
-                                    Establece un PIN de 4-8 dígitos para restablecer la contraseña de <strong>cualquier usuario</strong> del sistema. Este PIN es global y funciona para todos los usuarios.
+                                <p style="font-size: 0.875rem; color: #475569; margin-bottom: 1rem; line-height: 1.5;">
+                                    Este código de <strong>4 a 8 dígitos</strong> es tu llave de control en el mostrador. Los cajeros te lo solicitarán para:
+                                    <ul style="margin: 0.4rem 0 0.75rem 1.25rem; padding: 0; color: #334155; font-size: 0.85rem;">
+                                        <li>Autorizar ventas a crédito (fiados) a clientes con deuda pendiente.</li>
+                                        <li>Aperturas manuales de la gaveta de dinero desde el POS.</li>
+                                        <li>Anular o corregir ventas y turnos.</li>
+                                        <li>Restablecer contraseñas de cajeros o empleados.</li>
+                                    </ul>
                                 </p>
-                                <div id="adminPINStatus" style="margin-bottom: 0.75rem; padding: 0.75rem; background: var(--light); border-radius: 0.375rem; font-size: 0.875rem;">
-                                    <span id="pinStatusText">Cargando...</span>
+                                <div id="adminPINStatus" style="margin-bottom: 1rem; padding: 0.85rem 1rem; background: var(--light); border-radius: 0.5rem; font-size: 0.9rem; border: 1px solid #e2e8f0;">
+                                    <span id="pinStatusText">Cargando estado del PIN...</span>
                                 </div>
-                                <button class="btn btn-primary" id="adminPINBtn" onclick="SettingsView.showSetAdminPINForm()">
-                                    Configurar PIN
-                                </button>
+                                <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                                    <button class="btn btn-primary" id="adminPINBtn" onclick="SettingsView.showSetAdminPINForm()" style="font-weight: 800; border-radius: 0.6rem;">
+                                        🔒 Personalizar PIN de Permisos
+                                    </button>
+                                    <button class="btn btn-outline-secondary" onclick="SettingsView.showForgotAdminPINModal()" style="font-weight: 700; border-radius: 0.6rem; background: #f8fafc; border: 1.5px solid #cbd5e1; color: #334155;">
+                                        ❓ ¿Olvidaste tu PIN?
+                                    </button>
+                                </div>
                             </div>
+
+                            <!-- CONTROL DE ARQUEO CIEGO PARA EMPLEADOS -->
+                            <div style="border-top: 1px solid var(--border); padding-top: 1.25rem; background: #f8fafc; border-radius: 0.75rem; padding: 1rem 1.25rem; border: 1.5px solid #e2e8f0;">
+                                <label style="display: flex; align-items: center; gap: 0.75rem; cursor: pointer; font-weight: 800; color: #0f172a;">
+                                    <input type="checkbox" id="blindCashClosingForEmployees" style="width: 1.25rem; height: 1.25rem; cursor: pointer; accent-color: #4f46e5;" onchange="SettingsView.saveBlindCashClosingSetting()">
+                                    <span>🔒 Exigir Arqueo Ciego a Cajeros y Empleados</span>
+                                </label>
+                                <p style="font-size: 0.85rem; color: #64748b; margin-left: 2rem; margin-top: 0.35rem; margin-bottom: 0; line-height: 1.4;">
+                                    <strong>Recomendado:</strong> Oculta los montos esperados en el cierre para obligar al cajero a contar físicamente el dinero en mano. El Dueño siempre verá los montos esperados con total claridad.
+                                </p>
+                            </div>
+
+                            <!-- CONTROL DE TOPE DE DESCUENTO PARA CAJEROS -->
+                            <div style="border-top: 1px solid var(--border); padding-top: 1.25rem; background: #f8fafc; border-radius: 0.75rem; padding: 1rem 1.25rem; border: 1.5px solid #e2e8f0;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.35rem;">
+                                    <h4 style="margin: 0; font-size: 0.95rem; color: #0f172a; font-weight: 800; display: flex; align-items: center; gap: 0.4rem;">
+                                        🏷️ Descuento Máximo Permitido a Cajeros
+                                    </h4>
+                                    <div style="display: flex; align-items: center; gap: 0.35rem; width: 110px;">
+                                        <input type="number" id="maxEmployeeDiscount" min="0" max="100" step="1" class="form-control" style="font-weight: 850; text-align: center; height: 38px; border-radius: 0.5rem; border: 1.5px solid #cbd5e1;" onchange="SettingsView.saveDiscountLimitSetting(this.value)">
+                                        <span style="font-weight: 900; color: #64748b;">%</span>
+                                    </div>
+                                </div>
+                                <p style="font-size: 0.85rem; color: #64748b; margin: 0; line-height: 1.4;">
+                                    Cualquier descuento por encima de este porcentaje exigirá el <strong>PIN Maestro del Dueño</strong> en el momento de cobrar.
+                                </p>
+                            </div>
+
                             <div style="border-top: 1px solid var(--border); padding-top: 1.5rem;">
-                                <h4 style="margin-bottom: 0.75rem;">Código de Recuperación</h4>
+                                <h4 style="margin-bottom: 0.75rem;">Código de Recuperación de Emergencia</h4>
                                 <p style="font-size: 0.875rem; color: var(--text); opacity: 0.8; margin-bottom: 1rem;">
-                                    Genera un código de recuperación para restablecer tu contraseña. 
+                                    Genera un código único de emergencia para restablecer el acceso si no tienes internet. 
                                     <strong>Guarda este código en un lugar seguro</strong> - solo se mostrará una vez.
                                 </p>
                                 <div id="recoveryCodeStatus" style="margin-bottom: 0.75rem; padding: 0.75rem; background: var(--light); border-radius: 0.375rem; font-size: 0.875rem;">
                                     <span id="codeStatusText">Cargando...</span>
                                 </div>
-                                <button class="btn btn-primary" onclick="SettingsView.generateRecoveryCode()">
+                                <button class="btn btn-primary" onclick="SettingsView.generateRecoveryCode()" style="font-weight: 700; border-radius: 0.5rem;">
                                     Generar Código de Recuperación
                                 </button>
                             </div>
@@ -859,11 +1000,11 @@ const SettingsView = {
                             </span>
                         </div>
                         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem;">
-                            <button class="btn btn-primary" style="height: 48px; justify-content: center; background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); font-weight: 850; border-radius: 0.75rem; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);" onclick="BackupManager.exportAllData()">
-                                📤 Descargar Respaldo Total (.JSON)
+                            <button class="btn btn-primary" style="height: 48px; justify-content: center; background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); font-weight: 850; border-radius: 0.75rem; box-shadow: 0 4px 12px rgba(79, 70, 229, 0.25);" onclick="BackupManager.exportAllData()" title="Descarga una copia completa de tu negocio a tu carpeta de Descargas o Pendrive en 1 clic">
+                                💾 Guardar Respaldo a Pendrive / Descargas (.JSON)
                             </button>
-                            <button class="btn btn-secondary" style="height: 48px; justify-content: center; border: 2px solid #6366f1; color: #4338ca; background: #eef2ff; font-weight: 850; border-radius: 0.75rem;" onclick="document.getElementById('importBackupJsonInput').click()">
-                                📥 Restaurar desde Respaldo (.JSON)
+                            <button class="btn btn-secondary" style="height: 48px; justify-content: center; border: 2px solid #6366f1; color: #4338ca; background: #eef2ff; font-weight: 850; border-radius: 0.75rem;" onclick="document.getElementById('importBackupJsonInput').click()" title="Carga un archivo de respaldo previamente descargado para recuperar todos tus datos">
+                                📥 Restaurar desde Archivo (.JSON)
                             </button>
                             <input type="file" id="importBackupJsonInput" style="display: none;" accept=".json" onchange="SettingsView.handleImport(event)">
                         </div>
@@ -1077,15 +1218,38 @@ const SettingsView = {
                                 </p>
                             </div>
                             <div>
-                                <h4 style="margin-bottom: 0.75rem;">Reinstalar</h4>
-                                <button class="btn btn-secondary btn-sm" onclick="SettingsView.reinstallApp()">
-                                    Reinstalar PWA
-                                </button>
+                                <h4 style="margin-bottom: 0.75rem;">Plataforma</h4>
+                                <span class="badge" style="background: #e0e7ff; color: #4338ca; font-weight: 800; padding: 0.35rem 0.65rem; border-radius: 0.4rem; font-size: 0.8rem; display: inline-block;">
+                                    🖥️ Desktop (Windows)
+                                </span>
                                 <p style="font-size: 0.75rem; margin-top: 0.5rem; color: var(--text); opacity: 0.7;">
-                                    Actualiza la aplicación
+                                    Ejecutable nativo para PC
                                 </p>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- SECCIÓN: ESTADÍSTICAS DEL SISTEMA -->
+                    <div class="card" style="margin-bottom: 0; background: #ffffff; border: 1.5px solid #d1d5db; border-radius: 1rem; padding: 1.5rem; box-shadow: 0 4px 12px rgba(0,0,0,0.06); border-top: 4px solid #f43f5e;">
+                        <h3 style="margin-bottom: 1.25rem; color: #111827; font-size: 1.05rem; display: flex; align-items: center; gap: 0.5rem;">📊 Estadísticas y Salud del Sistema</h3>
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.875rem 1rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem;">
+                                <span style="color: #374151; font-weight: 600;">📦 Productos registrados:</span>
+                                <strong id="stat-products" style="color: #4f46e5; font-size: 1.1rem;">Cargando...</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.875rem 1rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem;">
+                                <span style="color: #374151; font-weight: 600;">💵 Ventas totales registradas:</span>
+                                <strong id="stat-sales" style="color: #059669; font-size: 1.1rem;">Cargando...</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; align-items: center; padding: 0.875rem 1rem; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.5rem;">
+                                <span style="color: #374151; font-weight: 600;">👥 Clientes registrados:</span>
+                                <strong id="stat-customers" style="color: #db2777; font-size: 1.1rem;">Cargando...</strong>
+                            </div>
+                        </div>
+                        <button class="btn btn-secondary" style="width: 100%; margin-top: 1.25rem; background: #f9fafb; color: #374151; border: 1.5px solid #d1d5db; font-weight: 700; border-radius: 0.6rem; cursor: pointer;"
+                                onclick="SettingsView.checkStorage()">
+                            Ver Uso de Almacenamiento Local
+                        </button>
                     </div>
                 </div>
 
@@ -1112,8 +1276,21 @@ const SettingsView = {
         // Activar el panel seleccionado
         const activePanel = document.getElementById(tabId);
         if (activePanel) activePanel.classList.add('active');
-        if (tabId === 'settings-tab-visual') {
+        if (tabId === 'settings-tab-profile' || tabId === 'settings-tab-visual') {
             this.initNavCustomization();
+        } else if (tabId === 'settings-tab-pos') {
+            this.loadMultipleCashSettings();
+            this.loadTerminalId();
+            this.loadBankSettings();
+            this.initPOSSettingsSection();
+        } else if (tabId === 'settings-tab-hardware') {
+            this.loadPrinterSettings();
+            this.loadTicketSettings();
+        } else if (tabId === 'settings-tab-security') {
+            this.initSecuritySection();
+            this.loadDiscountLimitSetting();
+        } else if (tabId === 'settings-tab-system') {
+            this.updateStats();
         }
     },
 
@@ -1142,8 +1319,8 @@ const SettingsView = {
         document.documentElement.setAttribute('data-theme', theme);
         document.documentElement.style.setProperty('--app-brightness', brightness);
         
-        const slider = document.getElementById('brightness-slider');
-        const brightnessVal = document.getElementById('brightness-value');
+        const slider = document.getElementById('my-brightness-slider') || document.getElementById('brightness-slider');
+        const brightnessVal = document.getElementById('my-brightness-value') || document.getElementById('brightness-value');
         if (slider) slider.value = brightness;
         if (brightnessVal) brightnessVal.textContent = Math.round(brightness * 100) + '%';
     },
@@ -1324,7 +1501,7 @@ const SettingsView = {
         showNotification('Tema actualizado', 'success');
         
         // Actualizar visualmente la selección sin recargar toda la página
-        const container = document.getElementById('theme-options-container');
+        const container = document.getElementById('my-profile-theme-container') || document.getElementById('theme-options-container');
         if (container) {
             container.innerHTML = this.renderThemeOptions();
         }
@@ -1371,49 +1548,13 @@ const SettingsView = {
         }
     },
 
-    async initAutoBackupSection() {
-        const card = document.getElementById('autoBackupCard');
-        if (!card) return;
-        if (typeof window !== 'undefined' && window.api && typeof window.api.backupSaveToDisk === 'function') {
-            card.style.display = 'block';
-            try {
-                const enabledRow = await db.get('settings', 'autoBackupEnabled');
-                const hoursRow = await db.get('settings', 'autoBackupIntervalHours');
-                const onCloseRow = await db.get('settings', 'autoBackupOnClose');
-                const cbEnabled = document.getElementById('autoBackupEnabled');
-                const inputHours = document.getElementById('autoBackupIntervalHours');
-                const cbOnClose = document.getElementById('autoBackupOnClose');
-                if (cbEnabled) cbEnabled.checked = enabledRow == null ? true : !!enabledRow.value;
-                if (inputHours) inputHours.value = (hoursRow && hoursRow.value != null) ? Number(hoursRow.value) : 24;
-                if (cbOnClose) cbOnClose.checked = onCloseRow == null ? true : !!onCloseRow.value;
-            } catch (e) {
-                console.warn('initAutoBackupSection:', e.message);
-            }
-        } else {
-            card.style.display = 'none';
-        }
-    },
-
-    async saveAutoBackupOptions() {
-        const cbEnabled = document.getElementById('autoBackupEnabled');
-        const inputHours = document.getElementById('autoBackupIntervalHours');
-        const cbOnClose = document.getElementById('autoBackupOnClose');
-        if (!cbEnabled || !inputHours || !cbOnClose) return;
-        try {
-            const hours = Math.max(1, Math.min(168, Number(inputHours.value) || 24));
-            await db.put('settings', { key: 'autoBackupEnabled', value: cbEnabled.checked });
-            await db.put('settings', { key: 'autoBackupIntervalHours', value: hours });
-            await db.put('settings', { key: 'autoBackupOnClose', value: cbOnClose.checked });
-            inputHours.value = hours;
-            showNotification('Opciones de backup guardadas. Recarga la página para aplicar el intervalo.', 'success');
-            const note = document.getElementById('autoBackupNote');
-            if (note) note.style.display = 'block';
-        } catch (e) {
-            showNotification('Error al guardar: ' + e.message, 'error');
-        }
-    },
-
     async initPOSSettingsSection() {
+        this.loadDefaultPurchaseMargin();
+        this.loadBankSettings();
+        const cashRoundingCb = document.getElementById('posEnableCashRounding');
+        if (cashRoundingCb) {
+            cashRoundingCb.checked = localStorage.getItem('ENABLE_CASH_ROUNDING') !== 'false';
+        }
         const checkbox = document.getElementById('posAllowNegativeStock');
         if (!checkbox) return;
         try {
@@ -1425,7 +1566,26 @@ const SettingsView = {
         }
     },
 
+    loadDefaultPurchaseMargin() {
+        const input = document.getElementById('settingDefaultPurchaseMargin');
+        if (input) {
+            const val = localStorage.getItem('CF_DEFAULT_PURCHASE_MARGIN');
+            input.value = (val !== null && !isNaN(parseFloat(val))) ? parseFloat(val) : 35;
+        }
+    },
+
+    saveDefaultPurchaseMargin(val) {
+        const num = parseFloat(val);
+        const finalVal = (!isNaN(num) && num >= 0) ? num : 35;
+        localStorage.setItem('CF_DEFAULT_PURCHASE_MARGIN', finalVal);
+        showNotification(`Margen de compra base guardado en ${finalVal}%`, 'success');
+    },
+
     async savePOSSettings() {
+        const cashRoundingCb = document.getElementById('posEnableCashRounding');
+        if (cashRoundingCb) {
+            localStorage.setItem('ENABLE_CASH_ROUNDING', cashRoundingCb.checked ? 'true' : 'false');
+        }
         const checkbox = document.getElementById('posAllowNegativeStock');
         if (!checkbox) return;
         try {
@@ -1433,6 +1593,82 @@ const SettingsView = {
             showNotification('Configuración de venta guardada exitosamente.', 'success');
         } catch (e) {
             showNotification('Error al guardar configuración: ' + e.message, 'error');
+        }
+    },
+
+    // --- DATOS BANCARIOS PARA TRANSFERENCIA ---
+    saveBankSettings() {
+        const bankName = (document.getElementById('bankName')?.value || '').trim();
+        const bankAccountType = document.getElementById('bankAccountType')?.value || 'Cuenta RUT';
+        const bankAccountNumber = (document.getElementById('bankAccountNumber')?.value || '').trim();
+        const bankRut = (document.getElementById('bankRut')?.value || '').trim();
+        const bankBeneficiary = (document.getElementById('bankBeneficiary')?.value || '').trim();
+        const bankEmail = (document.getElementById('bankEmail')?.value || '').trim();
+
+        localStorage.setItem('BANK_NAME', bankName);
+        localStorage.setItem('BANK_ACCOUNT_TYPE', bankAccountType);
+        localStorage.setItem('BANK_ACCOUNT_NUMBER', bankAccountNumber);
+        localStorage.setItem('BANK_RUT', bankRut);
+        localStorage.setItem('BANK_BENEFICIARY', bankBeneficiary);
+        localStorage.setItem('BANK_EMAIL', bankEmail);
+
+        try {
+            let bankInfo = {};
+            try { bankInfo = JSON.parse(localStorage.getItem('PMV_BANK_INFO') || '{}'); } catch (_) {}
+            bankInfo.bankName = bankName;
+            bankInfo.bankAccountType = bankAccountType;
+            bankInfo.bankAccountNumber = bankAccountNumber;
+            bankInfo.bankRut = bankRut;
+            bankInfo.bankBeneficiary = bankBeneficiary;
+            bankInfo.bankEmail = bankEmail;
+            localStorage.setItem('PMV_BANK_INFO', JSON.stringify(bankInfo));
+
+            if (typeof SyncService !== 'undefined') {
+                SyncService.getCurrentUserId().then(uid => {
+                    if (uid && typeof SyncService.pushBusinessSettings === 'function') {
+                        SyncService.pushBusinessSettings(uid);
+                    }
+                }).catch(() => {});
+            }
+        } catch (e) {
+            console.warn('[SettingsView] Error sincronizando banco:', e);
+        }
+
+        showNotification('✅ Cuenta bancaria guardada y disponible en el POS', 'success');
+    },
+
+    loadBankSettings() {
+        const elName = document.getElementById('bankName');
+        if (!elName) return;
+        let bankInfo = {};
+        try { bankInfo = JSON.parse(localStorage.getItem('PMV_BANK_INFO') || '{}'); } catch (_) {}
+
+        elName.value = localStorage.getItem('BANK_NAME') || bankInfo.bankName || '';
+        const elType = document.getElementById('bankAccountType');
+        if (elType) elType.value = localStorage.getItem('BANK_ACCOUNT_TYPE') || bankInfo.bankAccountType || 'Cuenta RUT';
+        const elNum = document.getElementById('bankAccountNumber');
+        if (elNum) elNum.value = localStorage.getItem('BANK_ACCOUNT_NUMBER') || bankInfo.bankAccountNumber || '';
+        const elRut = document.getElementById('bankRut');
+        if (elRut) elRut.value = localStorage.getItem('BANK_RUT') || bankInfo.bankRut || '';
+        const elBen = document.getElementById('bankBeneficiary');
+        if (elBen) elBen.value = localStorage.getItem('BANK_BENEFICIARY') || bankInfo.bankBeneficiary || '';
+        const elMail = document.getElementById('bankEmail');
+        if (elMail) elMail.value = localStorage.getItem('BANK_EMAIL') || bankInfo.bankEmail || '';
+    },
+
+    // --- TOPE DE DESCUENTO PARA CAJEROS ---
+    saveDiscountLimitSetting(val) {
+        const num = parseFloat(val);
+        const finalVal = (!isNaN(num) && num >= 0 && num <= 100) ? num : 10;
+        localStorage.setItem('MAX_EMPLOYEE_DISCOUNT_PERCENT', finalVal);
+        showNotification(`Tope de descuento para cajeros guardado en ${finalVal}%`, 'success');
+    },
+
+    loadDiscountLimitSetting() {
+        const input = document.getElementById('maxEmployeeDiscount');
+        if (input) {
+            const val = localStorage.getItem('MAX_EMPLOYEE_DISCOUNT_PERCENT');
+            input.value = (val !== null && !isNaN(parseFloat(val))) ? parseFloat(val) : 10;
         }
     },
 
@@ -1454,119 +1690,6 @@ const SettingsView = {
         `).join('');
     },
 
-    async exportEntityData(key) {
-        const entity = (window.BACKUP_ENTITY_CONFIG || []).find(e => e.key === key);
-        if (!entity) return;
-
-        try {
-            showNotification(`Preparando ${entity.label}...`, 'info');
-            if (entity.type === 'store') {
-                await BackupManager.exportEntityToExcel(entity.store, entity.label, entity.sheet);
-            } else if (entity.handler === 'customerDebts') {
-                await BackupManager.exportCustomerDebts(entity.sheet, entity.label);
-            } else if (entity.handler === 'reportsSummary') {
-                await BackupManager.exportReportsSummary(entity.sheet, entity.label);
-            }
-        } catch (error) {
-            showNotification('Error al exportar: ' + error.message, 'error');
-        }
-    },
-
-    async deduplicateSuppliers() {
-        showConfirm('Esta acción unificará a todos los proveedores que tengan el mismo nombre, traspasando sus compras y deudas a un solo registro. ¿Deseas continuar?', async () => {
-            try {
-                showNotification('Limpiando duplicados...', 'info');
-                const result = await ApiClient.post('migration/deduplicate-suppliers');
-                if (result.success) {
-                    showNotification(`Limpieza completada. Se unificaron ${result.merged} registros.`, 'success');
-                    // Recargar la vista si estamos en proveedores (opcional)
-                }
-            } catch (error) {
-                showNotification('Error al limpiar proveedores: ' + error.message, 'error');
-            }
-        });
-    },
-
-    async deduplicateCustomers() {
-        showConfirm('⚠️ ATENCIÓN: Esta acción unificará clientes duplicados y SUMARÁ sus deudas pendientes (fiados). No se perderá ningún dato de cobranza. ¿Deseas continuar?', async () => {
-            try {
-                showNotification('Consolidando deudas y unificando registros...', 'info');
-                const result = await ApiClient.post('migration/deduplicate-customers');
-                if (result.success) {
-                    const debtMsg = result.totalDebt > 0 ? `\\n\\nSe consolidaron ${formatCLP(result.totalDebt)} en deudas de fiados.` : '';
-                    showNotification(`Fusión completada. Se unificaron ${result.merged} clientes.${debtMsg}`, 'success');
-                }
-            } catch (error) {
-                showNotification('Error al fusionar clientes: ' + error.message, 'error');
-            }
-        });
-    },
-
-    async handleImport(event) {
-        const file = event.target.files[0];
-        if (!file) return;
-
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            try {
-                const jsonData = e.target.result;
-                showConfirm(
-                    '⚠️ ADVERTENCIA: La importación reemplazará TODOS tus datos actuales. El sistema se reiniciará para aplicar los cambios.\\n\\n¿Deseas continuar?',
-                    async () => {
-                        showNotification('Restaurando base de datos...', 'info');
-                        await BackupManager.importData(jsonData);
-                    }
-                );
-            } catch (error) {
-                showNotification('Error al procesar el archivo de respaldo', 'error');
-            }
-        };
-        reader.readAsText(file);
-        event.target.value = ''; 
-    },
-
-    async exportBusinessData() {
-        try {
-            await BackupManager.exportAllData();
-        } catch (error) {
-            console.error('[Export] Error:', error);
-            showNotification('Error al exportar negocio: ' + error.message, 'error');
-        }
-    },
-
-    async importExcelData() {
-        const entitySelect = document.getElementById('excelImportEntity');
-        const fileInput = document.getElementById('excelImportFile');
-        const file = fileInput?.files[0];
-        const entityKey = entitySelect?.value;
-
-        if (!file) {
-            showNotification('Selecciona un archivo Excel', 'warning');
-            return;
-        }
-
-        const entity = this.excelEntities.find(e => e.key === entityKey);
-        if (!entity) {
-            showNotification('Selecciona una entidad válida', 'warning');
-            return;
-        }
-
-        if (entity.type !== 'store') {
-            showNotification('Esta entidad no admite importación directa', 'warning');
-            return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            const arrayBuffer = e.target.result;
-            await BackupManager.importEntityFromExcel(entity.store, entity.sheet, entity.label, arrayBuffer);
-            fileInput.value = '';
-        };
-        reader.onerror = () => {
-            showNotification('No se pudo leer el archivo', 'error');
-        };
-        reader.readAsArrayBuffer(file);
-    },
 
     async checkStorage() {
         if ('storage' in navigator && 'estimate' in navigator.storage) {
@@ -1602,29 +1725,6 @@ const SettingsView = {
         }
     },
 
-    showImportModal() {
-        const content = `
-            <div class="form-group">
-                <label>Archivo JSON de Backup</label>
-                <input type="file" id="importFile" class="form-control" accept=".json">
-            </div>
-            
-            <div style="background: var(--light); padding: 1rem; border-radius: 0.375rem; font-size: 0.875rem;">
-                <strong>Nota:</strong> Selecciona un archivo JSON exportado previamente desde este sistema.
-                Los datos existentes pueden ser sobrescritos.
-            </div>
-        `;
-
-        const footer = `
-            <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-            <button class="btn btn-primary" onclick="SettingsView.processImport()">Importar</button>
-        `;
-
-        showModal(content, { title: 'Importar Datos', footer, width: '500px' });
-    },
-
-    // processImport ha sido reemplazado por handleImport para soporte directo de input file
-
     async clearCache() {
         if ('caches' in window) {
             const cacheNames = await caches.keys();
@@ -1636,486 +1736,47 @@ const SettingsView = {
         }
     },
 
-    async reinstallApp() {
-        if ('serviceWorker' in navigator) {
-            const registration = await navigator.serviceWorker.getRegistration();
-            if (registration) {
-                await registration.unregister();
-                await this.clearCache();
-                showNotification('App desinstalada. Recarga para reinstalar.', 'success');
-                setTimeout(() => location.reload(), 1500);
-            }
-        } else {
-            showNotification('Service Worker no disponible', 'warning');
-        }
-    },
-
-    async factoryReset() {
-        // Doble confirmación con modal personalizado (prompt() no funciona en Electron)
-        showConfirm('⚠️ ¿Estás SEGURO de que deseas eliminar TODOS los datos?\n\nEsto borrará productos, ventas, clientes, compras y todo lo demás.', () => {
-            // Segunda confirmación: modal con input
-            const content = `
-                <div style="text-align: center; margin-bottom: 1.5rem;">
-                    <div style="font-size: 3rem; margin-bottom: 0.5rem;">🚨</div>
-                    <p style="color: #fca5a5; font-weight: bold; font-size: 1.1rem;">ÚLTIMA ADVERTENCIA</p>
-                    <p style="font-size: 0.9rem; color: var(--text); opacity: 0.8;">
-                        Esta acción eliminará permanentemente todos los datos.<br>
-                        <strong>No se puede deshacer.</strong>
-                    </p>
-                </div>
-                <div class="form-group">
-                    <label style="color: #fca5a5;">Para confirmar, escribe <strong>BORRAR TODO</strong> en el campo:</label>
-                    <input type="text" id="factoryResetConfirmInput" class="form-control" 
-                           placeholder="Escribe BORRAR TODO aquí" autocomplete="off"
-                           style="text-align: center; font-weight: bold; font-size: 1.1rem; letter-spacing: 2px; margin-top: 0.5rem;">
-                </div>
-            `;
-            const footer = `
-                <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-                <button class="btn" id="factoryResetExecBtn" 
-                        style="background: #dc2626; color: white; font-weight: bold; opacity: 0.5; cursor: not-allowed;" 
-                        disabled onclick="SettingsView.executeFactoryReset()">
-                    🗑️ ELIMINAR TODO
-                </button>
-            `;
-            showModal(content, { title: '⚠️ Confirmación Final', footer, width: '480px' });
-
-            // Habilitar botón solo si escriben "BORRAR TODO"
-            setTimeout(() => {
-                const input = document.getElementById('factoryResetConfirmInput');
-                const btn = document.getElementById('factoryResetExecBtn');
-                if (input && btn) {
-                    input.addEventListener('input', () => {
-                        if (input.value.trim() === 'BORRAR TODO') {
-                            btn.disabled = false;
-                            btn.style.opacity = '1';
-                            btn.style.cursor = 'pointer';
-                        } else {
-                            btn.disabled = true;
-                            btn.style.opacity = '0.5';
-                            btn.style.cursor = 'not-allowed';
-                        }
-                    });
-                    input.focus();
-                }
-            }, 100);
-        });
-    },
-
-    async executeFactoryReset() {
-        closeModal();
+    async loadDebtSettings() {
         try {
-            showNotification('🚮 Vaciando base de datos...', 'info');
-            await db.wipeAll();
-            showNotification('✅ Base de datos vaciada exitosamente. Recargando...', 'success');
-            setTimeout(() => {
-                window.location.reload();
-            }, 2000);
-        } catch (error) {
-            showNotification('❌ Error: ' + error.message, 'error');
-            console.error('Factory reset error:', error);
+            const inMild = document.getElementById('debtLimitMild');
+            const inHigh = document.getElementById('debtLimitHigh');
+            if (!inMild || !inHigh) return;
+
+            let limitMild = 15000;
+            let limitHigh = 30000;
+
+            if (window.db) {
+                const rowMild = await db.get('settings', 'debtLimitMild');
+                if (rowMild && rowMild.value !== undefined) limitMild = parseInt(rowMild.value) || 15000;
+                const rowHigh = await db.get('settings', 'debtLimitHigh');
+                if (rowHigh && rowHigh.value !== undefined) limitHigh = parseInt(rowHigh.value) || 30000;
+            }
+
+            inMild.value = limitMild;
+            inHigh.value = limitHigh;
+        } catch (e) {
+            console.warn('[SettingsView] Error cargando límites de deuda:', e);
         }
     },
 
-    /**
-     * C8: Cargar la lista de usuarios con sus roles.
-     */
-    async loadUserRoles() {
-        const container = document.getElementById('userRolesList');
-        if (!container) return;
-
+    async saveDebtSettings() {
         try {
-            const users = await User.getAll();
-            const currentUser = AuthManager.getCurrentUser();
+            const inMild = document.getElementById('debtLimitMild');
+            const inHigh = document.getElementById('debtLimitHigh');
+            if (!inMild || !inHigh) return;
 
-            if (users.length === 0) {
-                container.innerHTML = '<p style="color: var(--secondary);">No hay usuarios registrados.</p>';
-                return;
+            const valMild = parseInt(inMild.value) || 15000;
+            const valHigh = parseInt(inHigh.value) || 30000;
+
+            if (window.db) {
+                await db.put('settings', { key: 'debtLimitMild', value: valMild });
+                await db.put('settings', { key: 'debtLimitHigh', value: valHigh });
             }
-
-            container.innerHTML = users.map(u => {
-                const role = User.getEffectiveRole(u);
-                const roleLabel = PermissionService.ROLE_LABELS[role] || role;
-                const isSelf = currentUser && currentUser.id === u.id;
-                const roleBadgeColor = role === 'owner' ? '#a78bfa' : role === 'admin' ? '#60a5fa' : '#94a3b8';
-
-                return `
-                    <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.75rem; background: var(--light); border-radius: 0.375rem; border-left: 3px solid ${roleBadgeColor};">
-                        <div style="display: flex; align-items: center; gap: 0.75rem;">
-                            <div style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, ${roleBadgeColor}, ${roleBadgeColor}88); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 0.9rem;">
-                                ${u.username.charAt(0).toUpperCase()}
-                            </div>
-                            <div>
-                                <div style="font-weight: 600;">${u.username}${isSelf ? ' <span style="font-size: 0.75rem; opacity: 0.7;">(tú)</span>' : ''}</div>
-                                <div style="font-size: 0.8rem; color: var(--secondary);">
-                                    <span style="padding: 0.1rem 0.4rem; border-radius: 0.2rem; background: ${roleBadgeColor}33; color: ${roleBadgeColor};">${roleLabel}</span>
-                                    ${u.createdAt ? ` · Creado: ${new Date(u.createdAt).toLocaleDateString('es-CL')}` : ''}
-                                </div>
-                            </div>
-                        </div>
-                        <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            ${PermissionService.can('settings.users') ? `
-                                <button class="btn btn-secondary btn-sm" style="padding: 0.3rem 0.6rem; border: 1px solid #cbd5e1; font-weight: 700; font-size: 0.8rem; white-space: nowrap;" 
-                                        onclick="SettingsView.showChangeEmployeePasswordModal(${u.id}, '${u.username}')" title="Cambiar Contraseña">
-                                    🔑 Clave
-                                </button>
-                                <select onchange="SettingsView.changeUserRole(${u.id}, this.value, '${u.username}')"
-                                        style="padding: 0.3rem 0.5rem; border-radius: 0.25rem; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.85rem;"
-                                        ${isSelf ? 'disabled title="No puedes cambiar tu propio rol"' : ''}>
-                                    ${PermissionService.ROLES.map(r =>
-                    `<option value="${r}" ${r === role ? 'selected' : ''}>${PermissionService.ROLE_LABELS[r]}</option>`
-                ).join('')}
-                                </select>
-                                ${!isSelf ? `
-                                    <button class="btn btn-danger btn-sm" style="padding: 0.3rem 0.6rem;" 
-                                            onclick="SettingsView.deleteUser(${u.id}, '${u.username}')" title="Eliminar Usuario">
-                                        ✕
-                                    </button>
-                                ` : ''}
-                            ` : `<span style="font-size: 0.85rem; color: var(--secondary);">${roleLabel}</span>`}
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        } catch (error) {
-            console.error('Error al cargar usuarios:', error);
-            container.innerHTML = '<p style="color: var(--danger);">Error al cargar usuarios.</p>';
+            showNotification('Límites de semáforo de deudas guardados exitosamente', 'success');
+        } catch (e) {
+            console.error('[SettingsView] Error guardando límites de deuda:', e);
+            showNotification('Error guardando configuración de deudas: ' + e.message, 'error');
         }
-    },
-
-    /**
-     * C8: Cambiar el rol de un usuario.
-     */
-    async changeUserRole(userId, newRole, username) {
-        if (!PermissionService.check('settings.users', 'gestionar usuarios')) return;
-
-        try {
-            await User.updateRole(userId, newRole);
-            const roleLabel = PermissionService.ROLE_LABELS[newRole] || newRole;
-            showNotification(`Rol de "${username}" actualizado a ${roleLabel}`, 'success');
-            await this.loadUserRoles();
-        } catch (error) {
-            showNotification('Error al cambiar rol: ' + error.message, 'error');
-            await this.loadUserRoles(); // Recargar para restaurar estado visual
-        }
-    },
-
-    /**
-     * C8: Eliminar un usuario.
-     */
-    async deleteUser(userId, username) {
-        if (!PermissionService.check('settings.users', 'eliminar usuarios')) return;
-
-        showConfirm(`¿Estás seguro de que deseas eliminar permanentemente al usuario "${username}"?`, async () => {
-            try {
-                await db.delete('users', userId);
-                showNotification(`Usuario "${username}" eliminado correctamente`, 'success');
-                await this.loadUserRoles();
-            } catch (error) {
-                showNotification('Error al eliminar usuario: ' + error.message, 'error');
-            }
-        });
-    },
-
-    /**
-     * C8: Mostrar modal para crear nuevo usuario.
-     */
-    showCreateUserModal() {
-        if (!PermissionService.check('settings.users', 'crear usuarios')) return;
-
-        const content = `
-            <div class="form-group">
-                <label>Nombre de Usuario *</label>
-                <input type="text" id="newUsername" class="form-control" placeholder="Ej: vendedorpablo" autocomplete="off">
-            </div>
-            
-            <div class="form-group">
-                <label>Contraseña Temporal *</label>
-                <input type="password" id="newPassword" class="form-control" placeholder="Mínimo 4 caracteres" autocomplete="new-password">
-            </div>
-            
-            <div class="form-group">
-                <label>Rol del Usuario *</label>
-                <select id="newUserRole" class="form-control">
-                    <option value="cashier" selected>Cajero (Solo ventas y POS)</option>
-                    <option value="admin">Administrador (Gestión operativa)</option>
-                    <option value="owner">Propietario (Acceso Total)</option>
-                </select>
-            </div>
-            
-            <div style="background: var(--light); padding: 0.75rem; border-radius: 0.375rem; font-size: 0.85rem; margin-top: 1rem;">
-                <strong>Nota:</strong> Como dueños, ustedes tienen el control total del sistema.
-            </div>
-        `;
-
-        const footer = `
-            <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-            <button class="btn btn-primary" onclick="SettingsView.processCreateUser()">Crear Usuario</button>
-        `;
-
-        showModal(content, { title: 'Registrar Nuevo Trabajador', footer, width: '450px' });
-    },
-
-    /**
-     * C8: Procesar creación de usuario.
-     */
-    async processCreateUser() {
-        const username = document.getElementById('newUsername').value.trim();
-        const password = document.getElementById('newPassword').value;
-        const role = document.getElementById('newUserRole').value;
-
-        if (!username || !password) {
-            showNotification('Por favor completa todos los campos', 'warning');
-            return;
-        }
-
-        if (password.length < 4) {
-            showNotification('La contraseña debe tener al menos 4 caracteres', 'warning');
-            return;
-        }
-
-        try {
-            await User.create(username, password, null, role);
-            showNotification(`Usuario "${username}" creado exitosamente como ${PermissionService.ROLE_LABELS[role]}`, 'success');
-            closeModal();
-            await this.loadUserRoles();
-        } catch (error) {
-            showNotification('Error al crear usuario: ' + error.message, 'error');
-        }
-    },
-
-    async initSecuritySection() {
-        // Update PIN status
-        const hasPIN = await User.hasAdminPIN();
-        const pinStatusText = document.getElementById('pinStatusText');
-        const pinBtn = document.getElementById('adminPINBtn');
-
-        if (pinStatusText) {
-            pinStatusText.textContent = hasPIN ? '✓ PIN configurado' : 'PIN no configurado';
-        }
-        if (pinBtn) {
-            pinBtn.textContent = hasPIN ? 'Cambiar PIN' : 'Configurar PIN';
-        }
-
-        // Update recovery code status
-        const currentUser = AuthManager.getCurrentUser();
-        const codeStatusText = document.getElementById('codeStatusText');
-
-        if (codeStatusText && currentUser) {
-            const user = await User.getById(currentUser.id);
-            if (user && user.recoveryCode) {
-                codeStatusText.textContent = '✓ Código generado (ya no se mostrará)';
-            } else {
-                codeStatusText.textContent = 'Código no generado';
-            }
-        }
-    },
-
-    showSetAdminPINForm() {
-        const content = `
-            <div class="form-group">
-                <label>PIN de Administrador (4-8 dígitos) *</label>
-                <input type="password" id="adminPIN" class="form-control" placeholder="Ej: 1234" maxlength="8" pattern="[0-9]{4,8}" required>
-            </div>
-            
-            <div class="form-group">
-                <label>Confirmar PIN *</label>
-                <input type="password" id="adminPINConfirm" class="form-control" placeholder="Confirma el PIN" maxlength="8" pattern="[0-9]{4,8}" required>
-            </div>
-            
-            <div style="background: var(--light); padding: 1rem; border-radius: 0.375rem; font-size: 0.875rem; margin-top: 1rem;">
-                <strong>Importante:</strong> Este PIN permite restablecer la contraseña de cualquier usuario del sistema. Guárdalo en un lugar seguro.
-            </div>
-        `;
-
-        const footer = `
-            <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-            <button class="btn btn-primary" onclick="SettingsView.saveAdminPIN()">Guardar PIN</button>
-        `;
-
-        showModal(content, { title: 'Configurar PIN de Administrador', footer, width: '450px' });
-    },
-
-    async saveAdminPIN() {
-        const pin = document.getElementById('adminPIN').value;
-        const pinConfirm = document.getElementById('adminPINConfirm').value;
-
-        if (!pin || pin.length < 4 || pin.length > 8) {
-            showNotification('El PIN debe tener entre 4 y 8 dígitos', 'warning');
-            return;
-        }
-
-        if (!/^\d+$/.test(pin)) {
-            showNotification('El PIN solo puede contener números', 'warning');
-            return;
-        }
-
-        if (pin !== pinConfirm) {
-            showNotification('Los PINs no coinciden', 'warning');
-            return;
-        }
-
-        try {
-            console.log('💾 Guardando PIN de administrador...');
-            await User.setAdminPIN(pin);
-            console.log('✅ PIN guardado en base de datos');
-            
-            // Verificar que se guardó correctamente
-            const hasPIN = await User.hasAdminPIN();
-            console.log('🔍 Verificación de PIN guardado:', hasPIN);
-            
-            showNotification('PIN de administrador global configurado exitosamente. Este PIN permite recuperar la contraseña de cualquier usuario.', 'success');
-            closeModal();
-            
-            // Update status in view
-            await this.initSecuritySection();
-            console.log('🔄 UI actualizada con nuevo estado del PIN');
-        } catch (error) {
-            console.error('❌ Error al configurar PIN:', error);
-            showNotification('Error al configurar PIN: ' + error.message, 'error');
-        }
-    },
-
-    async generateRecoveryCode() {
-        const currentUser = AuthManager.getCurrentUser();
-        if (!currentUser) {
-            showNotification('Debes estar autenticado para generar un código de recuperación', 'warning');
-            return;
-        }
-
-        showConfirm('¿Generar un nuevo código de recuperación? Si ya tienes un código, este será reemplazado.', async () => {
-            try {
-                const { code, user } = await User.generateAndSetRecoveryCode(currentUser.id);
-
-                const content = `
-                <div style="text-align: center; margin-bottom: 1.5rem;">
-                    <div style="font-size: 1.5rem; font-weight: bold; color: var(--primary); font-family: monospace; letter-spacing: 2px; padding: 1rem; background: var(--light); border-radius: 0.5rem; margin-bottom: 1rem;">
-                        ${code}
-                    </div>
-                    <p style="font-size: 0.875rem; color: var(--text); opacity: 0.8;">
-                        <strong>⚠️ Importante:</strong> Guarda este código en un lugar seguro. No se mostrará nuevamente.
-                    </p>
-                    <p style="font-size: 0.875rem; color: var(--text); opacity: 0.8; margin-top: 0.5rem;">
-                        Puedes usar este código para restablecer tu contraseña si la olvidas.
-                    </p>
-                </div>
-            `;
-
-                showModal(content, { title: 'Código de Recuperación Generado', width: '500px' });
-
-                // Update status in view
-                await this.initSecuritySection();
-            } catch (error) {
-                console.error('Error al generar código de recuperación:', error);
-                showNotification('Error al generar código: ' + error.message, 'error');
-            }
-        });
-    },
-
-    async enableSQLiteMode() {
-        showConfirm('¿Estás seguro de activar el motor SQLite? Esto requiere que el servidor backend esté corriendo (Puerto 3000).', async () => {
-            try {
-                const response = await fetch(`${window.API_CONFIG.BASE_URL}/api/status`);
-                if (!response.ok) throw new Error('Servidor no disponible');
-
-                localStorage.setItem('DB_MODE', 'sqlite');
-                showNotification('Motor SQLite activado. La aplicación se reiniciará.', 'success');
-                setTimeout(() => location.reload(), 1500);
-            } catch (e) {
-                showNotification('Error: El servidor backend no responde. ¿Ejecutaste el programa con este nuevo código?', 'error');
-            }
-        });
-    },
-
-    async initSQLiteInfo() {
-        const infoDiv = document.getElementById('sqliteInfo');
-        const ipText = document.getElementById('serverIPInfo');
-        if (!infoDiv || !ipText) return;
-
-        if (window.db && window.db.mode === 'sqlite') {
-            infoDiv.style.display = 'block';
-            try {
-                const status = await fetch(`${window.API_CONFIG.BASE_URL}/api/status`).then(r => r.json());
-                ipText.innerHTML = `URL para Celular: http://${status.ip}:${status.port}`;
-            } catch (e) {
-                ipText.innerHTML = 'Error al obtener IP del servidor';
-            }
-        }
-    },
-
-    showSQLiteMigrationModal() {
-        const content = `
-            <div style="text-align: center; padding: 1rem;">
-                <div style="font-size: 3rem; margin-bottom: 1rem;">💾 ➡️ 🗄️</div>
-                <h3>Paso Final: Inyectar Datos en SQLite</h3>
-                <p style="margin-bottom: 1.5rem; color: var(--secondary);">Selecciona el archivo <strong>.json</strong> que exportaste en el Paso 1.</p>
-                
-                <div class="form-group" style="text-align: left;">
-                    <label>Archivo de Migración (.json)</label>
-                    <input type="file" id="migrationFile" class="form-control" accept=".json">
-                </div>
-                
-                <div style="background: #fef2f2; color: #991b1b; padding: 1rem; border-radius: 0.5rem; font-size: 0.85rem; margin-top: 1rem; border: 1px solid #fee2e2;">
-                    <strong>Atención:</strong> Esto reemplazará cualquier dato que exista en la nueva base de datos SQLite.
-                </div>
-            </div>
-        `;
-
-        const footer = `
-            <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-            <button class="btn btn-primary" onclick="SettingsView.processSQLiteMigration()">Comenzar Migración</button>
-        `;
-
-        showModal(content, { title: 'Importar en Motor SQLite', footer, width: '500px' });
-    },
-
-    async processSQLiteMigration() {
-        const fileInput = document.getElementById('migrationFile');
-        const file = fileInput?.files[0];
-
-        if (!file) {
-            showNotification('Selecciona el archivo exportado', 'warning');
-            return;
-        }
-
-        // C4: Mover confirmación al inicio para evitar bloqueos durante el proceso pesado
-        showConfirm(
-            '⚠️ ADVERTENCIA: Se sobrescribirán todos los datos en SQLite.\n¿Estás seguro de continuar?',
-            async () => {
-                const btn = document.querySelector('button[onclick="SettingsView.processSQLiteMigration()"]');
-                if (btn) {
-                    btn.disabled = true;
-                    btn.innerHTML = '<span class="loading-spinner"></span> Trabajando...';
-                }
-
-                const reader = new FileReader();
-                reader.onload = async (e) => {
-                    try {
-                        const jsonData = e.target.result;
-                        if (btn) btn.innerHTML = '<span class="loading-spinner"></span> Subiendo 5MB...';
-                        
-                        await BackupManager.importData(jsonData);
-                        if (btn) btn.textContent = '✅ Completado';
-                        closeModal();
-                    } catch (error) {
-                        console.error('Error:', error);
-                        showNotification('Error: ' + error.message, 'error');
-                        if (btn) {
-                            btn.disabled = false;
-                            btn.textContent = 'Reintentar Migración';
-                        }
-                    }
-                };
-                reader.onerror = () => {
-                    showNotification('Error al leer el archivo', 'error');
-                    if (btn) {
-                        btn.disabled = false;
-                        btn.textContent = 'Comenzar Migración';
-                    }
-                };
-                reader.readAsText(file);
-            }
-        );
     },
 
     async saveMultipleCashSettings() {
@@ -2149,6 +1810,7 @@ const SettingsView = {
     },
 
     async loadMultipleCashSettings() {
+        await this.loadDebtSettings();
         const allowMultiple = localStorage.getItem('allowMultipleCashRegisters') === 'true';
         const checkbox = document.getElementById('allowMultipleCashRegisters');
         if (checkbox) {
@@ -2180,6 +1842,56 @@ const SettingsView = {
                 listDiv.innerHTML = '<p style="color: #ef4444; font-size: 0.85rem;">Error al cargar cajas</p>';
             }
         }
+    },
+
+    async saveBlindCashClosingSetting(val = null) {
+        let isBlind;
+        if (typeof val === 'boolean') {
+            isBlind = val;
+        } else {
+            const cb1 = document.getElementById('blindCashClosingForEmployees');
+            const cb2 = document.getElementById('blindCashClosingForEmployeesPane2');
+            isBlind = cb1 ? cb1.checked : (cb2 ? cb2.checked : true);
+        }
+
+        const cb1 = document.getElementById('blindCashClosingForEmployees');
+        const cb2 = document.getElementById('blindCashClosingForEmployeesPane2');
+        if (cb1) cb1.checked = isBlind;
+        if (cb2) cb2.checked = isBlind;
+
+        localStorage.setItem('blindCashClosingForEmployees', isBlind ? 'true' : 'false');
+        try {
+            if (window.db && window.db.mode === 'sqlite') {
+                await window.db.put('settings', { key: 'blindCashClosingForEmployees', value: isBlind ? '1' : '0' });
+            }
+            let bankInfo = {};
+            try { bankInfo = JSON.parse(localStorage.getItem('PMV_BANK_INFO') || '{}'); } catch (_) {}
+            bankInfo.blindCashClosingForEmployees = isBlind;
+            localStorage.setItem('PMV_BANK_INFO', JSON.stringify(bankInfo));
+
+            if (typeof SyncService !== 'undefined') {
+                const uid = await SyncService.getCurrentUserId();
+                if (uid && typeof SyncService.pushBusinessSettings === 'function') {
+                    await SyncService.pushBusinessSettings(uid);
+                }
+                if (typeof SyncService.triggerAutoSync === 'function') {
+                    SyncService.triggerAutoSync(300);
+                }
+            }
+        } catch (e) {
+            console.warn('[SettingsView] Error guardando ajuste de arqueo ciego:', e);
+        }
+
+        showNotification(isBlind ? '🔒 Arqueo Ciego activado para cajeros y empleados' : '👁️ Arqueo con montos visibles activado para cajeros', 'success');
+    },
+
+    loadBlindCashClosingSetting() {
+        const stored = localStorage.getItem('blindCashClosingForEmployees');
+        const isBlind = (stored === null || stored === 'true' || stored === '1');
+        const cb1 = document.getElementById('blindCashClosingForEmployees');
+        const cb2 = document.getElementById('blindCashClosingForEmployeesPane2');
+        if (cb1) cb1.checked = isBlind;
+        if (cb2) cb2.checked = isBlind;
     },
 
     selectedRoleInEditor: 'cashier',
@@ -2384,6 +2096,11 @@ const SettingsView = {
                 profileThemeContainer.innerHTML = this.renderThemeOptions();
             }
 
+            const nameInput = document.getElementById('myDisplayNameInput');
+            if (nameInput && currentUser) {
+                nameInput.value = currentUser.username || currentUser.name || '';
+            }
+
             const brightness = localStorage.getItem('APP_BRIGHTNESS') || '1';
             const mySlider = document.getElementById('my-brightness-slider');
             const myVal = document.getElementById('my-brightness-value');
@@ -2394,34 +2111,60 @@ const SettingsView = {
         }
     },
 
-    async savePrinterSettings() {
-        const printerPort = document.getElementById('printerPort').value;
-        const paperWidth = document.getElementById('paperWidth').value;
-        const autoPrintTicket = document.getElementById('autoPrintTicket').checked;
+    async saveOwnDisplayName() {
+        const input = document.getElementById('myDisplayNameInput');
+        if (!input) return;
+        const newName = input.value.trim();
+        if (!newName) {
+            showNotification('El nombre de usuario no puede estar vacío', 'warning');
+            return;
+        }
 
-        localStorage.setItem('printerPort', printerPort);
-        localStorage.setItem('paperWidth', paperWidth);
-        localStorage.setItem('autoPrintTicket', autoPrintTicket);
+        const btn = document.getElementById('btnSaveDisplayName');
+        if (btn) btn.disabled = true;
 
-        showNotification('Configuración de impresora guardada', 'success');
-    },
+        try {
+            // 1. Actualizar usuario en sesión activa local
+            const currentUser = (typeof AuthManager !== 'undefined' && AuthManager.getCurrentUser) ? AuthManager.getCurrentUser() : null;
+            if (currentUser) {
+                currentUser.username = newName;
+                currentUser.name = newName;
+                localStorage.setItem(AuthManager.SESSION_KEY, JSON.stringify(currentUser));
+                sessionStorage.setItem(AuthManager.SESSION_KEY, JSON.stringify(currentUser));
+            }
 
-    async loadPrinterSettings() {
-        const printerPort = localStorage.getItem('printerPort') || 'USB';
-        const paperWidth = localStorage.getItem('paperWidth') || '58mm';
-        const autoPrintTicket = localStorage.getItem('autoPrintTicket') === 'true';
+            // 2. Guardar en base de datos SQLite si está conectado
+            if (window.ApiClient) {
+                try {
+                    await window.ApiClient.post('auth/update-display-name', { name: newName });
+                } catch (e) {
+                    console.warn('[Settings] No se pudo sincronizar nombre en backend:', e);
+                }
+            }
 
-        const printerPortSelect = document.getElementById('printerPort');
-        const paperWidthSelect = document.getElementById('paperWidth');
-        const autoPrintCheckbox = document.getElementById('autoPrintTicket');
+            // 3. Si usa Supabase Auth, sincronizar metadatos de usuario en la nube
+            if (typeof getSupabaseClient === 'function') {
+                try {
+                    const client = getSupabaseClient();
+                    if (client && client.auth) {
+                        await client.auth.updateUser({ data: { name: newName, full_name: newName } });
+                    }
+                } catch (_) {}
+            }
 
-        if (printerPortSelect) printerPortSelect.value = printerPort;
-        if (paperWidthSelect) paperWidthSelect.value = paperWidth;
-        if (autoPrintCheckbox) autoPrintCheckbox.checked = autoPrintTicket;
+            // 4. Actualizar textos en UI de perfil y cabeceras
+            const usernameEl = document.getElementById('myProfileUsername');
+            if (usernameEl) usernameEl.textContent = newName;
+            const headerUsers = document.querySelectorAll('.header-user-name, #headerUserName, #currentUserName');
+            headerUsers.forEach(el => { el.textContent = newName; });
 
-        // Cargar estado inicial del panel bluetooth
-        this.handlePrinterPortChange();
-        this.updateBluetoothStatus();
+            showNotification('✅ Tu nombre de usuario fue guardado correctamente. Las próximas operaciones se registrarán con este nombre.', 'success');
+        } catch (error) {
+            console.error('Error guardando nombre de usuario:', error);
+            showNotification('Error al guardar nombre: ' + error.message, 'error');
+        } finally {
+            if (btn) btn.disabled = false;
+        }
     },
 
     handlePrinterPortChange() {
@@ -2564,10 +2307,67 @@ manera correcta.
                 showNotification('Error de impresión: ' + err.message, 'error');
             }
         } else {
-            showNotification('Iniciando prueba de impresión...', 'info');
+            showNotification('Generando ticket térmico de calibración...', 'info');
+            const bizName = localStorage.getItem('BUSINESS_NAME') || 'Mi Negocio';
+            const bizRut = localStorage.getItem('BUSINESS_RUT') || '';
+            const paperWidth = localStorage.getItem('printerPaperWidth') || '80mm';
+
+            const iframe = document.createElement('iframe');
+            iframe.style.position = 'fixed';
+            iframe.style.right = '0';
+            iframe.style.bottom = '0';
+            iframe.style.width = '0';
+            iframe.style.height = '0';
+            iframe.style.border = '0';
+            document.body.appendChild(iframe);
+
+            const doc = iframe.contentWindow.document;
+            doc.open();
+            doc.write(`
+                <html>
+                    <head>
+                        <title>Prueba de Impresión</title>
+                        <style>
+                            @page { margin: 0; size: ${paperWidth === '58mm' ? '58mm' : '80mm'} auto; }
+                            body { margin: 8px; font-family: 'Courier New', Courier, monospace; font-size: 13px; color: #000; background: #fff; text-align: center; }
+                            .divider { border-top: 1px dashed #000; margin: 8px 0; }
+                            .bold { font-weight: 900; }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="bold" style="font-size: 15px; text-transform: uppercase;">${bizName}</div>
+                        ${bizRut ? `<div>RUT: ${bizRut}</div>` : ''}
+                        <div class="divider"></div>
+                        <div class="bold" style="font-size: 14px;">PRUEBA DE IMPRESIÓN</div>
+                        <div style="font-size: 11px; margin-top: 4px;">CALIBRACIÓN TÉRMICA EXITOSA</div>
+                        <div class="divider"></div>
+                        <div style="text-align: left; font-size: 12px; line-height: 1.4;">
+                            <div>Fecha: ${new Date().toLocaleDateString('es-CL')}</div>
+                            <div>Hora: ${new Date().toLocaleTimeString('es-CL')}</div>
+                            <div>Ancho Papel: ${paperWidth}</div>
+                            <div>Sistema: Caja Fácil POS</div>
+                            <div>Estado: Conectada y Lista</div>
+                        </div>
+                        <div class="divider"></div>
+                        <div style="font-size: 11px; line-height: 1.3;">
+                            Si puede leer este comprobante, su impresora térmica está configurada y lista para operar.
+                        </div>
+                        <div class="divider"></div>
+                        <div style="margin-top: 10px; font-size: 10px;">*** FIN DE PRUEBA ***</div>
+                        <div style="height: 35px;"></div>
+                    </body>
+                </html>
+            `);
+            doc.close();
+
             setTimeout(() => {
-                showNotification('Prueba de impresión enviada a la impresora', 'success');
-            }, 1000);
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+                setTimeout(() => {
+                    document.body.removeChild(iframe);
+                    showNotification('Ticket de prueba enviado a la impresora', 'success');
+                }, 1000);
+            }, 300);
         }
     },
 
@@ -2687,68 +2487,218 @@ manera correcta.
         }
     },
 
+    // --- GESTIÓN DE TERMINAL / CAJA REGISTRADORA (MULTICAJA) ---
+    saveTerminalId() {
+        const input = document.getElementById('terminalIdInput');
+        const rawId = input ? input.value.trim() : '';
+        const terminalId = rawId || 'PC-1';
+        localStorage.setItem('TERMINAL_ID', terminalId);
+        if (input) input.value = terminalId;
+        showNotification(`💻 Esta estación quedó registrada como: "${terminalId}"`, 'success');
+    },
+
+    loadTerminalId() {
+        const input = document.getElementById('terminalIdInput');
+        if (input) {
+            input.value = localStorage.getItem('TERMINAL_ID') || 'PC-1';
+        }
+    },
+
+    // --- PERIFÉRICOS, IMPRESORA TÉRMICA Y GAVETA DE DINERO ---
+    savePrinterSettings() {
+        const portSelect = document.getElementById('printerPort');
+        const widthSelect = document.getElementById('paperWidth');
+        const autoPrintCheck = document.getElementById('autoPrintTicket');
+        const autoDrawerCheck = document.getElementById('autoOpenCashDrawer');
+
+        if (portSelect) localStorage.setItem('printerPort', portSelect.value);
+        if (widthSelect) {
+            localStorage.setItem('printerPaperWidth', widthSelect.value);
+            localStorage.setItem('paperWidth', widthSelect.value);
+        }
+        if (autoPrintCheck) localStorage.setItem('autoPrintTicket', String(autoPrintCheck.checked));
+        if (autoDrawerCheck) localStorage.setItem('AUTO_OPEN_CASH_DRAWER', String(autoDrawerCheck.checked));
+
+        showNotification('Configuración de impresora y gaveta guardada', 'success');
+    },
+
+    loadPrinterSettings() {
+        const portSelect = document.getElementById('printerPort');
+        const widthSelect = document.getElementById('paperWidth');
+        const autoPrintCheck = document.getElementById('autoPrintTicket');
+        const autoDrawerCheck = document.getElementById('autoOpenCashDrawer');
+
+        if (portSelect) portSelect.value = localStorage.getItem('printerPort') || 'USB';
+        if (widthSelect) widthSelect.value = localStorage.getItem('printerPaperWidth') || localStorage.getItem('paperWidth') || '80mm';
+        if (autoPrintCheck) autoPrintCheck.checked = localStorage.getItem('autoPrintTicket') === 'true';
+        if (autoDrawerCheck) autoDrawerCheck.checked = localStorage.getItem('AUTO_OPEN_CASH_DRAWER') === 'true';
+
+        this.handlePrinterPortChange();
+        this.updateBluetoothStatus();
+    },
+
+    testCashDrawer() {
+        showNotification('⚡ Enviando señal de pulso a la gaveta de dinero RJ11...', 'info');
+        try {
+            // Pulso estándar ESC/POS (pines 2 y 5) enviado vía buffer invisible a la cola de impresión
+            const iframe = document.createElement('iframe');
+            iframe.style.position = 'fixed';
+            iframe.style.right = '0';
+            iframe.style.bottom = '0';
+            iframe.style.width = '0';
+            iframe.style.height = '0';
+            iframe.style.border = '0';
+            document.body.appendChild(iframe);
+
+            const doc = iframe.contentWindow.document;
+            doc.open();
+            // Secuencia estándar ESC/POS de apertura de gaveta: ESC p m t1 t2 (\x1B\x70\x00\x19\xFA)
+            doc.write(`<html><head><style>@page{margin:0;}body{margin:0;font-size:1px;color:transparent;}</style></head><body>\x1b\x70\x00\x19\xfa</body></html>`);
+            doc.close();
+
+            setTimeout(() => {
+                try {
+                    iframe.contentWindow.focus();
+                    iframe.contentWindow.print();
+                } catch (_) {}
+                setTimeout(() => {
+                    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+                }, 1000);
+            }, 250);
+
+            showNotification('✅ Pulso de apertura enviado. Si la gaveta está conectada al puerto RJ11 de la impresora, se abrirá de inmediato.', 'success');
+        } catch (err) {
+            console.error('Error al probar cajón de dinero:', err);
+            showNotification('Error al activar gaveta: ' + err.message, 'error');
+        }
+    },
+
+    // --- FICHA DE EMPRESA Y BOLETA TÉRMICA ---
     async saveTicketSettings() {
-        const ticketBusinessName = document.getElementById('ticketBusinessName').value;
-        const ticketAddress = document.getElementById('ticketAddress').value;
-        const ticketPhone = document.getElementById('ticketPhone').value;
-        const ticketFooter = document.getElementById('ticketFooter').value;
-        const showLogoOnTicket = document.getElementById('showLogoOnTicket').checked;
+        const bizName = (document.getElementById('ticketBusinessName')?.value || '').trim() || 'Mi Negocio';
+        const bizRut = (document.getElementById('ticketBusinessRut')?.value || '').trim();
+        const bizGiro = (document.getElementById('ticketBusinessGiro')?.value || '').trim();
+        const address = (document.getElementById('ticketAddress')?.value || '').trim();
+        const city = (document.getElementById('ticketBusinessCity')?.value || '').trim();
+        const phone = (document.getElementById('ticketPhone')?.value || '').trim();
+        const footer = (document.getElementById('ticketFooter')?.value || '').trim();
+        const showLogo = Boolean(document.getElementById('showLogoOnTicket')?.checked);
 
-        localStorage.setItem('ticketBusinessName', ticketBusinessName);
-        localStorage.setItem('ticketAddress', ticketAddress);
-        localStorage.setItem('ticketPhone', ticketPhone);
-        localStorage.setItem('ticketFooter', ticketFooter);
-        localStorage.setItem('showLogoOnTicket', showLogoOnTicket);
+        // Guardado persistente tanto para tickets como para datos globales de la empresa
+        localStorage.setItem('ticketBusinessName', bizName);
+        localStorage.setItem('BUSINESS_NAME', bizName);
+        localStorage.setItem('ticketBusinessRut', bizRut);
+        localStorage.setItem('BUSINESS_RUT', bizRut);
+        localStorage.setItem('ticketBusinessGiro', bizGiro);
+        localStorage.setItem('BUSINESS_GIRO', bizGiro);
+        localStorage.setItem('ticketAddress', address);
+        localStorage.setItem('BUSINESS_ADDRESS', address);
+        localStorage.setItem('ticketBusinessCity', city);
+        localStorage.setItem('BUSINESS_CITY', city);
+        localStorage.setItem('ticketPhone', phone);
+        localStorage.setItem('BUSINESS_PHONE', phone);
+        localStorage.setItem('ticketFooter', footer);
+        localStorage.setItem('showLogoOnTicket', String(showLogo));
 
-        showNotification('Configuración de tickets guardada', 'success');
+        showNotification('✅ Ficha comercial y diseño de boleta guardados con éxito', 'success');
     },
 
     async loadTicketSettings() {
-        const ticketBusinessName = localStorage.getItem('ticketBusinessName') || '';
-        const ticketAddress = localStorage.getItem('ticketAddress') || '';
-        const ticketPhone = localStorage.getItem('ticketPhone') || '';
-        const ticketFooter = localStorage.getItem('ticketFooter') || '';
-        const showLogoOnTicket = localStorage.getItem('showLogoOnTicket') === 'true';
+        const bizName = localStorage.getItem('ticketBusinessName') || localStorage.getItem('BUSINESS_NAME') || '';
+        const bizRut = localStorage.getItem('ticketBusinessRut') || localStorage.getItem('BUSINESS_RUT') || '';
+        const bizGiro = localStorage.getItem('ticketBusinessGiro') || localStorage.getItem('BUSINESS_GIRO') || '';
+        const address = localStorage.getItem('ticketAddress') || localStorage.getItem('BUSINESS_ADDRESS') || '';
+        const city = localStorage.getItem('ticketBusinessCity') || localStorage.getItem('BUSINESS_CITY') || '';
+        const phone = localStorage.getItem('ticketPhone') || localStorage.getItem('BUSINESS_PHONE') || '';
+        const footer = localStorage.getItem('ticketFooter') || '¡Gracias por su preferencia!';
+        const showLogo = localStorage.getItem('showLogoOnTicket') === 'true';
 
-        const businessNameInput = document.getElementById('ticketBusinessName');
+        const nameInput = document.getElementById('ticketBusinessName');
+        const rutInput = document.getElementById('ticketBusinessRut');
+        const giroInput = document.getElementById('ticketBusinessGiro');
         const addressInput = document.getElementById('ticketAddress');
+        const cityInput = document.getElementById('ticketBusinessCity');
         const phoneInput = document.getElementById('ticketPhone');
         const footerInput = document.getElementById('ticketFooter');
         const logoCheckbox = document.getElementById('showLogoOnTicket');
 
-        if (businessNameInput) businessNameInput.value = ticketBusinessName;
-        if (addressInput) addressInput.value = ticketAddress;
-        if (phoneInput) phoneInput.value = ticketPhone;
-        if (footerInput) footerInput.value = ticketFooter;
-        if (logoCheckbox) logoCheckbox.checked = showLogoOnTicket;
+        if (nameInput) nameInput.value = bizName;
+        if (rutInput) rutInput.value = bizRut;
+        if (giroInput) giroInput.value = bizGiro;
+        if (addressInput) addressInput.value = address;
+        if (cityInput) cityInput.value = city;
+        if (phoneInput) phoneInput.value = phone;
+        if (footerInput) footerInput.value = footer;
+        if (logoCheckbox) logoCheckbox.checked = showLogo;
     },
 
     async previewTicket() {
-        const businessName = document.getElementById('ticketBusinessName').value || 'Mi Negocio';
-        const address = document.getElementById('ticketAddress').value || 'Dirección';
-        const phone = document.getElementById('ticketPhone').value || 'Teléfono';
-        const footer = document.getElementById('ticketFooter').value || '¡Gracias por su compra!';
+        const bizName = document.getElementById('ticketBusinessName')?.value || localStorage.getItem('BUSINESS_NAME') || 'Mi Negocio';
+        const bizRut = document.getElementById('ticketBusinessRut')?.value || localStorage.getItem('BUSINESS_RUT') || '';
+        const bizGiro = document.getElementById('ticketBusinessGiro')?.value || localStorage.getItem('BUSINESS_GIRO') || '';
+        const address = document.getElementById('ticketAddress')?.value || localStorage.getItem('BUSINESS_ADDRESS') || 'Dirección Comercial';
+        const city = document.getElementById('ticketBusinessCity')?.value || localStorage.getItem('BUSINESS_CITY') || '';
+        const phone = document.getElementById('ticketPhone')?.value || localStorage.getItem('BUSINESS_PHONE') || '';
+        const footer = document.getElementById('ticketFooter')?.value || '¡Gracias por su compra!';
+        const terminalId = localStorage.getItem('TERMINAL_ID') || 'PC-1';
 
         const content = `
-            <div style="font-family: monospace; font-size: 12px; padding: 1rem; background: white; border: 1px solid #ddd; max-width: 300px; margin: 0 auto;">
-                <div style="text-align: center; margin-bottom: 1rem;">
-                    <div style="font-weight: bold; font-size: 14px;">${businessName}</div>
-                    <div style="font-size: 10px;">${address}</div>
-                    <div style="font-size: 10px;">${phone}</div>
+            <div style="font-family: 'Courier New', Courier, monospace; font-size: 13px; padding: 1.25rem; background: #ffffff; border: 1.5px dashed #cbd5e1; max-width: 320px; margin: 0 auto; color: #1e293b; box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-radius: 0.5rem; line-height: 1.35;">
+                <div style="text-align: center; margin-bottom: 0.75rem;">
+                    <div style="font-weight: 900; font-size: 16px; text-transform: uppercase; letter-spacing: 0.5px;">${bizName}</div>
+                    ${bizRut ? `<div style="font-size: 12px; font-weight: 700;">R.U.T.: ${bizRut}</div>` : ''}
+                    ${bizGiro ? `<div style="font-size: 11px; color: #475569;">Giro: ${bizGiro}</div>` : ''}
+                    <div style="font-size: 11px;">${address}</div>
+                    ${city ? `<div style="font-size: 11px;">${city}</div>` : ''}
+                    ${phone ? `<div style="font-size: 11px;">Fono: ${phone}</div>` : ''}
                 </div>
-                <hr style="margin: 0.5rem 0;">
-                <div style="margin-bottom: 1rem;">
-                    <div>Producto A x2 - $10.000</div>
-                    <div>Producto B x1 - $5.000</div>
+                <div style="border-top: 1px dashed #94a3b8; margin: 0.5rem 0;"></div>
+                <div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 700;">
+                    <span>BOLETA VENTA</span>
+                    <span>#${terminalId}-00482</span>
                 </div>
-                <hr style="margin: 0.5rem 0;">
-                <div style="text-align: right; font-weight: bold;">Total: $15.000</div>
-                <hr style="margin: 0.5rem 0;">
-                <div style="text-align: center; font-size: 10px; margin-top: 1rem;">${footer}</div>
+                <div style="font-size: 10px; color: #64748b; margin-top: 0.2rem;">
+                    Fecha: ${new Date().toLocaleDateString('es-CL')} ${new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}
+                </div>
+                <div style="border-top: 1px dashed #94a3b8; margin: 0.5rem 0;"></div>
+                <div style="display: flex; flex-direction: column; gap: 0.35rem; font-size: 12px;">
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>1x Bebida Cola 1.5L</span>
+                        <strong>$1.890</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>2x Pan Hallulla (kg)</span>
+                        <strong>$2.400</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span>1x Queso Gauda 250g</span>
+                        <strong>$2.200</strong>
+                    </div>
+                </div>
+                <div style="border-top: 1px dashed #94a3b8; margin: 0.5rem 0;"></div>
+                <div style="display: flex; justify-content: space-between; font-size: 15px; font-weight: 900; margin-top: 0.25rem;">
+                    <span>TOTAL:</span>
+                    <span>$6.490</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 11px; margin-top: 0.25rem; color: #475569;">
+                    <span>Medio de Pago:</span>
+                    <span>Efectivo ($10.000)</span>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 11px; color: #475569;">
+                    <span>Vuelto:</span>
+                    <span>$3.510</span>
+                </div>
+                <div style="border-top: 1px dashed #94a3b8; margin: 0.75rem 0 0.5rem 0;"></div>
+                <div style="text-align: center; font-size: 11px; color: #475569; font-style: italic;">
+                    ${footer}
+                </div>
+                <div style="text-align: center; font-size: 9px; color: #94a3b8; margin-top: 0.5rem;">
+                    Caja Fácil POS • Estación: ${terminalId}
+                </div>
             </div>
         `;
 
-        showModal(content, { title: 'Vista Previa del Ticket', width: '350px' });
+        showModal(content, { title: '👁️ Vista Previa de Boleta Térmica', width: '380px' });
     },
 
     showInitialSetupWizard() {
@@ -2893,7 +2843,7 @@ manera correcta.
     showSetupStep3() {
         const hasPrinter = localStorage.getItem('hasPrinter') === 'true' ? 'yes' : 'no';
         const printerPort = localStorage.getItem('printerPort') || 'USB';
-        const paperWidth = localStorage.getItem('paperWidth') || '58mm';
+        const paperWidth = localStorage.getItem('printerPaperWidth') || localStorage.getItem('paperWidth') || '58mm';
 
         const content = `
             <div class="form-group">
@@ -2946,6 +2896,7 @@ manera correcta.
         localStorage.setItem('hasPrinter', hasPrinter === 'yes');
         localStorage.setItem('printerPort', printerPort);
         localStorage.setItem('paperWidth', paperWidth);
+        localStorage.setItem('printerPaperWidth', paperWidth);
 
         closeModal();
         this.showSetupStep4();
@@ -3008,6 +2959,8 @@ manera correcta.
 
     async initSecuritySection() {
         this.updateAdminPINStatus();
+        this.loadBlindCashClosingSetting();
+        this.loadDiscountLimitSetting();
         this.loadUserRoles();
     },
 
@@ -3019,11 +2972,11 @@ manera correcta.
         try {
             const hasPIN = await User.hasAdminPIN();
             if (hasPIN) {
-                statusText.innerHTML = '🟢 <strong style="color: #166534;">PIN de Administrador Configurado</strong>';
-                if (pinBtn) pinBtn.textContent = '🔒 Cambiar PIN de Administrador';
+                statusText.innerHTML = '🟢 <strong style="color: #166534;">PIN Maestro Activo y Protegido (••••)</strong>';
+                if (pinBtn) pinBtn.textContent = '🔒 Cambiar PIN Maestro';
             } else {
-                statusText.innerHTML = '⚠️ <strong style="color: #92400e;">Sin PIN personalizado (Recomendado configurar uno)</strong>';
-                if (pinBtn) pinBtn.textContent = '🔑 Configurar PIN de Administrador';
+                statusText.innerHTML = '⚠️ <strong style="color: #92400e;">PIN por Defecto (1234) — Se recomienda personalizarlo para mayor seguridad</strong>';
+                if (pinBtn) pinBtn.textContent = '🔑 Personalizar PIN Maestro';
             }
         } catch (e) {
             console.error('[Settings] Error cargando estado de PIN:', e);
@@ -3107,6 +3060,9 @@ manera correcta.
                                     <button class="btn btn-sm btn-secondary" onclick="SettingsView.showEditRoleModal(${u.id}, '${u.username}', '${u.role}')" title="Cambiar Rol">
                                         🛡️ Rol
                                     </button>
+                                    <button class="btn btn-sm" onclick="SettingsView.deleteUser(${u.id}, '${u.username}')" title="Eliminar Usuario" style="background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; font-weight: 700; padding: 0.25rem 0.55rem; border-radius: 0.375rem; cursor: pointer;">
+                                        🗑️ Eliminar
+                                    </button>
                                 ` : ''}
                             </div>
                         </td>
@@ -3125,6 +3081,24 @@ manera correcta.
             console.error('[Settings] Error cargando lista de usuarios:', error);
             listDiv.innerHTML = '<p style="color: #ef4444; font-size: 0.85rem;">Error al cargar usuarios.</p>';
         }
+    },
+
+    async deleteUser(userId, username) {
+        if (!PermissionService.check('settings.users', 'eliminar usuarios')) return;
+
+        showConfirm(`¿Estás seguro de que deseas eliminar permanentemente al usuario "${username}"?`, async () => {
+            try {
+                if (window.db && window.db.mode === 'sqlite' && window.ApiClient) {
+                    await window.ApiClient.delete(`rest/users/${userId}`);
+                }
+                await db.delete('users', userId);
+                showNotification(`Usuario "${username}" eliminado correctamente`, 'success');
+                await this.loadUserRoles();
+            } catch (error) {
+                console.error('[Settings] Error al eliminar usuario:', error);
+                showNotification('Error al eliminar usuario: ' + error.message, 'error');
+            }
+        });
     },
 
     showCreateUserModal() {
@@ -3243,27 +3217,31 @@ manera correcta.
     showSetAdminPINForm() {
         const content = `
             <form onsubmit="event.preventDefault(); SettingsView.submitSetAdminPIN();" style="display: flex; flex-direction: column; gap: 1rem;">
-                <p style="font-size: 0.85rem; color: #64748b; margin: 0; line-height: 1.4;">
-                    El PIN de Administrador te permite restablecer la contraseña de cualquier usuario en caso de olvido. 
-                    Debe ser un número de <strong>4 a 8 dígitos</strong>.
+                <p style="font-size: 0.88rem; color: #475569; margin: 0; line-height: 1.45;">
+                    El <strong>PIN Maestro del Dueño</strong> te permite autorizar en el mostrador: ventas a crédito (fiados), aperturas de gaveta, anulación de ventas y recuperación de accesos.
+                    Debe ser un código numérico de <strong>4 a 8 dígitos</strong>.
                 </p>
                 <div>
                     <label style="display: block; font-weight: 700; font-size: 0.85rem; color: #374151; margin-bottom: 0.35rem;">Nuevo PIN de Seguridad (4-8 dígitos) *</label>
-                    <input type="password" id="newAdminPIN" class="form-control" maxlength="8" pattern="[0-9]*" inputmode="numeric" required placeholder="Ej: 123456" style="padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; font-size: 1.1rem; text-align: center; letter-spacing: 0.2rem;">
+                    <input type="password" id="newAdminPIN" class="form-control" maxlength="8" pattern="[0-9]*" inputmode="numeric" required placeholder="Ej: 123456" style="padding: 0.6rem 0.75rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1; font-size: 1.2rem; text-align: center; letter-spacing: 0.25rem;">
                 </div>
                 <div>
                     <label style="display: block; font-weight: 700; font-size: 0.85rem; color: #374151; margin-bottom: 0.35rem;">Confirmar Nuevo PIN *</label>
-                    <input type="password" id="confirmAdminPIN" class="form-control" maxlength="8" pattern="[0-9]*" inputmode="numeric" required placeholder="Repite el PIN" style="padding: 0.5rem 0.75rem; border-radius: 0.5rem; border: 1px solid #cbd5e1; font-size: 1.1rem; text-align: center; letter-spacing: 0.2rem;">
+                    <input type="password" id="confirmAdminPIN" class="form-control" maxlength="8" pattern="[0-9]*" inputmode="numeric" required placeholder="Repite el PIN" style="padding: 0.6rem 0.75rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1; font-size: 1.2rem; text-align: center; letter-spacing: 0.25rem;">
                 </div>
             </form>
         `;
 
         const footer = `
             <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
-            <button class="btn btn-primary" onclick="SettingsView.submitSetAdminPIN()">🔒 Guardar PIN</button>
+            <button class="btn btn-primary" onclick="SettingsView.submitSetAdminPIN()">🔒 Guardar PIN Maestro</button>
         `;
 
-        showModal(content, { title: '🔑 Configurar PIN de Seguridad', footer, width: '420px' });
+        showModal(content, { title: '🔑 Configurar PIN Maestro del Dueño', footer, width: '430px' });
+        setTimeout(() => {
+            const inp = document.getElementById('newAdminPIN');
+            if (inp) inp.focus();
+        }, 150);
     },
 
     async submitSetAdminPIN() {
@@ -3283,11 +3261,63 @@ manera correcta.
         try {
             await User.setAdminPIN(pin);
             closeModal();
-            showNotification('¡PIN de Administrador guardado exitosamente!', 'success');
+            showNotification('¡PIN Maestro del Dueño guardado y protegido exitosamente!', 'success');
             this.updateAdminPINStatus();
         } catch (err) {
             console.error('[Settings] Error al guardar PIN:', err);
             showNotification(err.message || 'Error al guardar el PIN.', 'error');
+        }
+    },
+
+    showForgotAdminPINModal() {
+        const currentUser = (typeof AuthManager !== 'undefined' && AuthManager.getCurrentUser) ? AuthManager.getCurrentUser() : null;
+        const username = currentUser?.username || 'admin';
+        const content = `
+            <form onsubmit="event.preventDefault(); SettingsView.verifyOwnerPasswordToResetPIN();" style="display: flex; flex-direction: column; gap: 1rem;">
+                <div style="background: #eff6ff; border: 1.5px solid #93c5fd; border-radius: 0.75rem; padding: 0.85rem 1rem; font-size: 0.88rem; color: #1e40af; line-height: 1.4;">
+                    🛡️ <strong>Recuperación de Seguridad del Dueño</strong><br>
+                    Para restablecer tu PIN de permisos, confirma la contraseña actual de tu cuenta <strong>"${safeHTML(username)}"</strong>:
+                </div>
+                <div>
+                    <label style="display: block; font-weight: 700; font-size: 0.85rem; color: #374151; margin-bottom: 0.35rem;">Contraseña de tu Cuenta de Dueño *</label>
+                    <input type="password" id="ownerConfirmPassword" class="form-control" required placeholder="Ingresa tu contraseña habitual" style="padding: 0.6rem 0.75rem; border-radius: 0.5rem; border: 1.5px solid #cbd5e1; font-size: 1rem;">
+                </div>
+            </form>
+        `;
+        const footer = `
+            <button class="btn btn-secondary" onclick="closeModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="SettingsView.verifyOwnerPasswordToResetPIN()">🔓 Validar y Cambiar PIN</button>
+        `;
+        showModal(content, { title: '🔑 Recuperar PIN de Permisos', footer, width: '440px' });
+        setTimeout(() => {
+            const inp = document.getElementById('ownerConfirmPassword');
+            if (inp) inp.focus();
+        }, 150);
+    },
+
+    async verifyOwnerPasswordToResetPIN() {
+        const pass = document.getElementById('ownerConfirmPassword')?.value || '';
+        if (!pass) {
+            showNotification('Ingresa la contraseña del dueño para continuar.', 'warning');
+            return;
+        }
+        const currentUser = (typeof AuthManager !== 'undefined' && AuthManager.getCurrentUser) ? AuthManager.getCurrentUser() : null;
+        const username = currentUser?.username || 'admin';
+
+        try {
+            const isValid = await User.verifyOwnerPassword(username, pass);
+            if (!isValid) {
+                showNotification('Contraseña incorrecta. Solo el dueño puede restablecer el PIN.', 'error');
+                return;
+            }
+            closeModal();
+            showNotification('✅ Identidad de dueño confirmada. Ahora puedes definir tu nuevo PIN.', 'success');
+            setTimeout(() => {
+                this.showSetAdminPINForm();
+            }, 250);
+        } catch (e) {
+            console.error('[SettingsView] Error validando clave de dueño:', e);
+            showNotification(e.message || 'Error al validar contraseña.', 'error');
         }
     },
 

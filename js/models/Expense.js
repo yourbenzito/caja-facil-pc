@@ -102,12 +102,22 @@ class Expense {
      */
     static async getByDateRange(startDate, endDate) {
         const all = await this.getAll();
+        const toDateStr = (val) => {
+            if (!val) return '';
+            if (val instanceof Date) {
+                const y = val.getFullYear();
+                const m = String(val.getMonth() + 1).padStart(2, '0');
+                const d = String(val.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            }
+            return String(val).slice(0, 10);
+        };
+        const startStr = toDateStr(startDate);
+        const endStr = toDateStr(endDate);
         return all.filter(e => {
             const d = e.date;
             if (!d) return false;
-            const dateStr = d.slice(0, 10);
-            const startStr = startDate.slice(0, 10);
-            const endStr = endDate.slice(0, 10);
+            const dateStr = toDateStr(d);
             return dateStr >= startStr && dateStr <= endStr;
         });
     }

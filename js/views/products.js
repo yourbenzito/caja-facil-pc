@@ -22,7 +22,12 @@ const ProductsView = {
 
     async render() {
         let contentHtml = '';
-        
+        this.categoriesList = (typeof Category !== 'undefined' && typeof Category.getAll === 'function')
+            ? await Category.getAll()
+            : [];
+        const stats = await Product.getCategoryStats();
+        this.categoryStats = stats;
+
         if (this.selectedCategory) {
             const products = await Product.getByCategory(this.selectedCategory);
             let filteredProducts = products;
@@ -35,10 +40,6 @@ const ProductsView = {
             }
             contentHtml = this.renderProductsTable(filteredProducts);
         } else {
-            this.categoriesList = (typeof Category !== 'undefined' && typeof Category.getAll === 'function')
-                ? await Category.getAll()
-                : [];
-            const stats = await Product.getCategoryStats();
             contentHtml = this.renderCategoriesGrid(stats);
         }
 
@@ -230,21 +231,34 @@ const ProductsView = {
         const categories = (this.categoriesList || []).map(c => c.name || c).filter(Boolean);
         if (!categories.length) return '';
 
+        const statsMap = {};
+        let totalAll = 0;
+        if (Array.isArray(this.categoryStats)) {
+            this.categoryStats.forEach(s => {
+                const count = s.total || 0;
+                totalAll += count;
+                statsMap[(s.category || 'General').toLowerCase()] = count;
+            });
+        }
+
         return `
             <div class="category-chips-bar" id="categoryChipsBar" title="Usa la rueda del mouse para deslizar las categorías horizontalmente">
                 <div class="category-chip-pill ${!this.selectedCategory ? 'active' : ''}" 
                      onclick="ProductsView.clearCategoryFilter()">
                     <span>⭐</span>
-                    <span>Todas las Categorías</span>
+                    <span>Todas</span>
+                    <span style="font-size: 0.72rem; font-weight: 850; background: ${!this.selectedCategory ? 'rgba(255,255,255,0.25)' : '#e2e8f0'}; color: ${!this.selectedCategory ? '#fff' : '#475569'}; padding: 0.1rem 0.45rem; border-radius: 999px; margin-left: 0.25rem;">${totalAll}</span>
                 </div>
                 ${categories.map(cat => {
                     const isActive = (this.selectedCategory || '').toLowerCase() === (cat || '').toLowerCase();
                     const icon = this.getCategoryIcon(cat);
+                    const count = statsMap[(cat || '').toLowerCase()] || 0;
                     return `
                         <div class="category-chip-pill ${isActive ? 'active' : ''}" 
                              onclick="ProductsView.filterByCategory('${safeHTML(cat)}')">
                             <span>${icon}</span>
                             <span>${safeHTML(cat)}</span>
+                            <span style="font-size: 0.72rem; font-weight: 850; background: ${isActive ? 'rgba(255,255,255,0.25)' : '#e2e8f0'}; color: ${isActive ? '#fff' : '#475569'}; padding: 0.1rem 0.45rem; border-radius: 999px; margin-left: 0.25rem;">${count}</span>
                         </div>
                     `;
                 }).join('')}
@@ -425,7 +439,7 @@ const ProductsView = {
         }
 
         return `
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.4rem; padding: 0.5rem 0 2rem 0;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 1rem; padding: 0.5rem 0 2rem 0;">
                 ${categories.map(cat => {
                     const s = stats[cat] || { total: 0, low: 0, out: 0, negative: 0 };
                     const catObj = (this.categoriesList || []).find(c => (typeof CategoryHelper !== 'undefined') ? CategoryHelper.areEqual(c.name, cat) : (c.name || '').toLowerCase() === cat.toLowerCase());
@@ -445,22 +459,22 @@ const ProductsView = {
 
                     return `
                         <div class="cat-card-pro" 
-                             style="border-top: 5px solid ${catColor}; --cat-glow: ${catColor}35;"
+                             style="border-top: 4px solid ${catColor}; --cat-glow: ${catColor}35; padding: 1.15rem 1rem 0.85rem;"
                              onclick="${mainOnClick}"
                              title="Clic para explorar los productos de ${safeHTML(cat)}">
                             
                             <!-- Icono Central con Badge Circular y Sombra Sutil -->
-                            <div class="cat-icon-container" style="background: ${catColor}15; border: 2px solid ${catColor}30; box-shadow: 0 4px 12px ${catColor}20;">
+                            <div class="cat-icon-container" style="background: ${catColor}15; border: 2px solid ${catColor}30; width: 58px; height: 58px; font-size: 2rem; margin: 0 auto 0.5rem; box-shadow: 0 4px 10px ${catColor}20;">
                                 ${icon}
                             </div>
 
                             <!-- Título de la Categoría -->
-                            <h3 style="margin: 0 0 0.35rem 0; font-size: 1.22rem; font-weight: 900; color: #0f172a; text-align: center; text-transform: uppercase; letter-spacing: 0.4px;">
+                            <h3 style="margin: 0 0 0.3rem 0; font-size: 1.08rem; font-weight: 900; color: #0f172a; text-align: center; text-transform: uppercase; letter-spacing: 0.3px;">
                                 ${safeHTML(cat)}
                             </h3>
 
                             <!-- Total Productos y Porcentaje de Salud de Inventario -->
-                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.82rem; font-weight: 800; color: #64748b; margin-bottom: 0.45rem; padding: 0 0.2rem;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; font-weight: 800; color: #64748b; margin-bottom: 0.35rem; padding: 0 0.2rem;">
                                 <span>${total} Productos</span>
                                 <span style="color: ${healthPct >= 90 ? '#10b981' : (healthPct >= 70 ? '#f59e0b' : '#ef4444')}; font-weight: 900;">
                                     ${healthPct}% En Stock
@@ -468,7 +482,7 @@ const ProductsView = {
                             </div>
 
                             <!-- Barra Visual Segmentada de Salud de Stock -->
-                            <div style="height: 6px; background: #e2e8f0; border-radius: 9999px; overflow: hidden; margin-bottom: 1rem; display: flex;" title="Verde: Disponible (${healthy}) | Naranja: Bajo Stock (${low}) | Rojo: Agotado (${out})">
+                            <div style="height: 5px; background: #e2e8f0; border-radius: 9999px; overflow: hidden; margin-bottom: 0.75rem; display: flex;" title="Verde: Disponible (${healthy}) | Naranja: Bajo Stock (${low}) | Rojo: Agotado (${out})">
                                 <div style="width: ${total > 0 ? (healthy/total)*100 : 100}%; background: #10b981; transition: width 0.4s ease;"></div>
                                 <div style="width: ${total > 0 ? (low/total)*100 : 0}%; background: #f59e0b; transition: width 0.4s ease;"></div>
                                 <div style="width: ${total > 0 ? (out/total)*100 : 0}%; background: #ef4444; transition: width 0.4s ease;"></div>
@@ -600,6 +614,17 @@ const ProductsView = {
                 return;
             }
 
+            // Confirmación de seguridad para evitar ajustes accidentales en pantallas táctiles
+            const unitLabel = product.type === 'weight' ? 'kg' : 'u.';
+            const actionText = delta > 0 ? `sumar +${qtyChange} ${unitLabel}` : `restar -${qtyChange} ${unitLabel}`;
+            const confirmed = await showConfirm(
+                `¿Deseas ${actionText} al stock de <strong>${safeHTML(product.name)}</strong>?`,
+                'Ajuste Rápido de Stock',
+                'Sí, Ajustar',
+                'Cancelar'
+            );
+            if (!confirmed) return;
+
             await Product.updateStock(productId, qtyChange, op);
 
             const newStock = op === 'add' ? currentStock + qtyChange : currentStock - qtyChange;
@@ -708,10 +733,17 @@ const ProductsView = {
                             <div id="sup-label-${p.id}" style="display: flex; align-items: center; gap: 0.5rem; color: #6b7280; font-size: 0.82rem; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                 <span>🚚</span> ${safeHTML(sup)}
                             </div>
-                            <div style="display: flex; gap: 0.5rem;">
+                            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: flex-end;">
                                 <button class="btn btn-icon" style="width: 36px; height: 36px; padding: 0; background: #eff6ff; color: #3b82f6; border: 1.5px solid #bfdbfe; border-radius: 0.65rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.background='#dbeafe'" onmouseout="this.style.background='#eff6ff'" onclick="ProductsView.showProductHistory(${p.id})" title="Ver Historial">
                                     📊
                                 </button>
+                                <button class="btn btn-icon" style="width: 36px; height: 36px; padding: 0; background: #f5f3ff; color: #7c3aed; border: 1.5px solid #ddd6fe; border-radius: 0.65rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.background='#ede9fe'" onmouseout="this.style.background='#f5f3ff'" onclick="ProductsView.printBarcodeLabel(${p.id})" title="Imprimir Etiqueta Góndola / Precio">
+                                    🏷️
+                                </button>
+                                ${PermissionService.can('products.create') ? `
+                                <button class="btn btn-icon" style="width: 36px; height: 36px; padding: 0; background: #f0fdfa; color: #0d9488; border: 1.5px solid #99f6e4; border-radius: 0.65rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.background='#ccfbf1'" onmouseout="this.style.background='#f0fdfa'" onclick="ProductsView.duplicateProduct(${p.id})" title="Duplicar Producto">
+                                    🔄
+                                </button>` : ''}
                                 ${(PermissionService.can('products.edit') || PermissionService.can('products.edit_price')) ? `
                                 <button class="btn btn-icon" style="width: 36px; height: 36px; padding: 0; background: #f0fdf4; color: #16a34a; border: 1.5px solid #bbf7d0; border-radius: 0.65rem; display: flex; align-items: center; justify-content: center; transition: all 0.2s;" onmouseover="this.style.background='#dcfce7'" onmouseout="this.style.background='#f0fdf4'" onclick="ProductsView.showProductForm(${p.id})" title="Editar">
                                     ✏️
@@ -792,8 +824,13 @@ const ProductsView = {
         window.scrollTo(0, lastScrollY);
     },
 
-    async showProductForm(id = null) {
-        const product = id ? await Product.getById(id) : null;
+    async showProductForm(id = null, cloneData = null) {
+        let product = null;
+        if (id) {
+            product = await Product.getById(id);
+        } else if (cloneData) {
+            product = cloneData;
+        }
         const categories = (typeof Category !== 'undefined') ? await Category.getUniqueNames() : [];
         if (!categories.includes('General')) categories.unshift('General');
 
@@ -978,7 +1015,8 @@ const ProductsView = {
     `;
         const footer = `<button class="btn btn-secondary" onclick="closeModal()" style="font-weight: 700;">Cancelar</button> <button class="btn btn-primary" onclick="ProductsView.saveProduct(${id})" style="font-weight: 800;">[F2] Guardar Producto</button>`;
         window._focusSearchAfterClose = () => ProductsView.focusSearch();
-        showModal(content, { title: id ? 'Editar Producto' : 'Nuevo Producto', footer, width: '920px' });
+        const modalTitle = id ? 'Editar Producto' : (cloneData ? 'Duplicar Producto' : 'Nuevo Producto');
+        showModal(content, { title: modalTitle, footer, width: '920px' });
 
         // Setup form interactions
         setTimeout(() => {
@@ -1181,6 +1219,284 @@ const ProductsView = {
         }
     },
 
+    async duplicateProduct(id) {
+        try {
+            const prod = await Product.getById(id);
+            if (!prod) return;
+            const clone = {
+                ...prod,
+                id: null,
+                barcode: '',
+                name: `${prod.name} (Copia)`,
+                stock: 0
+            };
+            await this.showProductForm(null, clone);
+        } catch (e) {
+            console.error('Error al duplicar producto:', e);
+            showNotification('Error al duplicar el producto', 'error');
+        }
+    },
+
+    async printBarcodeLabel(id) {
+        try {
+            const product = await Product.getById(id);
+            if (!product) return;
+
+            const bizName = localStorage.getItem('BUSINESS_NAME') || 'Mi Negocio';
+            const barcodeVal = (product.barcode || String(product.id || '')).trim();
+
+            // ponytail: generador SVG nativo Code39 para etiquetas sin dependencias externas
+            const CODE39 = {
+                '0': '000110100', '1': '100100001', '2': '001100001', '3': '101100000',
+                '4': '000110001', '5': '100110000', '6': '001110000', '7': '000100101',
+                '8': '100100100', '9': '001100100', 'A': '100001001', 'B': '001001001',
+                'C': '101001000', 'D': '000011001', 'E': '100011000', 'F': '001011000',
+                'G': '000001101', 'H': '100001100', 'I': '001001100', 'J': '000011100',
+                'K': '100000011', 'L': '001000011', 'M': '101000010', 'N': '000010011',
+                'O': '100010010', 'P': '001010010', 'Q': '000000111', 'R': '100000110',
+                'S': '001000110', 'T': '000010110', 'U': '110000001', 'V': '011000001',
+                'W': '111000000', 'X': '010010001', 'Y': '110010000', 'Z': '011010000',
+                '-': '010000101', '.': '110000100', ' ': '011000100', '$': '010101000',
+                '/': '010100010', '+': '010001010', '%': '000101010', '*': '010010100'
+            };
+
+            const buildSvg = (text, height = 46) => {
+                const clean = String(text || '').toUpperCase().replace(/[^0-9A-Z\-\.\ \$\/\+\%]/g, '') || '00000';
+                const str = '*' + clean + '*';
+                let x = 6;
+                const narrow = 2;
+                const wide = 5;
+                const rects = [];
+                for (let i = 0; i < str.length; i++) {
+                    const pat = CODE39[str[i]] || CODE39['0'];
+                    for (let b = 0; b < 9; b++) {
+                        const isBar = (b % 2 === 0);
+                        const w = pat[b] === '1' ? wide : narrow;
+                        if (isBar) rects.push(`<rect x="${x}" y="0" width="${w}" height="${height}" fill="#000000"/>`);
+                        x += w;
+                    }
+                    x += narrow;
+                }
+                const totalWidth = x + 6;
+                return `<svg viewBox="0 0 ${totalWidth} ${height}" xmlns="http://www.w3.org/2000/svg" style="max-width: 100%; height: ${height}px; display: block; margin: 0 auto;">${rects.join('')}</svg>`;
+            };
+
+            const barcodeSvg = buildSvg(barcodeVal);
+
+            const content = `
+                <div style="display: flex; flex-direction: column; gap: 1.25rem;">
+                    <!-- Vista previa etiqueta góndola -->
+                    <div style="background: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 1rem; padding: 1.25rem; display: flex; justify-content: center;">
+                        <div id="shelfTagPreview" style="background: #ffffff; border: 2px solid #0f172a; border-radius: 0.75rem; width: 280px; padding: 0.9rem; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.06); font-family: system-ui, sans-serif;">
+                            <div style="font-size: 0.72rem; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em; margin-bottom: 0.25rem;">
+                                ${safeHTML(bizName)}
+                            </div>
+                            <div style="font-size: 1.05rem; font-weight: 900; color: #0f172a; line-height: 1.2; margin-bottom: 0.5rem; min-height: 2.4em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                                ${safeHTML(product.name)}
+                            </div>
+                            <div style="background: #f1f5f9; border-radius: 0.5rem; padding: 0.4rem; margin-bottom: 0.6rem;">
+                                <span style="font-size: 0.72rem; color: #475569; font-weight: 700; display: block;">PRECIO VENTA</span>
+                                <strong style="font-size: 1.85rem; font-weight: 950; color: #0f172a;">${formatCLP(product.price)}</strong>
+                            </div>
+                            <div style="margin-top: 0.4rem;">
+                                ${barcodeSvg}
+                                <span style="font-size: 0.75rem; font-family: monospace; font-weight: 800; color: #334155; letter-spacing: 0.1em; display: block; margin-top: 0.25rem;">${safeHTML(barcodeVal)}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Controles de impresión -->
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 1rem; background: #ffffff; border: 1.5px solid #e2e8f0; border-radius: 0.75rem; padding: 0.85rem 1rem;">
+                        <label style="font-weight: 800; font-size: 0.9rem; color: #1e293b; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                            <span>🏷️ Copias a imprimir:</span>
+                        </label>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <input type="number" id="labelCopiesCount" value="1" min="1" max="50" style="width: 70px; height: 38px; text-align: center; font-weight: 900; font-size: 1.1rem; border: 2px solid #cbd5e1; border-radius: 0.5rem;">
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const footer = `
+                <button class="btn btn-secondary" onclick="closeModal()" style="font-weight: 700;">Cerrar</button>
+                <button class="btn btn-primary" onclick="ProductsView.executePrintLabel(${product.id})" style="font-weight: 900; background: #7c3aed; border-color: #6d28d9; display: flex; align-items: center; gap: 0.4rem;">
+                    <span>🖨️</span> <span>Imprimir Etiqueta</span>
+                </button>
+            `;
+
+            showModal(content, { title: '🏷️ Etiqueta de Precio y Góndola', footer, width: '480px' });
+        } catch (e) {
+            console.error('Error al generar etiqueta:', e);
+            showNotification('Error al preparar etiqueta para impresión', 'error');
+        }
+    },
+
+    async executePrintLabel(id) {
+        try {
+            const product = await Product.getById(id);
+            if (!product) return;
+
+            const copiesInput = document.getElementById('labelCopiesCount');
+            const copies = Math.min(Math.max(parseInt(copiesInput?.value || 1, 10), 1), 50);
+
+            const bizName = localStorage.getItem('BUSINESS_NAME') || 'Mi Negocio';
+            const barcodeVal = (product.barcode || String(product.id || '')).trim();
+
+            const CODE39 = {
+                '0': '000110100', '1': '100100001', '2': '001100001', '3': '101100000',
+                '4': '000110001', '5': '100110000', '6': '001110000', '7': '000100101',
+                '8': '100100100', '9': '001100100', 'A': '100001001', 'B': '001001001',
+                'C': '101001000', 'D': '000011001', 'E': '100011000', 'F': '001011000',
+                'G': '000001101', 'H': '100001100', 'I': '001001100', 'J': '000011100',
+                'K': '100000011', 'L': '001000011', 'M': '101000010', 'N': '000010011',
+                'O': '100010010', 'P': '001010010', 'Q': '000000111', 'R': '100000110',
+                'S': '001000110', 'T': '000010110', 'U': '110000001', 'V': '011000001',
+                'W': '111000000', 'X': '010010001', 'Y': '110010000', 'Z': '011010000',
+                '-': '010000101', '.': '110000100', ' ': '011000100', '$': '010101000',
+                '/': '010100010', '+': '010001010', '%': '000101010', '*': '010010100'
+            };
+
+            const clean = barcodeVal.toUpperCase().replace(/[^0-9A-Z\-\.\ \$\/\+\%]/g, '') || '00000';
+            const str = '*' + clean + '*';
+            let x = 6;
+            const narrow = 2;
+            const wide = 5;
+            const rects = [];
+            for (let i = 0; i < str.length; i++) {
+                const pat = CODE39[str[i]] || CODE39['0'];
+                for (let b = 0; b < 9; b++) {
+                    const isBar = (b % 2 === 0);
+                    const w = pat[b] === '1' ? wide : narrow;
+                    if (isBar) rects.push(`<rect x="${x}" y="0" width="${w}" height="42" fill="#000000"/>`);
+                    x += w;
+                }
+                x += narrow;
+            }
+            const totalWidth = x + 6;
+            const svgStr = `<svg viewBox="0 0 ${totalWidth} 42" xmlns="http://www.w3.org/2000/svg" style="width: 180px; height: 38px; display: block; margin: 0 auto;">${rects.join('')}</svg>`;
+
+            const singleLabelHtml = `
+                <div class="label-item">
+                    <div class="label-header">${safeHTML(bizName)}</div>
+                    <div class="label-title">${safeHTML(product.name)}</div>
+                    <div class="label-price-box">
+                        <span class="label-price-sub">PRECIO VENTA</span>
+                        <div class="label-price">${formatCLP(product.price)}</div>
+                    </div>
+                    <div class="label-barcode">
+                        ${svgStr}
+                        <div class="label-code">${safeHTML(barcodeVal)}</div>
+                    </div>
+                </div>
+            `;
+
+            let labelsHtml = '';
+            for (let i = 0; i < copies; i++) {
+                labelsHtml += singleLabelHtml;
+            }
+
+            const printWindow = window.open('', '_blank', 'width=650,height=600');
+            if (!printWindow) {
+                showNotification('Por favor permite ventanas emergentes para imprimir la etiqueta', 'warning');
+                return;
+            }
+
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>Etiquetas - ${safeHTML(product.name)}</title>
+                    <style>
+                        @page {
+                            size: auto;
+                            margin: 4mm;
+                        }
+                        body {
+                            font-family: Arial, sans-serif;
+                            margin: 0;
+                            padding: 8px;
+                            background: #ffffff;
+                            color: #000000;
+                            display: flex;
+                            flex-wrap: wrap;
+                            gap: 10px;
+                        }
+                        .label-item {
+                            width: 58mm;
+                            border: 1.5px solid #000000;
+                            border-radius: 6px;
+                            padding: 6px 8px;
+                            box-sizing: border-box;
+                            text-align: center;
+                            page-break-inside: avoid;
+                        }
+                        .label-header {
+                            font-size: 9px;
+                            font-weight: bold;
+                            text-transform: uppercase;
+                            letter-spacing: 0.5px;
+                            color: #444444;
+                            margin-bottom: 2px;
+                        }
+                        .label-title {
+                            font-size: 13px;
+                            font-weight: 900;
+                            line-height: 1.15;
+                            max-height: 2.4em;
+                            overflow: hidden;
+                            margin-bottom: 4px;
+                        }
+                        .label-price-box {
+                            border: 1.5px solid #000000;
+                            border-radius: 4px;
+                            padding: 3px 0;
+                            margin-bottom: 4px;
+                            background: #f7f7f7;
+                        }
+                        .label-price-sub {
+                            font-size: 8px;
+                            font-weight: bold;
+                            display: block;
+                            letter-spacing: 0.5px;
+                        }
+                        .label-price {
+                            font-size: 20px;
+                            font-weight: 900;
+                            line-height: 1;
+                        }
+                        .label-barcode {
+                            margin-top: 3px;
+                        }
+                        .label-code {
+                            font-family: monospace;
+                            font-size: 10px;
+                            font-weight: bold;
+                            letter-spacing: 1px;
+                            margin-top: 2px;
+                        }
+                    </style>
+                </head>
+                <body>
+                    ${labelsHtml}
+                    <script>
+                        window.onload = function() {
+                            window.print();
+                            setTimeout(function() { window.close(); }, 500);
+                        };
+                    </script>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+            closeModal();
+            showNotification(`Imprimiendo ${copies} etiqueta(s)...`, 'success');
+        } catch (e) {
+            console.error('Error al imprimir etiquetas:', e);
+            showNotification('Error al abrir impresión de etiquetas', 'error');
+        }
+    },
+
     async deleteProduct(id) {
         showConfirm('¿Desactivar este producto? No se borrará de la base de datos pero no aparecerá en ventas. Podrás restaurarlo desde el botón "Desactivados".', async () => {
             try {
@@ -1192,8 +1508,17 @@ const ProductsView = {
     },
 
     async showDeletedProducts() {
-        const products = await Product.getAllIncludingDeleted();
-        const deleted = products.filter(p => p.deleted);
+        let deleted = [];
+        try {
+            if (typeof Product !== 'undefined' && typeof Product.getDeleted === 'function') {
+                deleted = await Product.getDeleted();
+            }
+        } catch (_) {}
+
+        if (!deleted || deleted.length === 0) {
+            const all = await Product.getAllIncludingDeleted();
+            deleted = (all || []).filter(p => p.isActive === false || p.isActive === 0 || p.deleted || p.deletedAt);
+        }
 
         if (deleted.length === 0) {
             window._focusSearchAfterClose = () => ProductsView.focusSearch();
@@ -1205,46 +1530,57 @@ const ProductsView = {
         }
 
         const content = `
-    <p style="margin-bottom: 1rem; color: #94a3b8;">
-        Estos productos están desactivados. No aparecerán en ventas ni en el buscador, pero sus registros históricos se mantienen.
+            <p style="margin-bottom: 1rem; color: #94a3b8; font-size: 0.9rem;">
+                Estos productos están desactivados. No aparecen en ventas ni en búsquedas de mostrador, pero sus registros históricos se mantienen intactos.
             </p>
-    <div class="table-container" style="max-height: 450px; overflow-y: auto; border-radius: 0.5rem; border: 1px solid rgba(255,255,255,0.05);">
-        <table class="table">
-            <thead style="background: rgba(0,0,0,0.2); position: sticky; top: 0; z-index: 1;">
-                <tr>
-                    <th style="text-align: left; padding: 0.75rem 1rem;">Producto</th>
-                    <th style="text-align: left; padding: 0.75rem 1rem;">Categoría</th>
-                    <th style="text-align: right; padding: 0.75rem 1rem;">Costo</th>
-                    <th style="text-align: center; padding: 0.75rem 1rem;">Acciones</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${deleted.map(p => `
-                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); opacity: 0.85;">
+            <div class="table-container" style="max-height: 450px; overflow-y: auto; border-radius: 0.5rem; border: 1px solid rgba(255,255,255,0.08);">
+                <table class="table">
+                    <thead style="background: rgba(0,0,0,0.3); position: sticky; top: 0; z-index: 1;">
+                        <tr>
+                            <th style="text-align: left; padding: 0.75rem 1rem;">Producto</th>
+                            <th style="text-align: left; padding: 0.75rem 1rem;">Categoría</th>
+                            <th style="text-align: right; padding: 0.75rem 1rem;">Costo</th>
+                            <th style="text-align: center; padding: 0.75rem 1rem;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${deleted.map(p => `
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); opacity: 0.9;">
                                 <td style="padding: 0.75rem 1rem;">
-                                    <div style="font-weight: 600; color: #fff;">${safeHTML(p.name)}</div>
-                                    <small style="color: #64748b;">${safeHTML(p.barcode || 'Sin código')}</small>
+                                    <div style="font-weight: 700; color: #fff;">${safeHTML(p.name)}</div>
+                                    <small style="color: #64748b; font-family: monospace;">${safeHTML(p.barcode || 'Sin código')}</small>
                                 </td>
                                 <td style="padding: 0.75rem 1rem; color: #94a3b8;">${safeHTML(p.category || 'General')}</td>
-                                <td style="padding: 0.75rem 1rem; text-align: right; color: #fff;">${formatCLP(p.cost || 0)}</td>
+                                <td style="padding: 0.75rem 1rem; text-align: right; color: #fff; font-weight: 700;">${formatCLP(p.cost || 0)}</td>
                                 <td style="padding: 0.75rem 1rem; text-align: center;">
-                                    <button class="btn btn-sm btn-success" onclick="ProductsView.restoreProduct(${p.id})">
-                                        Restaurar
+                                    <button class="btn btn-sm btn-success" onclick="ProductsView.restoreProduct(${p.id})" style="font-weight: 800; border-radius: 0.4rem; padding: 0.35rem 0.75rem;">
+                                        ↩️ Restaurar
                                     </button>
                                 </td>
                             </tr>
                         `).join('')}
-            </tbody>
-        </table>
-    </div>
-`;
+                    </tbody>
+                </table>
+            </div>
+        `;
 
         window._focusSearchAfterClose = () => ProductsView.focusSearch();
         showModal(content, {
-            title: `Productos Desactivados(${deleted.length})`,
+            title: `📋 Productos Desactivados (${deleted.length})`,
             footer: '<button class="btn btn-secondary" onclick="closeModal()">Cerrar</button>',
-            width: '600px'
+            width: '650px'
         });
+    },
+
+    async restoreProduct(id) {
+        try {
+            await ProductController.restoreProduct(id);
+            closeModal();
+            await this.refresh();
+            await this.showDeletedProducts();
+        } catch (error) {
+            showNotification(error.message, 'error');
+        }
     },
 
     // ===== CÁLCULOS DE PRECIOS =====
@@ -1387,29 +1723,77 @@ const ProductsView = {
         const product = await Product.getById(id);
         const movements = await StockMovement.getByProduct(id);
         const sorted = movements.sort((a, b) => new Date(b.date) - new Date(a.date));
+        const unit = product.type === 'weight' ? 'kg' : 'un';
+
+        // ponytail: calcular saldo resultante fila por fila desde el stock actual hacia atrás
+        let runningStock = parseFloat(product.stock) || 0;
+        const movementsWithBalance = sorted.map(m => {
+            const balanceAfter = runningStock;
+            const qty = parseFloat(m.quantity) || 0;
+            runningStock -= qty;
+            return { ...m, qty, balanceAfter };
+        });
+
+        const getBadge = (type) => {
+            switch(type) {
+                case 'sale':
+                    return '<span class="badge" style="background: rgba(239, 68, 68, 0.1); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.2); font-weight: 800; padding: 0.2rem 0.55rem; border-radius: 99px;">🛒 Venta</span>';
+                case 'purchase':
+                    return '<span class="badge" style="background: rgba(16, 185, 129, 0.1); color: #047857; border: 1px solid rgba(16, 185, 129, 0.2); font-weight: 800; padding: 0.2rem 0.55rem; border-radius: 99px;">📥 Compra</span>';
+                case 'consumption':
+                    return '<span class="badge" style="background: rgba(245, 158, 11, 0.1); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.2); font-weight: 800; padding: 0.2rem 0.55rem; border-radius: 99px;">🥣 Merma/Consumo</span>';
+                case 'adjustment':
+                    return '<span class="badge" style="background: rgba(59, 130, 246, 0.1); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.2); font-weight: 800; padding: 0.2rem 0.55rem; border-radius: 99px;">⚙️ Ajuste</span>';
+                default:
+                    return `<span class="badge badge-secondary" style="padding: 0.2rem 0.55rem; border-radius: 99px;">${type}</span>`;
+            }
+        };
+
         const content = `
-    <div style="margin-bottom: 1rem;">
-                <h3>${safeHTML(product.name)}</h3>
-                <p>Stock actual: <strong>${formatStock(product.stock)} ${product.type === 'weight' ? 'kg' : 'un'}</strong></p>
+            <div style="background: var(--surface); border: 1.5px solid var(--border); border-radius: 0.85rem; padding: 0.85rem 1.15rem; margin-bottom: 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                <div>
+                    <h3 style="margin: 0; font-size: 1.15rem; font-weight: 900; color: var(--text);">${safeHTML(product.name)}</h3>
+                    <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 0.2rem;">
+                        Código: <strong>${product.barcode || 'Sin código'}</strong> · Categoría: <strong>${product.category || 'General'}</strong>
+                    </div>
+                </div>
+                <div style="background: #ecfdf5; border: 1.5px solid #a7f3d0; border-radius: 0.65rem; padding: 0.5rem 0.95rem; text-align: right; flex-shrink: 0;">
+                    <div style="font-size: 0.65rem; font-weight: 800; color: #047857; text-transform: uppercase;">Stock Actual</div>
+                    <div style="font-size: 1.25rem; font-weight: 950; color: #047857; line-height: 1.1;">${formatStock(product.stock)} ${unit}</div>
+                </div>
             </div>
-    <div class="table-container" style="max-height: 400px; overflow-y: auto;">
-        <table>
-            <thead><tr><th>Fecha</th><th>Tipo</th><th>Cant.</th><th>Motivo</th></tr></thead>
-            <tbody>
-                ${sorted.length === 0 ? '<tr><td colspan="4" style="text-align:center;">No hay movimientos</td></tr>' : sorted.map(m => `
-                            <tr>
-                                <td>${formatDateTime(m.date)}</td>
-                                <td><span class="badge badge-info">${m.type}</span></td>
-                                <td style="color: ${m.quantity > 0 ? 'var(--success)' : 'var(--danger)'}; font-weight: bold;">${m.quantity > 0 ? '+' : ''}${formatStock(m.quantity)}</td>
-                                <td>${safeHTML(m.reason || '-')}</td>
+
+            <div class="table-container" style="max-height: 320px; overflow-y: auto; border: 1.5px solid var(--border); border-radius: 0.65rem;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead style="position: sticky; top: 0; background: var(--surface); z-index: 2;">
+                        <tr>
+                            <th style="padding: 0.6rem 0.75rem; font-size: 0.75rem;">Fecha y Hora</th>
+                            <th style="padding: 0.6rem 0.75rem; font-size: 0.75rem;">Tipo</th>
+                            <th style="padding: 0.6rem 0.75rem; font-size: 0.75rem; text-align: right;">Variación</th>
+                            <th style="padding: 0.6rem 0.75rem; font-size: 0.75rem; text-align: right;">Stock Resultante</th>
+                            <th style="padding: 0.6rem 0.75rem; font-size: 0.75rem;">Motivo / Detalle</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${movementsWithBalance.length === 0 ? '<tr><td colspan="5" style="text-align:center; padding: 1.5rem; color: var(--text-muted);">No hay movimientos registrados</td></tr>' : movementsWithBalance.map(m => `
+                            <tr style="border-bottom: 1px solid var(--border);">
+                                <td style="padding: 0.55rem 0.75rem; font-size: 0.8rem; white-space: nowrap;">${formatDateTime(m.date)}</td>
+                                <td style="padding: 0.55rem 0.75rem;">${getBadge(m.type)}</td>
+                                <td style="padding: 0.55rem 0.75rem; text-align: right; font-weight: 800; font-size: 0.88rem; color: ${m.qty > 0 ? 'var(--success, #059669)' : 'var(--danger, #dc2626)'};">
+                                    ${m.qty > 0 ? '+' : ''}${formatStock(m.qty)} ${unit}
+                                </td>
+                                <td style="padding: 0.55rem 0.75rem; text-align: right; font-weight: 900; font-size: 0.9rem; color: var(--text);">
+                                    ${formatStock(m.balanceAfter)} ${unit}
+                                </td>
+                                <td style="padding: 0.55rem 0.75rem; font-size: 0.8rem; color: var(--text-muted);">${safeHTML(m.reason || '-')}</td>
                             </tr>
                         `).join('')}
-            </tbody>
-        </table>
-    </div>
-`;
+                    </tbody>
+                </table>
+            </div>
+        `;
         window._focusSearchAfterClose = () => ProductsView.focusSearch();
-        showModal(content, { title: 'Historial de Movimientos', footer: '<button class="btn btn-primary" onclick="closeModal()">Cerrar</button>', width: '700px' });
+        showModal(content, { title: 'Historial de Movimientos de Stock', footer: '<button class="btn btn-primary" onclick="closeModal()">Cerrar</button>', width: '760px' });
     },
 
     async showCategoryManagerModal() {
