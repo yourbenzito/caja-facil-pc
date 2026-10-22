@@ -50,12 +50,12 @@ GRANT EXECUTE ON FUNCTION public.get_public_promo_stats() TO service_role;
 REVOKE ALL ON FUNCTION public.delete_user_account() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.delete_user_account() TO service_role;
 
--- F. Funciones auxiliares de negocio
-REVOKE ALL ON FUNCTION public.check_is_business_owner(UUID, UUID) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.check_is_business_owner(UUID, UUID) TO authenticated, service_role;
+-- F. Funciones auxiliares de negocio (exclusivas para service_role del backend)
+REVOKE ALL ON FUNCTION public.check_is_business_owner(UUID, UUID) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.check_is_business_owner(UUID, UUID) TO service_role;
 
-REVOKE ALL ON FUNCTION public.join_business_by_code(TEXT) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.join_business_by_code(TEXT) TO authenticated, service_role;
+REVOKE ALL ON FUNCTION public.join_business_by_code(TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.join_business_by_code(TEXT) TO service_role;
 
 -- -----------------------------------------------------------------------------------------
 -- PARTE 3: VISTA SEGURA CON INVOCACIÓN DE PERMISOS DE USUARIO
