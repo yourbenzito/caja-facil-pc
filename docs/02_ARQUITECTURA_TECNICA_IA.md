@@ -154,7 +154,7 @@ El sistema de sincronización (`backend/routes/sync.js` y `js/services/SyncServi
 * **Manejo de Variables de Entorno en el Instalador:**
   * En producción, Electron no permite escribir dentro de `app.asar`.
   * Por ello, `server.js` detecta `IS_PACKAGED` y lee/crea el archivo `.env` en la carpeta `userData` del sistema operativo: `%APPDATA%\caja-facil-pos\.env`.
-  * Si es la primera instalación en una máquina, clona automáticamente `backend/.env.example` (que ya contiene las credenciales de Supabase Cloud) y genera llaves criptográficas únicas para esa máquina.
+  * Si es la primera instalación en una máquina, crea automáticamente el archivo `.env` en `userData` y genera llaves criptográficas únicas para esa máquina. Las credenciales de Supabase se configuran de forma segura y aislada en ese `.env` local.
 * **Archivos Críticos Desempaquetados (`asarUnpack`):**
   * `sqlite3` (Binario C++ nativo que requiere ejecución fuera del asar).
   * `backend/server.js` y `backend/schema.sql`.
